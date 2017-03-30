@@ -99,6 +99,7 @@ private:
     Gui::Document       *pcDocument;
 
     static SoFullPath * currenthighlight;
+    static SoNode *currenthighlightRoot;
 
     SbBool highlighted;
     // -1 = not handled, 0 = not selected, 1 = selected
@@ -106,10 +107,81 @@ private:
     SoColorPacker colorpacker;
 };
 
+
+class GuiExport SelectionContext {
+public:
+    SelectionContext() {}
+    virtual ~SelectionContext(){}
+};
+
+typedef std::shared_ptr<SelectionContext> SelectionContextPtr;
+typedef std::map<SoNode*,SelectionContextPtr> SelectionContextMap;
+
+class SelectionActionContext;
+
+class GuiExport SoFCSelectionRoot : public SoSeparator {
+    typedef SoSeparator inherited;
+
+    SO_NODE_HEADER(Gui::SoFCSelectionRoot);
+  
+public:
+    static void initClass(void);
+    static void finish(void);
+    SoFCSelectionRoot();
+
+    SoSFBool selectionSync;
+
+    virtual void GLRender(SoGLRenderAction * action);
+    virtual void GLRenderBelowPath(SoGLRenderAction * action);
+    virtual void GLRenderInPath(SoGLRenderAction * action);
+    virtual void GLRenderOffPath(SoGLRenderAction * action);
+
+    template<class T>
+    static std::shared_ptr<T> getContext(SoNode *node, std::shared_ptr<T> def) {
+        if(!currentRoot || currentRoot->selectionSync.getValue()) return def;
+        auto it = currentRoot->contextMap.find(node);
+        if(it!=currentRoot->contextMap.end())
+            return std::dynamic_pointer_cast<T>(it->second);
+        return std::shared_ptr<T>();
+    }
+
+    void resetContext();
+
+protected:
+    virtual ~SoFCSelectionRoot();
+
+private:
+    SelectionContextMap contextMap;
+    static SoFCSelectionRoot *currentRoot;
+
+    friend class SelectionActionContext;
+};
+
+
+class GuiExport SelectionActionContext {
+public:
+    SelectionActionContext();
+    virtual ~SelectionActionContext();
+
+    void setSelectionRoot(SoNode *node);
+
+    template<class T>
+    std::shared_ptr<T> getContext(SoNode *node, std::shared_ptr<T> def) {
+        if(!_root || _root->selectionSync.getValue()) return def;
+        SelectionContextPtr &ctx = _root->contextMap[node];
+        if(!ctx) ctx = std::make_shared<T>();
+        return std::static_pointer_cast<T>(ctx);
+    }
+
+private:
+    SoFCSelectionRoot *_root;
+};
+
 /**
  * @author Werner Mayer
  */
 class GuiExport SoHighlightElementAction : public SoAction
+                                         , public SelectionActionContext
 {
     SO_ACTION_HEADER(SoHighlightElementAction);
 
@@ -142,6 +214,7 @@ private:
  * @author Werner Mayer
  */
 class GuiExport SoSelectionElementAction : public SoAction
+                                         , public SelectionActionContext
 {
     SO_ACTION_HEADER(SoSelectionElementAction);
 

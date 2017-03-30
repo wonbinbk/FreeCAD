@@ -75,7 +75,7 @@ enum ViewStatus {
     isRestoring = 2
 };
 
-
+class ViewProviderLink;
 
 /** General interface for all visual stuff in FreeCAD
   * This class is used to generate and handle all around 
@@ -87,6 +87,7 @@ enum ViewStatus {
 class GuiExport ViewProvider : public App::TransactionalObject
 {
     PROPERTY_HEADER(Gui::ViewProvider);
+    friend class ViewProviderLink;
 
 public:
     /// constructor.
@@ -124,6 +125,8 @@ public:
     virtual bool useNewSelectionModel(void) const {return false;}
     /// indicates if the ViewProvider can be selected
     virtual bool isSelectable(void) const {return true;}
+    /// return a hit element given the picked point which contains the full node path
+    virtual std::string getElementPicked(const SoPickedPoint *) const;
     /// return a hit element to the selection path or 0
     virtual std::string getElement(const SoDetail *) const { return std::string(); }
     virtual SoDetail* getDetail(const char*) const { return 0; }

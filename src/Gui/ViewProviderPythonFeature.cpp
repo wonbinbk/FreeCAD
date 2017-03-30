@@ -375,6 +375,35 @@ std::string ViewProviderPythonFeatureImp::getElement(const SoDetail *det) const
     return "";
 }
 
+std::string ViewProviderPythonFeatureImp::getElementPicked(const SoPickedPoint *pp) const
+{
+    Base::PyGILStateLocker lock;
+    try {
+        App::Property* proxy = object->getPropertyByName("Proxy");
+        if (proxy && proxy->getTypeId() == App::PropertyPythonObject::getClassTypeId()) {
+            Py::Object vp = static_cast<App::PropertyPythonObject*>(proxy)->getValue();
+            if (vp.hasAttr(std::string("getElementPicked"))) {
+                PyObject* pivy = 0;
+                pivy = Base::Interpreter().createSWIGPointerObj("pivy.coin", "SoPickedPoint *", (void*)pp, 0);
+                Py::Callable method(vp.getAttr(std::string("getElementPicked")));
+                Py::Tuple args(1);
+                args.setItem(0, Py::Object(pivy, true));
+                Py::String name(method.apply(args));
+                return (std::string)name;
+            }
+        }
+    }
+    catch (const Base::Exception& e) {
+        e.ReportException();
+    }
+    catch (Py::Exception&) {
+        Base::PyException e; // extract the Python error text
+        e.ReportException();
+    }
+
+    return "";
+}
+
 SoDetail* ViewProviderPythonFeatureImp::getDetail(const char* name) const
 {
     // Run the onChanged method of the proxy object.

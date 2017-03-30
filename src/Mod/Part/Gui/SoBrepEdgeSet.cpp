@@ -63,8 +63,27 @@
 
 using namespace PartGui;
 
-
 SO_NODE_SOURCE(SoBrepEdgeSet);
+
+class SoBrepEdgeSet::SelContext: public Gui::SelectionContext {
+public:
+    SelContext() {
+        highlightIndex = -1;
+        selectionIndex = -1;
+        selectionIndex.setNum(0);
+    }
+
+    SoSFInt32 highlightIndex;
+    SoMFInt32 selectionIndex;
+
+    std::vector<int32_t> hl, sl;
+    SbColor selectionColor;
+    SbColor highlightColor;
+    //#0000834: Minor preselection color bug
+    //To solve this we need a seprate color packer for highlighting and selection
+    SoColorPacker colorpacker1;
+    SoColorPacker colorpacker2;
+};
 
 void SoBrepEdgeSet::initClass()
 {
@@ -74,25 +93,25 @@ void SoBrepEdgeSet::initClass()
 SoBrepEdgeSet::SoBrepEdgeSet()
 {
     SO_NODE_CONSTRUCTOR(SoBrepEdgeSet);
-    SO_NODE_ADD_FIELD(highlightIndex, (-1));
-    SO_NODE_ADD_FIELD(selectionIndex, (-1));
-    selectionIndex.setNum(0);
+    selContext = std::make_shared<SelContext>();
 }
 
 void SoBrepEdgeSet::GLRender(SoGLRenderAction *action)
 {
-    if (this->selectionIndex.getNum() > 0)
-        renderSelection(action);
-    if (this->highlightIndex.getValue() >= 0)
-        renderHighlight(action);
+    SelContextPtr ctx = Gui::SoFCSelectionRoot::getContext<SelContext>(this,selContext);
+
+    if (ctx && ctx->selectionIndex.getNum() > 0)
+        renderSelection(action,ctx);
+    if (ctx && ctx->highlightIndex.getValue() >= 0)
+        renderHighlight(action,ctx);
     inherited::GLRender(action);
 
     // Workaround for #0000433
 //#if !defined(FC_OS_WIN32)
-    if (this->highlightIndex.getValue() >= 0)
-        renderHighlight(action);
-    if (this->selectionIndex.getNum() > 0)
-        renderSelection(action);
+    if (ctx && ctx->highlightIndex.getValue() >= 0)
+        renderHighlight(action,ctx);
+    if (ctx && ctx->selectionIndex.getNum() > 0)
+        renderSelection(action,ctx);
 //#endif
 }
 
@@ -124,15 +143,15 @@ void SoBrepEdgeSet::renderShape(const SoGLCoordinateElement * const coords,
     }
 }
 
-void SoBrepEdgeSet::renderHighlight(SoGLRenderAction *action)
+void SoBrepEdgeSet::renderHighlight(SoGLRenderAction *action, SelContextPtr ctx)
 {
     SoState * state = action->getState();
     state->push();
   //SoLineWidthElement::set(state, this, 4.0f);
 
-    SoLazyElement::setEmissive(state, &this->highlightColor);
+    SoLazyElement::setEmissive(state, &ctx->highlightColor);
     SoOverrideElement::setEmissiveColorOverride(state, this, true);
-    SoLazyElement::setDiffuse(state, this,1, &this->highlightColor,&this->colorpacker1);
+    SoLazyElement::setDiffuse(state, this,1, &ctx->highlightColor,&ctx->colorpacker1);
     SoOverrideElement::setDiffuseColorOverride(state, this, true);
     SoLazyElement::setLightModel(state, SoLazyElement::BASE_COLOR);
 
@@ -151,10 +170,10 @@ void SoBrepEdgeSet::renderHighlight(SoGLRenderAction *action)
     SoMaterialBundle mb(action);
     mb.sendFirst(); // make sure we have the correct material
 
-    int num = (int)this->hl.size();
+    int num = (int)ctx->hl.size();
     if (num > 0) {
-        const int32_t* id = &(this->hl[0]);
-        if (!validIndexes(coords, this->hl)) {
+        const int32_t* id = &(ctx->hl[0]);
+        if (!validIndexes(coords, ctx->hl)) {
             SoDebugError::postWarning("SoBrepEdgeSet::renderHighlight", "highlightIndex out of range");
         }
         else {
@@ -164,18 +183,18 @@ void SoBrepEdgeSet::renderHighlight(SoGLRenderAction *action)
     state->pop();
 }
 
-void SoBrepEdgeSet::renderSelection(SoGLRenderAction *action)
+void SoBrepEdgeSet::renderSelection(SoGLRenderAction *action, SelContextPtr ctx)
 {
-    int numSelected =  this->selectionIndex.getNum();
+    int numSelected =  ctx->selectionIndex.getNum();
     if (numSelected == 0) return;
 
     SoState * state = action->getState();
     state->push();
   //SoLineWidthElement::set(state, this, 4.0f);
 
-    SoLazyElement::setEmissive(state, &this->selectionColor);
+    SoLazyElement::setEmissive(state, &ctx->selectionColor);
     SoOverrideElement::setEmissiveColorOverride(state, this, true);
-    SoLazyElement::setDiffuse(state, this,1, &this->selectionColor,&this->colorpacker2);
+    SoLazyElement::setDiffuse(state, this,1, &ctx->selectionColor,&ctx->colorpacker2);
     SoOverrideElement::setDiffuseColorOverride(state, this, true);
     SoLazyElement::setLightModel(state, SoLazyElement::BASE_COLOR);
 
@@ -194,15 +213,15 @@ void SoBrepEdgeSet::renderSelection(SoGLRenderAction *action)
     SoMaterialBundle mb(action);
     mb.sendFirst(); // make sure we have the correct material
 
-    int num = (int)this->sl.size();
+    int num = (int)ctx->sl.size();
     if (num > 0) {
-        if (this->sl[0] < 0) {
+        if (ctx->sl[0] < 0) {
             renderShape(static_cast<const SoGLCoordinateElement*>(coords), cindices, numcindices);
         }
         else {
-            cindices = &(this->sl[0]);
-            numcindices = (int)this->sl.size();
-            if (!validIndexes(coords, this->sl)) {
+            cindices = &(ctx->sl[0]);
+            numcindices = (int)ctx->sl.size();
+            if (!validIndexes(coords, ctx->sl)) {
                 SoDebugError::postWarning("SoBrepEdgeSet::renderSelection", "selectionIndex out of range");
             }
             else {
@@ -253,32 +272,39 @@ void SoBrepEdgeSet::doAction(SoAction* action)
 {
     if (action->getTypeId() == Gui::SoHighlightElementAction::getClassTypeId()) {
         Gui::SoHighlightElementAction* hlaction = static_cast<Gui::SoHighlightElementAction*>(action);
+        SelContextPtr ctx = hlaction->getContext<SelContext>(this,selContext);
         if (!hlaction->isHighlighted()) {
-            this->highlightIndex = -1;
-            this->hl.clear();
+            ctx->highlightIndex = -1;
+            ctx->hl.clear();
+            touch();
             return;
         }
         const SoDetail* detail = hlaction->getElement();
         if (detail) {
             if (!detail->isOfType(SoLineDetail::getClassTypeId())) {
-                this->highlightIndex = -1;
-                this->hl.clear();
+                ctx->highlightIndex = -1;
+                ctx->hl.clear();
+                touch();
                 return;
             }
 
-            this->highlightColor = hlaction->getColor();
+            ctx->highlightColor = hlaction->getColor();
             int32_t index = static_cast<const SoLineDetail*>(detail)->getLineIndex();
             const int32_t* cindices = this->coordIndex.getValues(0);
             int numcindices = this->coordIndex.getNum();
 
-            createIndexArray(&index, 1, cindices, numcindices, this->hl);
-            this->highlightIndex.setValue(index);
+            createIndexArray(&index, 1, cindices, numcindices, ctx->hl);
+            if(index!=ctx->highlightIndex.getValue()) {
+                touch();
+                ctx->highlightIndex.setValue(index);
+            }
         }
     }
     else if (action->getTypeId() == Gui::SoSelectionElementAction::getClassTypeId()) {
         Gui::SoSelectionElementAction* selaction = static_cast<Gui::SoSelectionElementAction*>(action);
-
-        this->selectionColor = selaction->getColor();
+        SelContextPtr ctx = selaction->getContext<SelContext>(this,selContext);
+        ctx->selectionColor = selaction->getColor();
+        touch();
         if (selaction->getType() == Gui::SoSelectionElementAction::All) {
             //const int32_t* cindices = this->coordIndex.getValues(0);
             //int numcindices = this->coordIndex.getNum();
@@ -299,14 +325,14 @@ void SoBrepEdgeSet::doAction(SoAction* action)
             //    int numcindices = this->coordIndex.getNum();
             //    createIndexArray(selsegm, numsegm, cindices, numcindices, this->sl);
             //}
-            this->selectionIndex.setValue(-1); // all
-            this->sl.clear();
-            this->sl.push_back(-1);
+            ctx->selectionIndex.setValue(-1); // all
+            ctx->sl.clear();
+            ctx->sl.push_back(-1);
             return;
         }
         else if (selaction->getType() == Gui::SoSelectionElementAction::None) {
-            this->selectionIndex.setNum(0);
-            this->sl.clear();
+            ctx->selectionIndex.setNum(0);
+            ctx->sl.clear();
             return;
         }
 
@@ -320,29 +346,29 @@ void SoBrepEdgeSet::doAction(SoAction* action)
             switch (selaction->getType()) {
             case Gui::SoSelectionElementAction::Append:
                 {
-                    if (this->selectionIndex.find(index) < 0) {
-                        int start = this->selectionIndex.getNum();
-                        this->selectionIndex.set1Value(start, index);
+                    if (ctx->selectionIndex.find(index) < 0) {
+                        int start = ctx->selectionIndex.getNum();
+                        ctx->selectionIndex.set1Value(start, index);
                     }
                 }
                 break;
             case Gui::SoSelectionElementAction::Remove:
                 {
-                    int start = this->selectionIndex.find(index);
+                    int start = ctx->selectionIndex.find(index);
                     if (start >= 0)
-                        this->selectionIndex.deleteValues(start,1);
+                        ctx->selectionIndex.deleteValues(start,1);
                 }
                 break;
             default:
                 break;
             }
 
-            int numsegm = this->selectionIndex.getNum();
+            int numsegm = ctx->selectionIndex.getNum();
             if (numsegm > 0) {
-                const int32_t* selsegm = this->selectionIndex.getValues(0);
+                const int32_t* selsegm = ctx->selectionIndex.getValues(0);
                 const int32_t* cindices = this->coordIndex.getValues(0);
                 int numcindices = this->coordIndex.getNum();
-                createIndexArray(selsegm, numsegm, cindices, numcindices, this->sl);
+                createIndexArray(selsegm, numsegm, cindices, numcindices, ctx->sl);
             }
         }
     }

@@ -698,3 +698,7 @@ std::vector< App::DocumentObject* > ViewProvider::claimChildren3D(void) const {
     }
     return vec;
 }
+
+std::string ViewProvider::getElementPicked(const SoPickedPoint *pp) const {
+    return getElement(pp?pp->getDetail():0);
+}

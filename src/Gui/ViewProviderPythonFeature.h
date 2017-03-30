@@ -52,6 +52,7 @@ public:
     QIcon getIcon() const;
     std::vector<App::DocumentObject*> claimChildren(const std::vector<App::DocumentObject*>&) const;
     bool useNewSelectionModel() const;
+    std::string getElementPicked(const SoPickedPoint *pp) const;
     std::string getElement(const SoDetail *det) const;
     SoDetail* getDetail(const char*) const;
     std::vector<Base::Vector3d> getSelectionShape(const char* Element) const;
@@ -150,6 +151,11 @@ public:
     //@{
     virtual bool useNewSelectionModel() const {
         return imp->useNewSelectionModel();
+    }
+    virtual std::string getElementPicked(const SoPickedPoint *pp) const {
+        std::string name = imp->getElementPicked(pp);
+        if (!name.empty()) return name;
+        return ViewProviderT::getElementPicked(pp);
     }
     virtual std::string getElement(const SoDetail *det) const {
         std::string name = imp->getElement(det);

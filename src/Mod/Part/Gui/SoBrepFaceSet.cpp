@@ -78,11 +78,30 @@
 // Should come after glext.h to avoid warnings
 #include <Inventor/C/glue/gl.h>
 
-
 using namespace PartGui;
 
 
 SO_NODE_SOURCE(SoBrepFaceSet);
+
+class SoBrepFaceSet::SelContext : public Gui::SelectionContext {
+public:
+    SoSFInt32 highlightIndex;
+    SoMFInt32 selectionIndex;
+
+#ifdef RENDER_GLARRAYS
+    std::vector<int32_t> index_array;
+    std::vector<float> vertex_array;
+#endif
+    SbColor selectionColor;
+    SbColor highlightColor;
+    SoColorPacker colorpacker;
+
+    SelContext() {
+        highlightIndex = -1;
+        selectionIndex = -1;
+        selectionIndex.setNum(0);
+    }
+};
 
 #define PRIVATE(p) ((p)->pimpl)
 
@@ -173,9 +192,8 @@ SoBrepFaceSet::SoBrepFaceSet()
 {
     SO_NODE_CONSTRUCTOR(SoBrepFaceSet);
     SO_NODE_ADD_FIELD(partIndex, (-1));
-    SO_NODE_ADD_FIELD(highlightIndex, (-1));
-    SO_NODE_ADD_FIELD(selectionIndex, (-1));
-    selectionIndex.setNum(0);
+
+    selContext = std::make_shared<SelContext>();
 
     pimpl.reset(new VBO);
 }
@@ -188,8 +206,9 @@ void SoBrepFaceSet::doAction(SoAction* action)
 {
     if (action->getTypeId() == Gui::SoHighlightElementAction::getClassTypeId()) {
         Gui::SoHighlightElementAction* hlaction = static_cast<Gui::SoHighlightElementAction*>(action);
+        SelContextPtr ctx = hlaction->getContext<SelContext>(this,selContext);
         if (!hlaction->isHighlighted()) {
-            this->highlightIndex = -1;
+            ctx->highlightIndex = -1;
             return;
         }
 
@@ -197,18 +216,19 @@ void SoBrepFaceSet::doAction(SoAction* action)
         if (detail) {
             if (detail->isOfType(SoFaceDetail::getClassTypeId())) {
                 int index = static_cast<const SoFaceDetail*>(detail)->getPartIndex();
-                this->highlightIndex.setValue(index);
-                this->highlightColor = hlaction->getColor();
+                ctx->highlightIndex.setValue(index);
+                ctx->highlightColor = hlaction->getColor();
             }
             else {
-                this->highlightIndex = -1;
+                ctx->highlightIndex = -1;
                 return;
             }
         }
     }
     else if (action->getTypeId() == Gui::SoSelectionElementAction::getClassTypeId()) {
         Gui::SoSelectionElementAction* selaction = static_cast<Gui::SoSelectionElementAction*>(action);
-        this->selectionColor = selaction->getColor();
+        SelContextPtr ctx = selaction->getContext<SelContext>(this,selContext);
+        ctx->selectionColor = selaction->getColor();
         if (selaction->getType() == Gui::SoSelectionElementAction::All) {
             //int num = this->partIndex.getNum();
             //this->selectionIndex.setNum(num);
@@ -216,12 +236,14 @@ void SoBrepFaceSet::doAction(SoAction* action)
             //for (int i=0; i<num;i++)
             //    v[i] = i;
             //this->selectionIndex.finishEditing();
-            this->selectionIndex.setValue(-1); // all
+            ctx->selectionIndex.setValue(-1); // all
+
+            //TODO: check if this need to be context aware
             PRIVATE(this)->updateVbo = true;
             return;
         }
         else if (selaction->getType() == Gui::SoSelectionElementAction::None) {
-            this->selectionIndex.setNum(0);
+            ctx->selectionIndex.setNum(0);
             PRIVATE(this)->updateVbo = true;
             return;
         }
@@ -236,17 +258,17 @@ void SoBrepFaceSet::doAction(SoAction* action)
             switch (selaction->getType()) {
             case Gui::SoSelectionElementAction::Append:
                 {
-                    if (this->selectionIndex.find(index) < 0) {
-                        int start = this->selectionIndex.getNum();
-                        this->selectionIndex.set1Value(start, index);
+                    if (ctx->selectionIndex.find(index) < 0) {
+                        int start = ctx->selectionIndex.getNum();
+                        ctx->selectionIndex.set1Value(start, index);
                     }
                 }
                 break;
             case Gui::SoSelectionElementAction::Remove:
                 {
-                    int start = this->selectionIndex.find(index);
+                    int start = ctx->selectionIndex.find(index);
                     if (start >= 0)
-                        this->selectionIndex.deleteValues(start,1);
+                        ctx->selectionIndex.deleteValues(start,1);
                 }
                 break;
             default:
@@ -304,15 +326,18 @@ void SoBrepFaceSet::GLRender(SoGLRenderAction *action)
     SoTextureCoordinateBundle tb(action, true, false);
     SbBool doTextures = tb.needCoordinates();
 
-    int32_t hl_idx = this->highlightIndex.getValue();
-    int32_t num_selected = this->selectionIndex.getNum();
-
-    if (this->coordIndex.getNum() < 3)
+    if (ctx->coordIndex.getNum() < 3)
         return;
+
+    SelContextPtr ctx = Gui::SoFCSelectionRoot::getContext<SelContext>(this,selContext);
+
+    int32_t hl_idx = ctx?ctx->highlightIndex.getValue():-1;
+    int32_t num_selected = ctx?ctx->selectionIndex.getNum():0;
+
     if (num_selected > 0)
-        renderSelection(action);
+        renderSelection(action,ctx);
     if (hl_idx >= 0)
-        renderHighlight(action);
+        renderHighlight(action,ctx);
 
     // When setting transparency shouldGLRender() handles the rendering and returns false.
     // Therefore generatePrimitives() needs to be re-implemented to handle the materials
@@ -370,9 +395,9 @@ void SoBrepFaceSet::GLRender(SoGLRenderAction *action)
     // Workaround for #0000433
 //#if !defined(FC_OS_WIN32)
     if (hl_idx >= 0)
-        renderHighlight(action);
+        renderHighlight(action,ctx);
     if (num_selected > 0)
-        renderSelection(action);
+        renderSelection(action,ctx);
 //#endif
     
     if(normalCacheUsed)
@@ -453,10 +478,11 @@ void SoBrepFaceSet::GLRender(SoGLRenderAction *action)
 
     if (this->coordIndex.getNum() < 3)
         return;
-    if (this->selectionIndex.getNum() > 0)
-        renderSelection(action);
-    if (this->highlightIndex.getValue() >= 0)
-        renderHighlight(action);
+    SelContextPtr ctx = Gui::SoFCSelectionRoot::getContext<SelContext>(this,selContext);
+    if (ctx && ctx->selectionIndex.getNum() > 0)
+        renderSelection(action,ctx);
+    if (ctx && ctx->highlightIndex.getValue() >= 0)
+        renderHighlight(action,ctx);
     // When setting transparency shouldGLRender() handles the rendering and returns false.
     // Therefore generatePrimitives() needs to be re-implemented to handle the materials
     // correctly.
@@ -517,10 +543,10 @@ void SoBrepFaceSet::GLRender(SoGLRenderAction *action)
         
     // Workaround for #0000433
 //#if !defined(FC_OS_WIN32)
-    if (this->highlightIndex.getValue() >= 0)
-        renderHighlight(action);
-    if (this->selectionIndex.getNum() > 0)
-        renderSelection(action);
+    if (ctx && ctx->highlightIndex.getValue() >= 0)
+        renderHighlight(action,ctx);
+    if (ctx && ctx->selectionIndex.getNum() > 0)
+        renderSelection(action,ctx);
 //#endif
 }
 #endif
@@ -799,16 +825,16 @@ void SoBrepFaceSet::generatePrimitives(SoAction * action)
 
 #undef DO_VERTEX
 
-void SoBrepFaceSet::renderHighlight(SoGLRenderAction *action)
+void SoBrepFaceSet::renderHighlight(SoGLRenderAction *action, SelContextPtr ctx)
 {
     SoState * state = action->getState();
     state->push();
 
-    SoLazyElement::setEmissive(state, &this->highlightColor);
+    SoLazyElement::setEmissive(state, &ctx->highlightColor);
     SoOverrideElement::setEmissiveColorOverride(state, this, true);
     // if shading is disabled then set also the diffuse color
     if (SoLazyElement::getLightModel(state) == SoLazyElement::BASE_COLOR) {
-        SoLazyElement::setDiffuse(state, this,1, &this->highlightColor,&this->colorpacker);
+        SoLazyElement::setDiffuse(state, this,1, &ctx->highlightColor,&ctx->colorpacker);
         SoOverrideElement::setDiffuseColorOverride(state, this, true);
     }
 
@@ -837,7 +863,7 @@ void SoBrepFaceSet::renderHighlight(SoGLRenderAction *action)
 
     mb.sendFirst(); // make sure we have the correct material
 
-    int32_t id = this->highlightIndex.getValue();
+    int32_t id = ctx->highlightIndex.getValue();
     if (id >= this->partIndex.getNum()) {
         SoDebugError::postWarning("SoBrepFaceSet::renderHighlight", "highlightIndex out of range");
     }
@@ -875,20 +901,20 @@ void SoBrepFaceSet::renderHighlight(SoGLRenderAction *action)
         this->readUnlockNormalCache();
 }
 
-void SoBrepFaceSet::renderSelection(SoGLRenderAction *action)
+void SoBrepFaceSet::renderSelection(SoGLRenderAction *action, SelContextPtr ctx)
 {
-    int numSelected =  this->selectionIndex.getNum();
-    const int32_t* selected = this->selectionIndex.getValues(0);
+    int numSelected =  ctx->selectionIndex.getNum();
+    const int32_t* selected = ctx->selectionIndex.getValues(0);
     if (numSelected == 0) return;
 
     SoState * state = action->getState();
     state->push();
 
-    SoLazyElement::setEmissive(state, &this->selectionColor);
+    SoLazyElement::setEmissive(state, &ctx->selectionColor);
     SoOverrideElement::setEmissiveColorOverride(state, this, true);
     // if shading is disabled then set also the diffuse color
     if (SoLazyElement::getLightModel(state) == SoLazyElement::BASE_COLOR) {
-        SoLazyElement::setDiffuse(state, this,1, &this->selectionColor,&this->colorpacker);
+        SoLazyElement::setDiffuse(state, this,1, &ctx->selectionColor,&ctx->colorpacker);
         SoOverrideElement::setDiffuseColorOverride(state, this, true);
     }
 

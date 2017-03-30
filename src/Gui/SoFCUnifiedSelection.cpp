@@ -94,6 +94,7 @@
 using namespace Gui;
 
 SoFullPath * Gui::SoFCUnifiedSelection::currenthighlight = NULL;
+SoNode *Gui::SoFCUnifiedSelection::currenthighlightRoot = NULL;
 
 
 // *************************************************************************
@@ -132,6 +133,8 @@ SoFCUnifiedSelection::~SoFCUnifiedSelection()
     if (currenthighlight != NULL) {
         currenthighlight->unref();
         currenthighlight = NULL;
+        currenthighlightRoot->unref();
+        currenthighlightRoot = NULL;
     }
 }
 
@@ -296,6 +299,7 @@ void SoFCUnifiedSelection::doAction(SoAction *action)
                     SoSelectionElementAction action(type);
                     action.setColor(this->colorSelection.getValue());
                     action.setElement(detail);
+                    action.setSelectionRoot(vp->getRoot());
                     action.apply(vp->getRoot());
                 }
                 delete detail;
@@ -317,6 +321,7 @@ void SoFCUnifiedSelection::doAction(SoAction *action)
                     if(checkSelectionStyle(type,vpd)) {
                         SoSelectionElementAction action(type);
                         action.setColor(this->colorSelection.getValue());
+                        action.setSelectionRoot(vpd->getRoot());
                         action.apply(vpd->getRoot());
                     }
                 }
@@ -375,16 +380,17 @@ SoFCUnifiedSelection::handleEvent(SoHandleEventAction * action)
             if (vpd && vpd->useNewSelectionModel() && vpd->isSelectable()) {
                 std::string documentName = vpd->getObject()->getDocument()->getName();
                 std::string objectName = vpd->getObject()->getNameInDocument();
-                std::string subElementName = vpd->getElement(pp ? pp->getDetail() : 0);
+                std::string subElementName = vpd->getElementPicked(pp);
 
                 this->preSelection = 1;
                 static char buf[513];
+                const auto &pt = pp->getPoint();
                 snprintf(buf,512,"Preselected: %s.%s.%s (%g, %g, %g)",documentName.c_str()
                                            ,objectName.c_str()
                                            ,subElementName.c_str()
-                                           ,pp->getPoint()[0]
-                                           ,pp->getPoint()[1]
-                                           ,pp->getPoint()[2]);
+                                           ,fabs(pt[0])>1e-7?pt[0]:0.0
+                                           ,fabs(pt[1])>1e-7?pt[1]:0.0
+                                           ,fabs(pt[2])>1e-7?pt[2]:0.0);
 
                 getMainWindow()->showMessage(QString::fromLatin1(buf));
 
@@ -403,19 +409,26 @@ SoFCUnifiedSelection::handleEvent(SoHandleEventAction * action)
                         if (currenthighlight && currenthighlight->getTail() != sa.getPath()->getTail()) {
                             SoHighlightElementAction action;
                             action.setHighlighted(false);
+                            action.setSelectionRoot(currenthighlightRoot);
                             action.apply(currenthighlight);
                             currenthighlight->unref();
                             currenthighlight = 0;
+                            currenthighlightRoot->unref();
+                            currenthighlightRoot = 0;
                             //old_state = !highlighted;
                         }
                         else if (currenthighlight) {
                             // clean-up the highlight path before assigning a new path
                             currenthighlight->unref();
                             currenthighlight = 0;
+                            currenthighlightRoot->unref();
+                            currenthighlightRoot = 0;
                         }
 
                         currenthighlight = static_cast<SoFullPath*>(sa.getPath()->copy());
                         currenthighlight->ref();
+                        currenthighlightRoot = vp->getRoot();
+                        currenthighlightRoot->ref();
                     }
                 }
             }
@@ -434,10 +447,13 @@ SoFCUnifiedSelection::handleEvent(SoHandleEventAction * action)
                 action.setHighlighted(highlighted);
                 action.setColor(this->colorHighlight.getValue());
                 action.setElement(pp ? pp->getDetail() : 0);
+                action.setSelectionRoot(currenthighlightRoot);
                 action.apply(currenthighlight);
                 if (!highlighted) {
                     currenthighlight->unref();
                     currenthighlight = 0;
+                    currenthighlightRoot->unref();
+                    currenthighlightRoot = 0;
                 }
                 this->touch();
             }
@@ -461,7 +477,8 @@ SoFCUnifiedSelection::handleEvent(SoHandleEventAction * action)
                 SoSelectionElementAction::Type type = SoSelectionElementAction::None;
                 std::string documentName = vpd->getObject()->getDocument()->getName();
                 std::string objectName = vpd->getObject()->getNameInDocument();
-                std::string subElementName = vpd->getElement(pp ? pp->getDetail() : 0);
+                std::string subElementName = vpd->getElementPicked(pp);
+                const auto &pt = pp->getPoint();
                 if (event->wasCtrlDown()) {
                     if (Gui::Selection().isSelected(documentName.c_str()
                                          ,objectName.c_str()
@@ -475,18 +492,16 @@ SoFCUnifiedSelection::handleEvent(SoHandleEventAction * action)
                         bool ok = Gui::Selection().addSelection(documentName.c_str()
                                           ,objectName.c_str()
                                           ,subElementName.c_str()
-                                          ,pp->getPoint()[0]
-                                          ,pp->getPoint()[1]
-                                          ,pp->getPoint()[2]);
+                                          ,pt[0] ,pt[1] ,pt[2]);
                         if (ok)
                             type = SoSelectionElementAction::Append;
                         if (mymode == OFF) {
                             snprintf(buf,512,"Selected: %s.%s.%s (%g, %g, %g)",documentName.c_str()
                                                        ,objectName.c_str()
                                                        ,subElementName.c_str()
-                                                       ,pp->getPoint()[0]
-                                                       ,pp->getPoint()[1]
-                                                       ,pp->getPoint()[2]);
+                                                       ,fabs(pt[0])>1e-7?pt[0]:0.0
+                                                       ,fabs(pt[1])>1e-7?pt[1]:0.0
+                                                       ,fabs(pt[2])>1e-7?pt[2]:0.0);
 
                             getMainWindow()->showMessage(QString::fromLatin1(buf));
                         }
@@ -500,9 +515,7 @@ SoFCUnifiedSelection::handleEvent(SoHandleEventAction * action)
                         bool ok = Gui::Selection().addSelection(documentName.c_str()
                                               ,objectName.c_str()
                                               ,subElementName.c_str()
-                                              ,pp->getPoint()[0]
-                                              ,pp->getPoint()[1]
-                                              ,pp->getPoint()[2]);
+                                              ,pt[0] ,pt[1] ,pt[2]);
                         if (ok)
                             type = SoSelectionElementAction::Append;
                     }
@@ -510,10 +523,7 @@ SoFCUnifiedSelection::handleEvent(SoHandleEventAction * action)
                         Gui::Selection().clearSelection(documentName.c_str());
                         bool ok = Gui::Selection().addSelection(documentName.c_str()
                                               ,objectName.c_str()
-                                              ,0
-                                              ,pp->getPoint()[0]
-                                              ,pp->getPoint()[1]
-                                              ,pp->getPoint()[2]);
+                                              ,0 ,pt[0] ,pt[1] ,pt[2]);
                         if (ok)
                             type = SoSelectionElementAction::All;
                     }
@@ -522,9 +532,9 @@ SoFCUnifiedSelection::handleEvent(SoHandleEventAction * action)
                         snprintf(buf,512,"Selected: %s.%s.%s (%g, %g, %g)",documentName.c_str()
                                                    ,objectName.c_str()
                                                    ,subElementName.c_str()
-                                                   ,pp->getPoint()[0]
-                                                   ,pp->getPoint()[1]
-                                                   ,pp->getPoint()[2]);
+                                                   ,fabs(pt[0])>1e-7?pt[0]:0.0
+                                                   ,fabs(pt[1])>1e-7?pt[1]:0.0
+                                                   ,fabs(pt[2])>1e-7?pt[2]:0.0);
 
                         getMainWindow()->showMessage(QString::fromLatin1(buf));
                     }
@@ -535,6 +545,7 @@ SoFCUnifiedSelection::handleEvent(SoHandleEventAction * action)
                     SoSelectionElementAction action(type);
                     action.setColor(this->colorSelection.getValue());
                     action.setElement(pp ? pp->getDetail() : 0);
+                    action.setSelectionRoot(currenthighlightRoot);
                     action.apply(currenthighlight);
                     this->touch();
                 }
@@ -580,6 +591,27 @@ void SoFCUnifiedSelection::GLRenderBelowPath(SoGLRenderAction * action)
         }
     }
 }
+
+// ---------------------------------------------------------------
+SelectionActionContext::SelectionActionContext():_root(0)
+{}
+
+SelectionActionContext::~SelectionActionContext() {
+    if(_root) _root->unref();
+}
+
+void SelectionActionContext::setSelectionRoot(SoNode *node) {
+    SoFCSelectionRoot *root = NULL;
+    if(node) {
+        if(!node->getTypeId().isDerivedFrom(SoFCSelectionRoot::getClassTypeId()))
+            return;
+        root = static_cast<SoFCSelectionRoot*>(node);
+        root->ref();
+    }
+    if(_root) _root->unref();
+    _root = root;
+}
+
 
 // ---------------------------------------------------------------
 
@@ -782,3 +814,51 @@ void SoVRMLAction::callDoAction(SoAction *action, SoNode *node)
 
     node->doAction(action);
 }
+
+// ---------------------------------------------------------------------------------
+
+SoFCSelectionRoot * SoFCSelectionRoot::currentRoot = NULL;
+
+SO_NODE_SOURCE(SoFCSelectionRoot);
+
+SoFCSelectionRoot::SoFCSelectionRoot()
+{
+    SO_NODE_CONSTRUCTOR(SoFCSelectionRoot);
+
+    SO_NODE_ADD_FIELD(selectionSync, (false));
+}
+
+SoFCSelectionRoot::~SoFCSelectionRoot()
+{
+}
+
+void SoFCSelectionRoot::initClass(void)
+{
+    SO_NODE_INIT_CLASS(SoFCSelectionRoot,SoSeparator,"Separator");
+}
+
+void SoFCSelectionRoot::finish()
+{
+    atexit_cleanup();
+}
+
+#define SOSELECTROOT_RENDER(_name) \
+void SoFCSelectionRoot::_name(SoGLRenderAction * action) {\
+    if(currentRoot) \
+        inherited::_name(action);\
+    else {\
+        currentRoot = this;\
+        inherited::_name(action);\
+        currentRoot = NULL;\
+    }\
+}
+
+SOSELECTROOT_RENDER(GLRender)
+SOSELECTROOT_RENDER(GLRenderBelowPath)
+SOSELECTROOT_RENDER(GLRenderOffPath)
+SOSELECTROOT_RENDER(GLRenderInPath)
+
+void SoFCSelectionRoot::resetContext() {
+    contextMap.clear();
+}
+

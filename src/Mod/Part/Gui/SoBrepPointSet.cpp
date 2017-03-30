@@ -63,8 +63,22 @@
 
 using namespace PartGui;
 
-
 SO_NODE_SOURCE(SoBrepPointSet);
+
+class SoBrepPointSet::SelContext: public Gui::SelectionContext {
+public:
+    SoSFInt32 highlightIndex;
+    SoMFInt32 selectionIndex;
+    SbColor selectionColor;
+    SbColor highlightColor;
+    SoColorPacker colorpacker;
+
+    SelContext() {
+        highlightIndex = -1;
+        selectionIndex = -1;
+        selectionIndex.setNum(0);
+    }
+};
 
 void SoBrepPointSet::initClass()
 {
@@ -74,9 +88,7 @@ void SoBrepPointSet::initClass()
 SoBrepPointSet::SoBrepPointSet()
 {
     SO_NODE_CONSTRUCTOR(SoBrepPointSet);
-    SO_NODE_ADD_FIELD(highlightIndex, (-1));
-    SO_NODE_ADD_FIELD(selectionIndex, (-1));
-    selectionIndex.setNum(0);
+    selContext = std::make_shared<SelContext>();
 }
 
 void SoBrepPointSet::GLRender(SoGLRenderAction *action)
@@ -87,18 +99,20 @@ void SoBrepPointSet::GLRender(SoGLRenderAction *action)
         // Fixes: #0000545: Undo revolve causes crash 'illegal storage'
         return;
     }
-    if (this->selectionIndex.getNum() > 0)
-        renderSelection(action);
-    if (this->highlightIndex.getValue() >= 0)
-        renderHighlight(action);
+    SelContextPtr ctx = Gui::SoFCSelectionRoot::getContext<SelContext>(this,selContext);
+
+    if (ctx && ctx->selectionIndex.getNum() > 0)
+        renderSelection(action,ctx);
+    if (ctx && ctx->highlightIndex.getValue() >= 0)
+        renderHighlight(action,ctx);
     inherited::GLRender(action);
 
     // Workaround for #0000433
 //#if !defined(FC_OS_WIN32)
-    if (this->highlightIndex.getValue() >= 0)
-        renderHighlight(action);
-    if (this->selectionIndex.getNum() > 0)
-        renderSelection(action);
+    if (ctx && ctx->highlightIndex.getValue() >= 0)
+        renderHighlight(action,ctx);
+    if (ctx && ctx->selectionIndex.getNum() > 0)
+        renderSelection(action,ctx);
 //#endif
 }
 
@@ -125,16 +139,16 @@ void SoBrepPointSet::renderShape(const SoGLCoordinateElement * const coords,
     glEnd();
 }
 
-void SoBrepPointSet::renderHighlight(SoGLRenderAction *action)
+void SoBrepPointSet::renderHighlight(SoGLRenderAction *action, SelContextPtr ctx)
 {
     SoState * state = action->getState();
     state->push();
     float ps = SoPointSizeElement::get(state);
     if (ps < 4.0f) SoPointSizeElement::set(state, this, 4.0f);
 
-    SoLazyElement::setEmissive(state, &this->highlightColor);
+    SoLazyElement::setEmissive(state, &ctx->highlightColor);
     SoOverrideElement::setEmissiveColorOverride(state, this, true);
-    SoLazyElement::setDiffuse(state, this,1, &this->highlightColor,&this->colorpacker);
+    SoLazyElement::setDiffuse(state, this,1, &ctx->highlightColor,&ctx->colorpacker);
     SoOverrideElement::setDiffuseColorOverride(state, this, true);
 
     const SoCoordinateElement * coords;
@@ -145,7 +159,7 @@ void SoBrepPointSet::renderHighlight(SoGLRenderAction *action)
     SoMaterialBundle mb(action);
     mb.sendFirst(); // make sure we have the correct material
 
-    int32_t id = this->highlightIndex.getValue();
+    int32_t id = ctx->highlightIndex.getValue();
     if (id < this->startIndex.getValue() || id >= coords->getNum()) {
         SoDebugError::postWarning("SoBrepPointSet::renderHighlight", "highlightIndex out of range");
     }
@@ -155,16 +169,16 @@ void SoBrepPointSet::renderHighlight(SoGLRenderAction *action)
     state->pop();
 }
 
-void SoBrepPointSet::renderSelection(SoGLRenderAction *action)
+void SoBrepPointSet::renderSelection(SoGLRenderAction *action, SelContextPtr ctx)
 {
     SoState * state = action->getState();
     state->push();
     float ps = SoPointSizeElement::get(state);
     if (ps < 4.0f) SoPointSizeElement::set(state, this, 4.0f);
 
-    SoLazyElement::setEmissive(state, &this->selectionColor);
+    SoLazyElement::setEmissive(state, &ctx->selectionColor);
     SoOverrideElement::setEmissiveColorOverride(state, this, true);
-    SoLazyElement::setDiffuse(state, this,1, &this->selectionColor,&this->colorpacker);
+    SoLazyElement::setDiffuse(state, this,1, &ctx->selectionColor,&ctx->colorpacker);
     SoOverrideElement::setDiffuseColorOverride(state, this, true);
 
     const SoCoordinateElement * coords;
@@ -177,8 +191,8 @@ void SoBrepPointSet::renderSelection(SoGLRenderAction *action)
     SoMaterialBundle mb(action);
     mb.sendFirst(); // make sure we have the correct material
 
-    cindices = this->selectionIndex.getValues(0);
-    numcindices = this->selectionIndex.getNum();
+    cindices = ctx->selectionIndex.getValues(0);
+    numcindices = ctx->selectionIndex.getNum();
 
     if (!validIndexes(coords, this->startIndex.getValue(), cindices, numcindices)) {
         SoDebugError::postWarning("SoBrepPointSet::renderSelection", "selectionIndex out of range");
@@ -204,38 +218,46 @@ void SoBrepPointSet::doAction(SoAction* action)
 {
     if (action->getTypeId() == Gui::SoHighlightElementAction::getClassTypeId()) {
         Gui::SoHighlightElementAction* hlaction = static_cast<Gui::SoHighlightElementAction*>(action);
+        SelContextPtr ctx = hlaction->getContext<SelContext>(this,selContext);
         if (!hlaction->isHighlighted()) {
-            this->highlightIndex = -1;
+            ctx->highlightIndex = -1;
+            touch();
             return;
         }
         const SoDetail* detail = hlaction->getElement();
         if (detail) {
             if (!detail->isOfType(SoPointDetail::getClassTypeId())) {
-                this->highlightIndex = -1;
+                ctx->highlightIndex = -1;
+                touch();
                 return;
             }
 
             int index = static_cast<const SoPointDetail*>(detail)->getCoordinateIndex();
-            this->highlightIndex.setValue(index);
-            this->highlightColor = hlaction->getColor();
+            if(index!=ctx->highlightIndex.getValue()) {
+                ctx->highlightIndex.setValue(index);
+                ctx->highlightColor = hlaction->getColor();
+                touch();
+            }
         }
     }
     else if (action->getTypeId() == Gui::SoSelectionElementAction::getClassTypeId()) {
         Gui::SoSelectionElementAction* selaction = static_cast<Gui::SoSelectionElementAction*>(action);
-        this->selectionColor = selaction->getColor();
+        SelContextPtr ctx = selaction->getContext<SelContext>(this,selContext);
+        ctx->selectionColor = selaction->getColor();
+        touch();
         if (selaction->getType() == Gui::SoSelectionElementAction::All) {
             const SoCoordinateElement* coords = SoCoordinateElement::getInstance(action->getState());
             int num = coords->getNum() - this->startIndex.getValue();
-            this->selectionIndex.setNum(num);
-            int32_t* v = this->selectionIndex.startEditing();
+            ctx->selectionIndex.setNum(num);
+            int32_t* v = ctx->selectionIndex.startEditing();
             int32_t s = this->startIndex.getValue();
             for (int i=0; i<num;i++)
                 v[i] = i + s;
-            this->selectionIndex.finishEditing();
+            ctx->selectionIndex.finishEditing();
             return;
         }
         else if (selaction->getType() == Gui::SoSelectionElementAction::None) {
-            this->selectionIndex.setNum(0);
+            ctx->selectionIndex.setNum(0);
             return;
         }
 
@@ -249,17 +271,17 @@ void SoBrepPointSet::doAction(SoAction* action)
             switch (selaction->getType()) {
             case Gui::SoSelectionElementAction::Append:
                 {
-                    if (this->selectionIndex.find(index) < 0) {
-                        int start = this->selectionIndex.getNum();
-                        this->selectionIndex.set1Value(start, index);
+                    if (ctx->selectionIndex.find(index) < 0) {
+                        int start = ctx->selectionIndex.getNum();
+                        ctx->selectionIndex.set1Value(start, index);
                     }
                 }
                 break;
             case Gui::SoSelectionElementAction::Remove:
                 {
-                    int start = this->selectionIndex.find(index);
+                    int start = ctx->selectionIndex.find(index);
                     if (start >= 0)
-                        this->selectionIndex.deleteValues(start,1);
+                        ctx->selectionIndex.deleteValues(start,1);
                 }
                 break;
             default:

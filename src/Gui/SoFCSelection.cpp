@@ -337,12 +337,13 @@ SoFCSelection::handleEvent(SoHandleEventAction * action)
                     }
                 }
                 
-                snprintf(buf,512,"Preselected: %s.%s.%s (%f,%f,%f)",documentName.getValue().getString()
+                const auto &pt = pp->getPoint();
+                snprintf(buf,512,"Preselected: %s.%s.%s (%g, %g, %g)",documentName.getValue().getString()
                                            ,objectName.getValue().getString()
                                            ,subElementName.getValue().getString()
-                                           ,pp->getPoint()[0]
-                                           ,pp->getPoint()[1]
-                                           ,pp->getPoint()[2]);
+                                           ,fabs(pt[0])>1e-7?pt[0]:0.0
+                                           ,fabs(pt[1])>1e-7?pt[1]:0.0
+                                           ,fabs(pt[2])>1e-7?pt[2]:0.0);
 
                 getMainWindow()->showMessage(QString::fromLatin1(buf));
             }
@@ -380,6 +381,7 @@ SoFCSelection::handleEvent(SoHandleEventAction * action)
             //       Otherwise the tree signals that an object is preselected even though it is hidden. (Werner)
             const SoPickedPoint * pp = this->getPickedPoint(action);
             if (pp && pp->getPath()->containsPath(action->getCurPath())) {
+                const auto &pt = pp->getPoint();
                 if (bCtrl) {
                     if (Gui::Selection().isSelected(documentName.getValue().getString()
                                          ,objectName.getValue().getString()
@@ -391,17 +393,15 @@ SoFCSelection::handleEvent(SoHandleEventAction * action)
                         Gui::Selection().addSelection(documentName.getValue().getString()
                                           ,objectName.getValue().getString()
                                           ,subElementName.getValue().getString()
-                                          ,pp->getPoint()[0]
-                                          ,pp->getPoint()[1]
-                                          ,pp->getPoint()[2]);
+                                          ,pt[0] ,pt[1] ,pt[2]);
 
                         if (mymode == OFF) {
-                            snprintf(buf,512,"Selected: %s.%s.%s (%f,%f,%f)",documentName.getValue().getString()
+                            snprintf(buf,512,"Selected: %s.%s.%s (%g, %g, %g)",documentName.getValue().getString()
                                                        ,objectName.getValue().getString()
                                                        ,subElementName.getValue().getString()
-                                                       ,pp->getPoint()[0]
-                                                       ,pp->getPoint()[1]
-                                                       ,pp->getPoint()[2]);
+                                                       ,fabs(pt[0])>1e-7?pt[0]:0.0
+                                                       ,fabs(pt[1])>1e-7?pt[1]:0.0
+                                                       ,fabs(pt[2])>1e-7?pt[2]:0.0);
 
                             getMainWindow()->showMessage(QString::fromLatin1(buf));
                         }
@@ -415,27 +415,22 @@ SoFCSelection::handleEvent(SoHandleEventAction * action)
                         Gui::Selection().addSelection(documentName.getValue().getString()
                                               ,objectName.getValue().getString()
                                               ,subElementName.getValue().getString()
-                                              ,pp->getPoint()[0]
-                                              ,pp->getPoint()[1]
-                                              ,pp->getPoint()[2]);
+                                              ,pt[0] ,pt[1] ,pt[2]);
                     }
                     else {
                         Gui::Selection().clearSelection(documentName.getValue().getString());
                         Gui::Selection().addSelection(documentName.getValue().getString()
                                               ,objectName.getValue().getString()
-                                              ,0
-                                              ,pp->getPoint()[0]
-                                              ,pp->getPoint()[1]
-                                              ,pp->getPoint()[2]);
+                                              ,0 ,pt[0] ,pt[1] ,pt[2]);
                     }
 
                     if (mymode == OFF) {
-                        snprintf(buf,512,"Selected: %s.%s.%s (%f,%f,%f)",documentName.getValue().getString()
+                        snprintf(buf,512,"Selected: %s.%s.%s (%g, %g, %g)",documentName.getValue().getString()
                                                    ,objectName.getValue().getString()
                                                    ,subElementName.getValue().getString()
-                                                   ,pp->getPoint()[0]
-                                                   ,pp->getPoint()[1]
-                                                   ,pp->getPoint()[2]);
+                                                   ,fabs(pt[0])>1e-7?pt[0]:0.0
+                                                   ,fabs(pt[1])>1e-7?pt[1]:0.0
+                                                   ,fabs(pt[2])>1e-7?pt[2]:0.0);
 
                         getMainWindow()->showMessage(QString::fromLatin1(buf));
                     }
@@ -544,6 +539,7 @@ SoFCSelection::handleEvent(SoHandleEventAction * action)
             //       Otherwise the tree signals that an object is preselected even though it is hidden. (Werner)
             const SoPickedPoint * pp = this->getPickedPoint(action);
             if (pp && pp->getPath()->containsPath(action->getCurPath())) {
+                const auto &pt = pp->getPoint();
                 if (bCtrl) {
                     if (Gui::Selection().isSelected(documentName.getValue().getString()
                                          ,objectName.getValue().getString()
@@ -556,17 +552,15 @@ SoFCSelection::handleEvent(SoHandleEventAction * action)
                         Gui::Selection().addSelection(documentName.getValue().getString()
                                           ,objectName.getValue().getString()
                                           ,subElementName.getValue().getString()
-                                          ,pp->getPoint()[0]
-                                          ,pp->getPoint()[1]
-                                          ,pp->getPoint()[2]);
+                                          ,pt[0] ,pt[1] ,pt[2]);
 
                         if (mymode == OFF) {
-                            snprintf(buf,512,"Selected: %s.%s.%s (%f,%f,%f)",documentName.getValue().getString()
+                            snprintf(buf,512,"Selected: %s.%s.%s (%g, %g, %g)",documentName.getValue().getString()
                                                        ,objectName.getValue().getString()
                                                        ,subElementName.getValue().getString()
-                                                       ,pp->getPoint()[0]
-                                                       ,pp->getPoint()[1]
-                                                       ,pp->getPoint()[2]);
+                                                       ,fabs(pt[0])>1e-7?pt[0]:0.0
+                                                       ,fabs(pt[1])>1e-7?pt[1]:0.0
+                                                       ,fabs(pt[2])>1e-7?pt[2]:0.0);
 
                             getMainWindow()->showMessage(QString::fromLatin1(buf));
                         }
@@ -580,27 +574,22 @@ SoFCSelection::handleEvent(SoHandleEventAction * action)
                         Gui::Selection().addSelection(documentName.getValue().getString()
                                               ,objectName.getValue().getString()
                                               ,subElementName.getValue().getString()
-                                              ,pp->getPoint()[0]
-                                              ,pp->getPoint()[1]
-                                              ,pp->getPoint()[2]);
+                                              ,pt[0] ,pt[1] ,pt[2]);
                     }
                     else {
                         Gui::Selection().clearSelection(documentName.getValue().getString());
                         Gui::Selection().addSelection(documentName.getValue().getString()
                                               ,objectName.getValue().getString()
-                                              ,0
-                                              ,pp->getPoint()[0]
-                                              ,pp->getPoint()[1]
-                                              ,pp->getPoint()[2]);
+                                              ,0 ,pt[0] ,pt[1] ,pt[2]);
                     }
  
                     if (mymode == OFF) {
-                        snprintf(buf,512,"Selected: %s.%s.%s (%f,%f,%f)",documentName.getValue().getString()
+                        snprintf(buf,512,"Selected: %s.%s.%s (%g, %g, %g)",documentName.getValue().getString()
                                                    ,objectName.getValue().getString()
                                                    ,subElementName.getValue().getString()
-                                                   ,pp->getPoint()[0]
-                                                   ,pp->getPoint()[1]
-                                                   ,pp->getPoint()[2]);
+                                                   ,fabs(pt[0])>1e-7?pt[0]:0.0
+                                                   ,fabs(pt[1])>1e-7?pt[1]:0.0
+                                                   ,fabs(pt[2])>1e-7?pt[2]:0.0);
 
                         getMainWindow()->showMessage(QString::fromLatin1(buf));
                     }

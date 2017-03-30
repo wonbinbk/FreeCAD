@@ -108,6 +108,7 @@
 #include "Transactions.h"
 #include <App/MaterialPy.h>
 #include <Base/GeometryPyCXX.h>
+#include "Link.h"
 
 // If you stumble here, run the target "BuildExtractRevision" on Windows systems
 // or the Python script "SubWCRev.py" on Linux based systems which builds
@@ -1259,6 +1260,8 @@ void Application::initTypes(void)
     App ::Line                      ::init();
     App ::Part                      ::init();
     App ::Origin                    ::init();
+    App ::Link                      ::init();
+    App ::XLink                     ::init();
 
     // Expression classes
     App ::Expression                ::init();
