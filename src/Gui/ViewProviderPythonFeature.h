@@ -55,6 +55,7 @@ public:
     std::string getElementPicked(const SoPickedPoint *pp) const;
     std::string getElement(const SoDetail *det) const;
     SoDetail* getDetail(const char*) const;
+    SoDetail* getDetailPath(const char *name, SoFullPath **path) const;
     std::vector<Base::Vector3d> getSelectionShape(const char* Element) const;
     ValueT setEdit(int ModNum);
     ValueT unsetEdit(int ModNum);
@@ -166,6 +167,10 @@ public:
         SoDetail* det = imp->getDetail(name);
         if (det) return det;
         return ViewProviderT::getDetail(name);
+    }
+    virtual SoDetail* getDetailPath(const char *name, SoFullPath **ppath) const {
+        if(!ppath) return getDetail(name);
+        return imp->getDetailPath(name,ppath);
     }
     virtual std::vector<Base::Vector3d> getSelectionShape(const char* Element) const {
         return ViewProviderT::getSelectionShape(Element);

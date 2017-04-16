@@ -24,10 +24,11 @@
 #ifndef GUI_VIEWPROVIDER_LINK_H
 #define GUI_VIEWPROVIDER_LINK_H
 
-#include <App/PropertyGeo.h>
+#include <boost/intrusive_ptr.hpp>
 #include <App/Link.h>
 #include "ViewProviderPythonFeature.h"
-#include "ViewProviderGeometryObject.h"
+#include "ViewProviderDocumentObject.h"
+#include "ViewProviderExtension.h"
 
 namespace Gui {
 
@@ -40,38 +41,86 @@ public:
     ViewProviderLink();
     virtual ~ViewProviderLink();
 
-    virtual void attach(App::DocumentObject *pcObj);
-    virtual void updateData(const App::Property*);
-    virtual void onChanged(const App::Property* prop);
-    virtual std::vector<App::DocumentObject*> claimChildren(void) const;
+    void attach(App::DocumentObject *pcObj) override;
+    void updateData(const App::Property*) override;
+    void onChanged(const App::Property* prop) override;
+    std::vector<App::DocumentObject*> claimChildren(void) const override;
 
-    virtual bool useNewSelectionModel(void) const;
-    virtual std::string getElementPicked(const SoPickedPoint *) const;
-    virtual SoDetail* getDetail(const char* subelement) const;
+    bool useNewSelectionModel(void) const override;
+    std::string getElementPicked(const SoPickedPoint *) const override;
+    SoDetail* getDetail(const char* subelement) const override;
+    SoDetail* getDetailPath(const char *subelement, SoFullPath **) const override;
 
-    virtual bool onDelete(const std::vector<std::string> &subNames);
+    bool onDelete(const std::vector<std::string> &subNames) override;
+    
+    bool canRemoveChildrenFromRoot() const override {
+        return moveChildFromRoot;
+    }
 
-    App::PropertyVector ScaleFactor;
-    App::PropertyBool Synchronized;
+    ViewProviderDocumentObject *getElementView(
+            const char *element, const char **subname) override;
+
+    ViewProviderDocumentObject *getLinkedView() override;
+
+    QIcon getIcon(void) const override;
+
+    void getNodeNames(QMap<SoNode*, QString> &nodeNames) const;
 
     class LinkInfo;
     friend class LinkInfo;
-    typedef std::shared_ptr<LinkInfo> LinkInfoPtr;
+    typedef boost::intrusive_ptr<LinkInfo> LinkInfoPtr;
+
+    class Observer: public ViewProviderExtension {
+        EXTENSION_TYPESYSTEM_HEADER_WITH_OVERRIDE();
+    public:
+        Observer();
+        void extensionOnDeleting() override;
+        void extensionOnChanged(const App::Property *) override;
+        void extensionUpdateData(const App::Property*) override;
+        void extensionHide(void) override;
+        void extensionShow(void) override;
+
+        LinkInfoPtr linkInfo;
+    };
 
     class DocInfo;
     friend class DocInfo;
     typedef std::shared_ptr<DocInfo> DocInfoPtr;
 
+    enum PropName {
+        PropNamePlacement,
+        PropNameObject,
+        PropNameFile,
+        PropNameObjectName,
+        PropNameMoveChild,
+        PropNameTransform,
+        PropNameScale,
+        PropNameMax,
+    };
+    typedef std::map<std::string,PropName> PropNameMap;
+    typedef std::array<std::string,ViewProviderLink::PropNameMax> PropNames;
+
+    // ViewProviderLink will keep the passed 'conf'. DO NOT modify afterwards.
+    void setPropertyNames(std::shared_ptr<PropNameMap> conf);
+
 protected:
-    void updateVisual(ViewProviderDocumentObject *vpLinked);
     void unlink(bool unlinkDoc=false);
     void findLink(bool touch=false);
+    bool findLink(const App::PropertyString *prop);
+    bool findLink(const App::PropertyLink *prop);
+    bool updateLink(App::DocumentObject *pcLinkedObj);
+    void setup();
+    void checkProperty(const App::Property *prop, bool fromObject);
 
-private:
-    ViewProviderDocumentObject *pcLinked;
-    std::string linkedObjName;
+    std::shared_ptr<PropNameMap> propName2Type;
+
+    std::shared_ptr<PropNames> propType2Name;
+
     LinkInfoPtr linkInfo;
     DocInfoPtr docInfo;
+
+    bool moveChildFromRoot;
+    bool linkTransform;
 };
 
 typedef Gui::ViewProviderPythonFeatureT<ViewProviderLink> ViewProviderLinkPython;

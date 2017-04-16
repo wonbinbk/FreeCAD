@@ -23,15 +23,16 @@
 #ifndef APP_LINK_H
 #define APP_LINK_H
 
-#include "GeoFeature.h"
+#include "DocumentObject.h"
 #include "PropertyLinks.h"
+#include "PropertyGeo.h"
 
 namespace App
 {
 
-class AppExport Link : public App::GeoFeature
+class AppExport Link : public App::DocumentObject
 {
-    PROPERTY_HEADER(App::GeoFeature);
+    PROPERTY_HEADER(App::DocumentObject);
 
 public:
     Link(void);
@@ -41,12 +42,16 @@ public:
         return "Gui::ViewProviderLink";
     }
 
-    PropertyLink Source;
+    PropertyLink LinkedObject;
+    PropertyPlacement LinkPlacement;
+    PropertyVector LinkScale;
+    PropertyBool LinkMoveChild;
+    PropertyBool LinkTransform;
 };
 
-class AppExport XLink : public App::GeoFeature
+class AppExport XLink : public App::DocumentObject
 {
-    PROPERTY_HEADER(App::GeoFeature);
+    PROPERTY_HEADER(App::DocumentObject);
 
 public:
     XLink(void);
@@ -56,8 +61,11 @@ public:
         return "Gui::ViewProviderLink";
     }
 
-    PropertyString SourceFile;
-    PropertyString ObjectName;
+    PropertyString LinkedFile;
+    PropertyString LinkedObjectName;
+    PropertyPlacement LinkPlacement;
+    PropertyVector LinkScale;
+    PropertyBool LinkTransform;
 };
 
 } //namespace App

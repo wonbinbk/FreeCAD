@@ -129,7 +129,7 @@ class GuiExport SelectionObserver
 
 public:
     /// Constructor
-    SelectionObserver();
+    SelectionObserver(bool attach = true);
     virtual ~SelectionObserver();
     bool blockConnection(bool block);
     bool isConnectionBlocked() const;

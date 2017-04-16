@@ -44,6 +44,7 @@
 #include "Document.h"
 #include "BitmapFactory.h"
 #include "ViewProvider.h"
+#include "ViewProviderDocumentObject.h"
 
 #include "propertyeditor/PropertyEditor.h"
 
@@ -203,13 +204,24 @@ void PropertyView::onSelectionChanged(const SelectionChanges& msg)
         std::vector<App::Property*> dataList;
         std::map<std::string, App::Property*> viewList;
         if ((*it).pObject) {
-            (*it).pObject->getPropertyList(dataList);
             ob = (*it).pObject;
 
             // get also the properties of the associated view provider
             Gui::Document* doc = Gui::Application::Instance->getDocument(it->pDoc);
             vp = doc->getViewProvider((*it).pObject);
-            if(!vp) continue;
+            if(vp) {
+                ViewProvider *cvp = vp->getElementView(it->SubName);
+                if(cvp && cvp!=vp && cvp->isDerivedFrom(ViewProviderDocumentObject::getClassTypeId())) {
+                    App::DocumentObject *obj = static_cast<ViewProviderDocumentObject*>(cvp)->getObject();
+                    if(obj) {
+                        ob = obj;
+                        vp = cvp;
+                    }
+                }
+            }
+
+            ob->getPropertyList(dataList);
+
             // get the properties as map here because it doesn't matter to have them sorted alphabetically
             vp->getPropertyMap(viewList);
         }

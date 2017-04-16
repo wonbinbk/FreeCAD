@@ -1462,6 +1462,7 @@ void Application::initTypes(void)
     Gui::ViewProviderMaterialObjectPython       ::init();
     Gui::ViewProviderLink                       ::init();
     Gui::ViewProviderLinkPython                 ::init();
+    Gui::ViewProviderLink::Observer             ::init();
 
     // Workbench
     Gui::Workbench                              ::init();

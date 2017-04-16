@@ -70,7 +70,6 @@ public:
     ~TreeWidget();
 
     void scrollItemToTop(Gui::Document*);
-    void setItemsSelected (const QList<QTreeWidgetItem *> items, bool select);
 
     static const int DocumentType;
     static const int ObjectType;
@@ -97,6 +96,10 @@ protected:
     bool event(QEvent *e);
     void keyPressEvent(QKeyEvent *event);
     void mouseDoubleClickEvent(QMouseEvent * event);
+
+protected:
+    void showEvent(QShowEvent *) override;
+    void hideEvent(QHideEvent *) override;
 
 protected Q_SLOTS:
     void onCreateGroup();
@@ -136,6 +139,8 @@ private:
     static QPixmap* documentPixmap;
     std::map<const Gui::Document*,DocumentItem*> DocumentMap;
     bool fromOutside;
+
+    friend class DocumentItem;
 };
 
 /** The link between the tree and a document.
@@ -150,10 +155,9 @@ public:
     ~DocumentItem();
 
     const Gui::Document* document() const;
-    void setObjectHighlighted(const char*, bool);
-    void setObjectSelected(const char*, bool);
     void clearSelection(void);
-    void updateSelection(void);
+    void updateSelection(QTreeWidgetItem *, bool unselect=false);
+    void updateItemSelection(DocumentObjectItem *);
     void selectItems(void);
     void testStatus(void);
     void setData(int column, int role, const QVariant & value);
@@ -179,6 +183,8 @@ protected:
     bool createNewItem(const Gui::ViewProviderDocumentObject&, 
                     QTreeWidgetItem *parent=0, int index=-1, 
                     DocumentObjectDataPtr ptrs = DocumentObjectDataPtr());
+
+    void findSelection(DocumentObjectItem *item, const char *subname);
 
 private:
     const Gui::Document* pDocument;
@@ -208,7 +214,8 @@ public:
     ~DocumentObjectItem();
 
     Gui::ViewProviderDocumentObject* object() const;
-    void testStatus(bool resetStatus, int status, QIcon &icon);
+    void testStatus(bool resetStatus, QIcon &icon);
+    void testStatus(bool resetStatus);
     void displayStatusInfo();
     void setExpandedStatus(bool);
     void setData(int column, int role, const QVariant & value);
@@ -216,10 +223,23 @@ public:
 
     // check if a new item is required at root
     bool requiredAtRoot() const;
+    
+    // check if having the same viewObject
+    bool isCloneOf(const QTreeWidgetItem *) const;
+
+    const char *getFullName(std::string &subname) const;
+
+    bool isLink() const;
+    bool isParentLink() const;
+    bool isGroup() const;
+    bool isParentGroup() const;
+
+    DocumentObjectItem *getParentItem() const;
 
 private:
     DocumentObjectDataPtr myData;
     int previousStatus;
+    int selected;
     bool populated;
 
     friend class TreeWidget;

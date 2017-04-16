@@ -418,6 +418,10 @@ void ViewProvider::setDefaultMode(int val)
 void ViewProvider::onChanged(const App::Property* prop)
 {
     Application::Instance->signalChangedObject(*this, *prop);
+
+    auto vector = getExtensionsDerivedFromType<Gui::ViewProviderExtension>();
+    for(Gui::ViewProviderExtension* ext : vector)
+        ext->extensionOnChanged(prop);
 }
 
 std::string ViewProvider::toString() const
@@ -549,6 +553,10 @@ bool ViewProvider::onDelete(const vector< string >& subNames) {
     for(Gui::ViewProviderExtension* ext : vector)
         del &= ext->extensionOnDelete(subNames);
 
+    if(del) {
+        for(Gui::ViewProviderExtension* ext : vector)
+            ext->extensionOnDeleting();
+    }
     return del;
 }
 

@@ -435,6 +435,52 @@ SoDetail* ViewProviderPythonFeatureImp::getDetail(const char* name) const
     return 0;
 }
 
+SoDetail* ViewProviderPythonFeatureImp::getDetailPath(
+        const char* name, SoFullPath **ppath) const
+{
+    bool freepath = false;
+    // Run the onChanged method of the proxy object.
+    Base::PyGILStateLocker lock;
+    try {
+        App::Property* proxy = object->getPropertyByName("Proxy");
+        if (proxy && proxy->getTypeId() == App::PropertyPythonObject::getClassTypeId()) {
+            Py::Object vp = static_cast<App::PropertyPythonObject*>(proxy)->getValue();
+            if (vp.hasAttr(std::string("getDetailPath"))) {
+                Py::Callable method(vp.getAttr(std::string("getDetailPath")));
+                PyObject* pivy = 0;
+                if(*ppath == 0) {
+                    freepath = true;
+                    *ppath = (SoFullPath*)(new SoPath);
+                    (*ppath)->ref();
+                }
+                pivy = Base::Interpreter().createSWIGPointerObj("pivy.coin", "SoFullPath *", (void*)*ppath, 0);
+                Py::Tuple args(2);
+                args.setItem(0, Py::String(name));
+                args.setItem(1, Py::Object(pivy, true));
+                Py::Object det(method.apply(args));
+                void* ptr = 0;
+                Base::Interpreter().convertSWIGPointerObj("pivy.coin", "SoDetail *", det.ptr(), &ptr, 0);
+                SoDetail* detail = reinterpret_cast<SoDetail*>(ptr);
+                return detail ? detail->copy() : 0;
+            }
+        }
+    }
+    catch (const Base::Exception& e) {
+        e.ReportException();
+    }
+    catch (Py::Exception&) {
+        Base::PyException e; // extract the Python error text
+        e.ReportException();
+    }
+
+    if(freepath) {
+        (*ppath)->unref();
+        *ppath = 0;
+    }
+    return object->getDetailPath(name,ppath);
+}
+
+
 std::vector<Base::Vector3d> ViewProviderPythonFeatureImp::getSelectionShape(const char* /*Element*/) const
 {
     return std::vector<Base::Vector3d>();

@@ -52,7 +52,11 @@ public:
     virtual std::vector<App::DocumentObject*> extensionClaimChildren3D(void) const { 
         return std::vector<App::DocumentObject*>(); }
         
+    // Called to query for delete
     virtual bool extensionOnDelete(const std::vector<std::string> &){ return true;}
+
+    // Called when all extensions agree to be deleted
+    virtual void extensionOnDeleting(){}
  
     virtual std::vector<App::DocumentObject*> extensionClaimChildren(void) const { 
         return std::vector<App::DocumentObject*>(); }
@@ -78,6 +82,9 @@ public:
 
     //update data of extended opject
     virtual void extensionUpdateData(const App::Property*);
+
+    // Called when the extended ViewProvider itselves is changed
+    virtual void extensionOnChanged(const App::Property*) {}
     
 private:
   //Gui::ViewProviderDocumentObject* m_viewBase = nullptr;

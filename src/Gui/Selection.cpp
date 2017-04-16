@@ -54,9 +54,10 @@
 using namespace Gui;
 using namespace std;
 
-SelectionObserver::SelectionObserver()
+SelectionObserver::SelectionObserver(bool attach)
 {
-    attachSelection();
+    if(attach)
+        attachSelection();
 }
 
 SelectionObserver::~SelectionObserver()

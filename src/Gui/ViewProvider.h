@@ -76,8 +76,6 @@ enum ViewStatus {
     isRestoring = 2
 };
 
-class ViewProviderLink;
-
 /** General interface for all visual stuff in FreeCAD
   * This class is used to generate and handle all around 
   * visualizing and presenting objects from the FreeCAD 
@@ -88,7 +86,6 @@ class ViewProviderLink;
 class GuiExport ViewProvider : public App::TransactionalObject
 {
     PROPERTY_HEADER(Gui::ViewProvider);
-    friend class ViewProviderLink;
 
 public:
     /// constructor.
@@ -130,10 +127,20 @@ public:
     virtual std::string getElementPicked(const SoPickedPoint *) const;
     /// return a hit element to the selection path or 0
     virtual std::string getElement(const SoDetail *) const { return std::string(); }
-    virtual SoDetail* getDetail(const char*) const { return 0; }
-    virtual SoDetail* getDetailPath(const char *subelement, SoFullPath **) const 
+    /// return the coin node detail of the subelement
+    virtual SoDetail* getDetail(const char *) const { return 0; }
+
+    /// return the coin node detail and optionally full path to the node of the subelement
+    //
+    /// Check ppath nullity to see if the caller wants the path. If *ppath==0,
+    /// you can return a new full path starting from the scene graph root all the way
+    /// to your subelement node. If *ppath!=0, you must only append additional path
+    /// starting from the active child node of your mode switch node.
+    virtual SoDetail* getDetailPath(const char *subelement, SoFullPath ** /*ppath*/) const 
         { return getDetail(subelement); }
+
     virtual std::vector<Base::Vector3d> getModelPoints(const SoPickedPoint *) const;
+
     /// return the higlight lines for a given element or the whole shape
     virtual std::vector<Base::Vector3d> getSelectionShape(const char* Element) const {
         (void)Element;
@@ -249,7 +256,6 @@ public:
     const std::string getOverrideMode();
     //@}
 
-
     /** @name Edit methods
      * if the Viewprovider goes in edit mode
      * you can handle most of the events in the viewer by yourself
@@ -338,6 +344,7 @@ public:
     /// Returns a list of added display mask modes
     std::vector<std::string> getDisplayMaskModes() const;
     void setDefaultMode(int);
+    int getDefaultMode() const { return _iActualMode; }
     //@}
     
 protected:
