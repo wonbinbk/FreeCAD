@@ -24,6 +24,7 @@
 #include "PreCompiled.h"
 #ifndef _PreComp_
 # include <Inventor/nodes/SoSeparator.h>
+# include <Inventor/nodes/SoSwitch.h>
 # include <QHeaderView>
 #endif
 
@@ -32,6 +33,7 @@
 #include "View3DInventor.h"
 #include "View3DInventorViewer.h"
 #include "ViewProviderDocumentObject.h"
+#include "ViewProviderLink.h"
 #include "Document.h"
 #include "Application.h"
 #include <App/Document.h>
@@ -91,7 +93,10 @@ void SceneModel::setNode(SoNode* node)
 
 void SceneModel::setNode(QModelIndex index, SoNode* node)
 {
-    this->setData(index, QVariant(QString::fromLatin1(node->getTypeId().getName())));
+    QString type(QString::fromLatin1(node->getTypeId().getName()));
+    if(node->getTypeId().isDerivedFrom(SoSwitch::getClassTypeId()))
+        type += QString::fromLatin1(" (%1)").arg(static_cast<SoSwitch*>(node)->whichChild.getValue());
+    this->setData(index, QVariant(type));
     if (node->getTypeId().isDerivedFrom(SoGroup::getClassTypeId())) {
         SoGroup *group = static_cast<SoGroup*>(node);
         // insert SoGroup icon
@@ -104,9 +109,10 @@ void SceneModel::setNode(QModelIndex index, SoNode* node)
             QMap<SoNode*, QString>::iterator it = nodeNames.find(child);
             if (it != nodeNames.end()) {
                 this->setData(this->index(i, 1, index), QVariant(it.value()));
-            }
-            else {
-                this->setData(this->index(i, 1, index), QVariant(QString::fromLatin1(child->getName())));
+            }else{
+                char addr[512];
+                snprintf(addr,sizeof(addr),"%s(0x%p)",child->getName().getString(),child);
+                this->setData(this->index(i, 1, index), QVariant(QString::fromLatin1(addr)));
             }
         }
     }
@@ -161,10 +167,10 @@ void DlgInspector::setNode(SoNode* node)
     
     QHeaderView* header = ui->treeView->header();
 #if QT_VERSION >= 0x050000
-    header->setSectionResizeMode(0, QHeaderView::Stretch);
+    header->setSectionResizeMode(0, QHeaderView::Interactive);
     header->setSectionsMovable(false);
 #else
-    header->setResizeMode(0, QHeaderView::Stretch);
+    header->setResizeMode(0, QHeaderView::Interactive);
     header->setMovable(false);
 #endif
 }
@@ -180,6 +186,9 @@ void DlgInspector::setNodeNames(Gui::Document* doc)
         if (obj) {
             QString label = QString::fromUtf8(obj->Label.getValue());
             nodeNames[vp->getRoot()] = label;
+
+            if(vp->isDerivedFrom(Gui::ViewProviderLink::getClassTypeId()))
+                static_cast<Gui::ViewProviderLink*>(vp)->getNodeNames(nodeNames);
         }
 
         std::vector<std::string> modes = vp->getDisplayMaskModes();
