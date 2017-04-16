@@ -53,7 +53,7 @@ ExtensionContainer::~ExtensionContainer() {
 void ExtensionContainer::registerExtension(Base::Type extension, Extension* ext) {
 
     if(ext->getExtendedContainer() != this)
-        throw Base::ValueError("ExtensionContainer::registerExtension: Extension has not this as base object");
+        throw Base::Exception("ExtensionContainer::registerExtension: Extension has not this as base object");
        
     //no duplicate extensions (including base classes)
     if(hasExtension(extension)) {
@@ -94,7 +94,7 @@ bool ExtensionContainer::hasExtension(const std::string& name) const {
 }
 
 
-Extension* ExtensionContainer::getExtension(Base::Type t) {
+Extension* ExtensionContainer::getExtension(Base::Type t, bool no_exception) {
    
     auto result = _extensions.find(t);
     if(result == _extensions.end()) {
@@ -104,6 +104,7 @@ Extension* ExtensionContainer::getExtension(Base::Type t) {
                 return entry.second;
         }
         //if we arive hear we don't have anything matching
+        if(no_exception) return nullptr;
         throw Base::TypeError("ExtensionContainer::getExtension: No extension of given type available");
     }
     
