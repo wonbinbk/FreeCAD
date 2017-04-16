@@ -757,12 +757,13 @@ void TreeWidget::onItemExpanded(QTreeWidgetItem * item)
     // object item expanded
     if (item && item->type() == TreeWidget::ObjectType) {
         DocumentObjectItem* obj = static_cast<DocumentObjectItem*>(item);
-        obj->setExpandedStatus(true);
         auto it = DocumentMap.find(obj->object()->getDocument());
         if(it==DocumentMap.end()) 
             Base::Console().Warning("DocumentItem::onItemExpanded: cannot find object document\n");
-        else
+        else {
             it->second->populateItem(obj);
+            obj->setExpandedStatus(true);
+        }
     }
 }
 
@@ -931,6 +932,63 @@ TreeDockWidget::~TreeDockWidget()
 {
 }
 
+// ---------------------------------------------------------------------------
+
+typedef std::set<DocumentObjectItem*> DocumentObjectItems;
+
+class Gui::DocumentObjectData {
+public:
+    DocumentObjectItems items;
+    ViewProviderDocumentObject *viewObject;
+    DocumentObjectItem *rootItem;
+
+    typedef boost::BOOST_SIGNALS_NAMESPACE::connection Connection;
+
+    Connection connectIcon;
+    Connection connectTool;
+    Connection connectStat;
+
+    DocumentObjectData(ViewProviderDocumentObject* vpd)
+        : viewObject(vpd),rootItem(0)
+    {
+        // Setup connections
+        connectIcon = viewObject->signalChangeIcon.connect(
+                boost::bind(&DocumentObjectData::slotChangeIcon, this));
+        connectTool = viewObject->signalChangeToolTip.connect(
+                boost::bind(&DocumentObjectData::slotChangeToolTip, this, _1));
+        connectStat = viewObject->signalChangeStatusTip.connect(
+                boost::bind(&DocumentObjectData::slotChangeStatusTip, this, _1));
+    }
+
+    void testStatus(bool resetStatus = false) {
+        App::DocumentObject* pObject = viewObject->getObject();
+
+        // if status has changed then continue
+        int currentStatus =
+            ((pObject->isError()          ? 1 : 0) << 2) |
+            ((pObject->mustExecute() == 1 ? 1 : 0) << 1) |
+            (viewObject->isShow()         ? 1 : 0);
+
+        QIcon icon;
+        for(auto item : items)
+            item->testStatus(resetStatus,currentStatus,icon);
+    }
+
+    void slotChangeIcon() {
+        testStatus(true);
+    }
+
+    void slotChangeToolTip(const QString& tip) {
+        for(auto item : items)
+            item->setToolTip(0, tip);
+    }
+
+    void slotChangeStatusTip(const QString& tip) {
+        for(auto item : items)
+            item->setStatusTip(0, tip);
+    }
+};
+
 // ----------------------------------------------------------------------------
 
 DocumentItem::DocumentItem(const Gui::Document* doc, QTreeWidgetItem * parent)
@@ -964,18 +1022,20 @@ DocumentItem::~DocumentItem()
 }
 
 #define FOREACH_ITEM(_item, _obj) \
-    auto _it = ObjectMap.find(std::string(_obj.getObject()->getNameInDocument()));\
-    if(_it == ObjectMap.end() || _it->second->empty()) return;\
-    for(auto _item : *_it->second){{
+    auto _it = ObjectMap.end();\
+    if(_obj.getObject()->getNameInDocument())\
+        _it = ObjectMap.find(_obj.getObject()->getNameInDocument());\
+    if(_it != ObjectMap.end()) {\
+        for(auto _item : _it->second->items){
 
 #define FOREACH_ITEM_ALL(_item) \
     for(auto _v : ObjectMap) {\
-        for(auto _item : *_v.second) {
+        for(auto _item : _v.second->items) {
 
 #define FOREACH_ITEM_NAME(_item,_name) \
     auto _it = ObjectMap.find(_name);\
     if(_it != ObjectMap.end()) {\
-        for(auto _item : *_it->second) {
+        for(auto _item : _it->second->items) {
 
 #define END_FOREACH_ITEM }}
 
@@ -999,27 +1059,29 @@ void DocumentItem::slotNewObject(const Gui::ViewProviderDocumentObject& obj) {
 }
 
 bool DocumentItem::createNewItem(const Gui::ViewProviderDocumentObject& obj,
-            QTreeWidgetItem *parent, int index, DocumentObjectItemsPtr ptrs)
+            QTreeWidgetItem *parent, int index, DocumentObjectDataPtr data)
 {
     const char *name;
     if (!obj.showInTree() || !(name=obj.getObject()->getNameInDocument())) 
         return false;
 
-    if(!ptrs) {
-        auto &items = ObjectMap[name];
-        if(!items) {
-            items.reset(new DocumentObjectItems);
-        }else if(items->size() && parent==NULL) {
+    if(!data) {
+        auto &pdata = ObjectMap[name];
+        if(!pdata) {
+            pdata = std::make_shared<DocumentObjectData>(const_cast<ViewProviderDocumentObject*>(&obj));
+        }else if(pdata->rootItem && parent==NULL) {
             Base::Console().Warning("DocumentItem::slotNewObject: Cannot add view provider twice.\n");
             return false;
         }
-        ptrs = items;
+        data = pdata;
     }
     std::string displayName = obj.getObject()->Label.getValue();
     std::string objectName = obj.getObject()->getNameInDocument();
-    DocumentObjectItem* item = new DocumentObjectItem(
-        const_cast<Gui::ViewProviderDocumentObject*>(&obj), ptrs);
-    if(!parent) parent = this;
+    DocumentObjectItem* item = new DocumentObjectItem(data);
+    if(!parent) {
+        parent = this;
+        data->rootItem = item;
+    }
     if(index<0)
         parent->addChild(item);
     else
@@ -1046,28 +1108,33 @@ static inline bool canCreateItem(const App::DocumentObject *obj, const Document 
 void DocumentItem::slotDeleteObject(const Gui::ViewProviderDocumentObject& view)
 {
     auto it = ObjectMap.find(std::string(view.getObject()->getNameInDocument()));
-    if(it == ObjectMap.end() || it->second->empty()) return;
-    auto &items = *(it->second);
+    if(it == ObjectMap.end() || it->second->items.empty()) return;
+    auto &items = it->second->items;
     for(auto cit=items.begin(),citNext=cit;cit!=items.end();cit=citNext) {
         ++citNext;
         delete *cit;
     }
     if(items.empty())
         ObjectMap.erase(it);
-
-    // Check for any child of the deleted object is not in the tree, and put it
+    
+    // Check for any child of the deleted object that is not in the tree, and put it
     // under document item.
     const auto &children = view.claimChildren();
     for(auto child : children) {
         if(!canCreateItem(child,pDocument)) 
             continue;
         auto it = ObjectMap.find(child->getNameInDocument());
-        if(it==ObjectMap.end() || it->second->empty()) {
+        if(it==ObjectMap.end() || it->second->items.empty()) {
             ViewProvider* vp = pDocument->getViewProvider(child);
             if(!vp || !vp->isDerivedFrom(ViewProviderDocumentObject::getClassTypeId()))
                 continue;
             createNewItem(static_cast<ViewProviderDocumentObject&>(*vp));
+        }else {
+            auto childItem = *it->second->items.begin();
+            if(childItem->requiredAtRoot())
+                createNewItem(*childItem->object(),this,-1,childItem->myData);
         }
+
     }
 }
 
@@ -1089,14 +1156,20 @@ void DocumentItem::populateItem(DocumentObjectItem *item, bool refresh) {
             if(!canCreateItem(child,pDocument)) 
                 continue;
             auto it = ObjectMap.find(child->getNameInDocument());
-            if(it == ObjectMap.end() || it->second->empty()) {
+            if(it == ObjectMap.end() || it->second->items.empty()) {
                 ViewProvider* vp = pDocument->getViewProvider(child);
                 if(!vp || !vp->isDerivedFrom(ViewProviderDocumentObject::getClassTypeId()))
                     continue;
                 doPopulate = true;
                 break;
             }
-            if((*it->second->begin())->parent() == this) {
+            auto childItem = *it->second->items.begin();
+            if(item->object()->canRemoveChildrenFromRoot()) {
+                if(it->second->rootItem) {
+                    doPopulate = true;
+                    break;
+                }
+            }else if(childItem->requiredAtRoot()){
                 doPopulate = true;
                 break;
             }
@@ -1124,6 +1197,16 @@ void DocumentItem::populateItem(DocumentObjectItem *item, bool refresh) {
                 item->removeChild(ci);
                 item->insertChild(i,ci);
             }
+
+            // Check if the item just changed its policy of whether to remove
+            // children item from the root. 
+            if(item->object()->canRemoveChildrenFromRoot()) {
+                if(childItem->myData->rootItem) {
+                    assert(childItem != childItem->myData->rootItem);
+                    delete childItem->myData->rootItem;
+                }
+            }else if(childItem->requiredAtRoot())
+                createNewItem(*childItem->object(),this,-1,childItem->myData);
             break;
         }
         if(found) continue;
@@ -1132,19 +1215,21 @@ void DocumentItem::populateItem(DocumentObjectItem *item, bool refresh) {
         // through slotNewObject -> populateItem
 
         auto it = ObjectMap.find(child->getNameInDocument());
-        if(it==ObjectMap.end() || it->second->empty()) {
+        if(it==ObjectMap.end() || it->second->items.empty()) {
             ViewProvider* vp = pDocument->getViewProvider(child);
             if(!vp || !vp->isDerivedFrom(ViewProviderDocumentObject::getClassTypeId()) || 
                !createNewItem(static_cast<ViewProviderDocumentObject&>(*vp),item,i,
-                        it==ObjectMap.end()?DocumentObjectItemsPtr():it->second))
+                        it==ObjectMap.end()?DocumentObjectDataPtr():it->second))
                 --i;
             continue;
         }
-        DocumentObjectItem *childItem = *it->second->begin();
-        if(childItem->parent() != this) {
+
+        if(!item->object()->canRemoveChildrenFromRoot() || !it->second->rootItem) {
+            DocumentObjectItem *childItem = *it->second->items.begin();
             if(!createNewItem(*childItem->object(),item,i,it->second))
                 --i;
         }else {
+            DocumentObjectItem *childItem = it->second->rootItem;
             if(item->isChildOfItem(childItem)) {
                 Base::Console().Error("Gui::DocumentItem::populateItem(): Cyclic dependency in %s and %s\n",
                         item->object()->getObject()->Label.getValue(),
@@ -1152,6 +1237,7 @@ void DocumentItem::populateItem(DocumentObjectItem *item, bool refresh) {
                 --i;
                 continue;
             }
+            it->second->rootItem = 0;
             this->removeChild(childItem);
             item->insertChild(i,childItem);
         }
@@ -1168,7 +1254,8 @@ void DocumentItem::populateItem(DocumentObjectItem *item, bool refresh) {
             // whole tree to confirm that. Just let it be. If the other
             // parent(s) later expanded, this child item will be moved from
             // root to its parent.
-            if(obj->myselves->size()==1) {
+            if(obj->requiredAtRoot()) {
+                obj->myData->rootItem = obj;
                 this->addChild(childItem);
                 continue;
             }
@@ -1179,11 +1266,33 @@ void DocumentItem::populateItem(DocumentObjectItem *item, bool refresh) {
 
 void DocumentItem::slotChangeObject(const Gui::ViewProviderDocumentObject& view)
 {
+    if(!view.showInTree()) {
+        slotDeleteObject(view);
+        return;
+    }
+    bool found = false;
     QString displayName = QString::fromUtf8(view.getObject()->Label.getValue());
     FOREACH_ITEM(item,view)
         item->setText(0, displayName);
         populateItem(item,true);
-    END_FOREACH_ITEM
+        found = true;
+    END_FOREACH_ITEM;
+
+    if(!found && view.getObject() && canCreateItem(view.getObject(),pDocument)) {
+        //showInTree changed?
+
+        for(const auto &v : ObjectMap) {
+            if(v.second->viewObject == &view) continue;
+            for(auto child : v.second->viewObject->claimChildren()) {
+                if(child != view.getObject()) continue;
+                found = true;
+                for(auto item : v.second->items)
+                    populateItem(item,true);
+                break;
+            }
+        }
+        if(!found) createNewItem(view);
+    }
 }
 
 void DocumentItem::slotRenameObject(const Gui::ViewProviderDocumentObject& obj)
@@ -1197,13 +1306,11 @@ void DocumentItem::slotActiveObject(const Gui::ViewProviderDocumentObject& obj)
     std::string objectName = obj.getObject()->getNameInDocument();
     if(ObjectMap.find(objectName) == ObjectMap.end())
         return; // signal is emitted before the item gets created
-    for(auto v : ObjectMap) {
-        for(auto item : *v.second) {
-            QFont f = item->font(0);
-            f.setBold(item->object() == &obj);
-            item->setFont(0,f);
-        }
-    }
+    FOREACH_ITEM_ALL(item);
+        QFont f = item->font(0);
+        f.setBold(item->object() == &obj);
+        item->setFont(0,f);
+    END_FOREACH_ITEM
 }
 
 void DocumentItem::slotHighlightObject (const Gui::ViewProviderDocumentObject& obj,const Gui::HighlightMode& high,bool set)
@@ -1298,9 +1405,8 @@ const Gui::Document* DocumentItem::document() const
 
 void DocumentItem::testStatus(void)
 {
-    FOREACH_ITEM_ALL(item);
-        item->testStatus();
-    END_FOREACH_ITEM;
+    for(const auto &v : ObjectMap)
+        v.second->testStatus();
 }
 
 void DocumentItem::setData (int column, int role, const QVariant & value)
@@ -1422,86 +1528,37 @@ void DocumentItem::selectItems(void)
 
 // ----------------------------------------------------------------------------
 
-DocumentObjectItem::DocumentObjectItem(Gui::ViewProviderDocumentObject* pcViewProvider,
-                                       DocumentObjectItemsPtr selves)
-    : QTreeWidgetItem(TreeWidget::ObjectType), previousStatus(-1), viewObject(pcViewProvider)
-    , myselves(selves), populated(false)
+DocumentObjectItem::DocumentObjectItem(DocumentObjectDataPtr data)
+    : QTreeWidgetItem(TreeWidget::ObjectType)
+    , myData(data), previousStatus(-1),populated(false)
 {
     setFlags(flags()|Qt::ItemIsEditable);
-    // Setup connections
-    connectIcon = pcViewProvider->signalChangeIcon.connect(boost::bind(&DocumentObjectItem::slotChangeIcon, this));
-    connectTool = pcViewProvider->signalChangeToolTip.connect(boost::bind(&DocumentObjectItem::slotChangeToolTip, this, _1));
-    connectStat = pcViewProvider->signalChangeStatusTip.connect(boost::bind(&DocumentObjectItem::slotChangeStatusTip, this, _1));
-    myselves->insert(this);
+    myData->items.insert(this);
 }
 
 DocumentObjectItem::~DocumentObjectItem()
 {
-    auto it = myselves->find(this);
-    if(it == myselves->end())
+    auto it = myData->items.find(this);
+    if(it == myData->items.end())
         assert(0);
     else
-        myselves->erase(it);
-    connectIcon.disconnect();
-    connectTool.disconnect();
-    connectStat.disconnect();
+        myData->items.erase(it);
+
+    if(myData->rootItem == this)
+        myData->rootItem = 0;
 }
 
 Gui::ViewProviderDocumentObject* DocumentObjectItem::object() const
 {
-    return viewObject;
+    return myData->viewObject;
 }
 
-void DocumentObjectItem::testStatus()
+void DocumentObjectItem::testStatus(bool resetStatus, int currentStatus, QIcon &icon )
 {
-    App::DocumentObject* pObject = viewObject->getObject();
-
-    // if status has changed then continue
-    int currentStatus =
-        ((pObject->isError()          ? 1 : 0) << 2) |
-        ((pObject->mustExecute() == 1 ? 1 : 0) << 1) |
-        (viewObject->isShow()         ? 1 : 0);
-    if (previousStatus == currentStatus)
+    if (!resetStatus && previousStatus==currentStatus)
         return;
-    previousStatus = currentStatus;
 
-    QPixmap px;
-    if (currentStatus & 4) {
-        // object is in error state
-        static const char * const feature_error_xpm[]={
-            "9 9 3 1",
-            ". c None",
-            "# c #ff0000",
-            "a c #ffffff",
-            "...###...",
-            ".##aaa##.",
-            ".##aaa##.",
-            "###aaa###",
-            "###aaa###",
-            "#########",
-            ".##aaa##.",
-            ".##aaa##.",
-            "...###..."};
-        px = QPixmap(feature_error_xpm);
-    }
-    else if (currentStatus & 2) {
-        // object must be recomputed
-        static const char * const feature_recompute_xpm[]={
-            "9 9 3 1",
-            ". c None",
-            "# c #0000ff",
-            "a c #ffffff",
-            "...###...",
-            ".######aa",
-            ".#####aa.",
-            "#####aa##",
-            "#aa#aa###",
-            "#aaaa####",
-            ".#aa####.",
-            ".#######.",
-            "...###..."};
-        px = QPixmap(feature_recompute_xpm);
-    }
+    previousStatus = currentStatus;
 
     QIcon::Mode mode = QIcon::Normal;
     if (currentStatus & 1) { // visible
@@ -1530,29 +1587,68 @@ void DocumentObjectItem::testStatus()
         mode = QIcon::Disabled;
     }
 
-    // get the original icon set
-    QIcon icon_org = viewObject->getIcon();
-    QIcon icon_mod;
-    int w = QApplication::style()->pixelMetric(QStyle::PM_ListViewIconSize);
+    if(icon.isNull()) {
+        QPixmap px;
+        if (currentStatus & 4) {
+            // object is in error state
+            static const char * const feature_error_xpm[]={
+                "9 9 3 1",
+                ". c None",
+                "# c #ff0000",
+                "a c #ffffff",
+                "...###...",
+                ".##aaa##.",
+                ".##aaa##.",
+                "###aaa###",
+                "###aaa###",
+                "#########",
+                ".##aaa##.",
+                ".##aaa##.",
+                "...###..."};
+            px = QPixmap(feature_error_xpm);
+        }
+        else if (currentStatus & 2) {
+            // object must be recomputed
+            static const char * const feature_recompute_xpm[]={
+                "9 9 3 1",
+                ". c None",
+                "# c #0000ff",
+                "a c #ffffff",
+                "...###...",
+                ".######aa",
+                ".#####aa.",
+                "#####aa##",
+                "#aa#aa###",
+                "#aaaa####",
+                ".#aa####.",
+                ".#######.",
+                "...###..."};
+            px = QPixmap(feature_recompute_xpm);
+        }
 
-    // if needed show small pixmap inside
-    if (!px.isNull()) {
-        icon_mod.addPixmap(BitmapFactory().merge(icon_org.pixmap(w, w, mode, QIcon::Off),
-            px,BitmapFactoryInst::TopRight), QIcon::Normal, QIcon::Off);
-        icon_mod.addPixmap(BitmapFactory().merge(icon_org.pixmap(w, w, mode, QIcon::On ),
-            px,BitmapFactoryInst::TopRight), QIcon::Normal, QIcon::Off);
-    }
-    else {
-        icon_mod.addPixmap(icon_org.pixmap(w, w, mode, QIcon::Off), QIcon::Normal, QIcon::Off);
-        icon_mod.addPixmap(icon_org.pixmap(w, w, mode, QIcon::On ), QIcon::Normal, QIcon::On );
+        // get the original icon set
+        QIcon icon_org = object()->getIcon();
+        int w = QApplication::style()->pixelMetric(QStyle::PM_ListViewIconSize);
+
+        // if needed show small pixmap inside
+        if (!px.isNull()) {
+            icon.addPixmap(BitmapFactory().merge(icon_org.pixmap(w, w, mode, QIcon::Off),
+                px,BitmapFactoryInst::TopRight), QIcon::Normal, QIcon::Off);
+            icon.addPixmap(BitmapFactory().merge(icon_org.pixmap(w, w, mode, QIcon::On ),
+                px,BitmapFactoryInst::TopRight), QIcon::Normal, QIcon::Off);
+        }
+        else {
+            icon.addPixmap(icon_org.pixmap(w, w, mode, QIcon::Off), QIcon::Normal, QIcon::Off);
+            icon.addPixmap(icon_org.pixmap(w, w, mode, QIcon::On ), QIcon::Normal, QIcon::On );
+        }
     }
 
-    this->setIcon(0, icon_mod);
+    this->setIcon(0, icon);
 }
 
 void DocumentObjectItem::displayStatusInfo()
 {
-    App::DocumentObject* Obj = viewObject->getObject();
+    App::DocumentObject* Obj = object()->getObject();
 
     QString info = QString::fromLatin1(Obj->getStatusString());
     if ( Obj->mustExecute() == 1 )
@@ -1571,7 +1667,7 @@ void DocumentObjectItem::displayStatusInfo()
 
 void DocumentObjectItem::setExpandedStatus(bool on)
 {
-    App::DocumentObject* Obj = viewObject->getObject();
+    App::DocumentObject* Obj = object()->getObject();
     Obj->setStatus(App::Expand, on);
 }
 
@@ -1580,7 +1676,7 @@ void DocumentObjectItem::setData (int column, int role, const QVariant & value)
     QTreeWidgetItem::setData(column, role, value);
     if (role == Qt::EditRole) {
         QString label = value.toString();
-        viewObject->getObject()->Label.setValue((const char*)label.toUtf8());
+        object()->getObject()->Label.setValue((const char*)label.toUtf8());
     }
 }
 
@@ -1601,20 +1697,16 @@ bool DocumentObjectItem::isChildOfItem(DocumentObjectItem* item)
     return false;
 }
 
-void DocumentObjectItem::slotChangeIcon()
-{
-    previousStatus = -1;
-    testStatus();
-}
-
-void DocumentObjectItem::slotChangeToolTip(const QString& tip)
-{
-    this->setToolTip(0, tip);
-}
-
-void DocumentObjectItem::slotChangeStatusTip(const QString& tip)
-{
-    this->setStatusTip(0, tip);
+bool DocumentObjectItem::requiredAtRoot() const{
+    if(myData->rootItem) return false;
+    for(auto item : myData->items) {
+        QTreeWidgetItem *parent = item->parent();
+        if(parent->type()==TreeWidget::DocumentType ||
+           (parent->type()==TreeWidget::ObjectType &&
+           static_cast<DocumentObjectItem*>(parent)->object()->canRemoveChildrenFromRoot()))
+            return false;
+    }
+    return true;
 }
 
 #include "moc_Tree.cpp"

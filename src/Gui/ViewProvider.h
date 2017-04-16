@@ -182,6 +182,8 @@ public:
     {
       return true;
     }
+    /** Tell the tree view to remove children items from the tree root*/
+    virtual bool canRemoveChildrenFromRoot() const {return true;}
     /** Remove a child from the view provider by drag and drop */
     virtual void dragObject(App::DocumentObject*);
     /** Check whether objects can be added to the view provider by drag and drop */

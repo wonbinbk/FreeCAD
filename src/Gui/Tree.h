@@ -37,8 +37,9 @@ namespace Gui {
 
 class ViewProviderDocumentObject;
 class DocumentObjectItem;
-typedef std::set<DocumentObjectItem*> DocumentObjectItems;
-typedef std::shared_ptr<DocumentObjectItems> DocumentObjectItemsPtr;
+class DocumentObjectData;
+typedef std::shared_ptr<DocumentObjectData> DocumentObjectDataPtr;
+
 class DocumentItem;
 
 /// highlight modes for the tree items
@@ -177,11 +178,11 @@ protected:
 
     bool createNewItem(const Gui::ViewProviderDocumentObject&, 
                     QTreeWidgetItem *parent=0, int index=-1, 
-                    DocumentObjectItemsPtr ptrs = DocumentObjectItemsPtr());
-        
+                    DocumentObjectDataPtr ptrs = DocumentObjectDataPtr());
+
 private:
     const Gui::Document* pDocument;
-    std::map<std::string,DocumentObjectItemsPtr> ObjectMap;
+    std::map<std::string,DocumentObjectDataPtr> ObjectMap;
 
     typedef boost::BOOST_SIGNALS_NAMESPACE::connection Connection;
     Connection connectNewObject;
@@ -203,31 +204,22 @@ private:
 class DocumentObjectItem : public QTreeWidgetItem
 {
 public:
-    DocumentObjectItem(Gui::ViewProviderDocumentObject* pcViewProvider, 
-                       DocumentObjectItemsPtr selves);
+    DocumentObjectItem(DocumentObjectDataPtr data);
     ~DocumentObjectItem();
 
     Gui::ViewProviderDocumentObject* object() const;
-    void testStatus();
+    void testStatus(bool resetStatus, int status, QIcon &icon);
     void displayStatusInfo();
     void setExpandedStatus(bool);
     void setData(int column, int role, const QVariant & value);
     bool isChildOfItem(DocumentObjectItem*);
 
-protected:
-    void slotChangeIcon();
-    void slotChangeToolTip(const QString&);
-    void slotChangeStatusTip(const QString&);
+    // check if a new item is required at root
+    bool requiredAtRoot() const;
 
 private:
-    typedef boost::BOOST_SIGNALS_NAMESPACE::connection Connection;
+    DocumentObjectDataPtr myData;
     int previousStatus;
-    Gui::ViewProviderDocumentObject* viewObject;
-    Connection connectIcon;
-    Connection connectTool;
-    Connection connectStat;
-
-    DocumentObjectItemsPtr myselves;
     bool populated;
 
     friend class TreeWidget;
