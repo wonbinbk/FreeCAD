@@ -91,10 +91,11 @@
 #include "ViewProviderDocumentObject.h"
 #include "ViewProviderGeometryObject.h"
 
+FC_LOG_LEVEL_INIT("SoFCUnifiedSelection",true,true);
+
 using namespace Gui;
 
 SoFullPath * Gui::SoFCUnifiedSelection::currenthighlight = NULL;
-SoNode *Gui::SoFCUnifiedSelection::currenthighlightRoot = NULL;
 
 
 // *************************************************************************
@@ -133,8 +134,6 @@ SoFCUnifiedSelection::~SoFCUnifiedSelection()
     if (currenthighlight != NULL) {
         currenthighlight->unref();
         currenthighlight = NULL;
-        currenthighlightRoot->unref();
-        currenthighlightRoot = NULL;
     }
 }
 
@@ -280,7 +279,8 @@ void SoFCUnifiedSelection::doAction(SoAction *action)
             App::DocumentObject* obj = doc->getObject(selaction->SelChange.pObjectName);
             ViewProvider*vp = Application::Instance->getViewProvider(obj);
             if (vp && vp->useNewSelectionModel() && vp->isSelectable()) {
-                SoDetail* detail = vp->getDetail(selaction->SelChange.pSubName);
+                SoFullPath *path = 0;
+                SoDetail* detail = vp->getDetailPath(selaction->SelChange.pSubName,&path);
                 SoSelectionElementAction::Type type = SoSelectionElementAction::None;
                 if (selaction->SelChange.Type == SelectionChanges::AddSelection) {
                     if (detail)
@@ -299,9 +299,12 @@ void SoFCUnifiedSelection::doAction(SoAction *action)
                     SoSelectionElementAction action(type);
                     action.setColor(this->colorSelection.getValue());
                     action.setElement(detail);
-                    action.setSelectionRoot(vp->getRoot());
-                    action.apply(vp->getRoot());
+                    if(path)
+                        action.apply(path);
+                    else
+                        action.apply(vp->getRoot());
                 }
+                if(path) path->unref();
                 delete detail;
             }
         }
@@ -321,7 +324,6 @@ void SoFCUnifiedSelection::doAction(SoAction *action)
                     if(checkSelectionStyle(type,vpd)) {
                         SoSelectionElementAction action(type);
                         action.setColor(this->colorSelection.getValue());
-                        action.setSelectionRoot(vpd->getRoot());
                         action.apply(vpd->getRoot());
                     }
                 }
@@ -409,26 +411,22 @@ SoFCUnifiedSelection::handleEvent(SoHandleEventAction * action)
                         if (currenthighlight && currenthighlight->getTail() != sa.getPath()->getTail()) {
                             SoHighlightElementAction action;
                             action.setHighlighted(false);
-                            action.setSelectionRoot(currenthighlightRoot);
                             action.apply(currenthighlight);
                             currenthighlight->unref();
                             currenthighlight = 0;
-                            currenthighlightRoot->unref();
-                            currenthighlightRoot = 0;
                             //old_state = !highlighted;
                         }
                         else if (currenthighlight) {
                             // clean-up the highlight path before assigning a new path
                             currenthighlight->unref();
                             currenthighlight = 0;
-                            currenthighlightRoot->unref();
-                            currenthighlightRoot = 0;
                         }
 
-                        currenthighlight = static_cast<SoFullPath*>(sa.getPath()->copy());
+                        if(pp && pp->getDetail()) 
+                            currenthighlight = static_cast<SoFullPath*>(pp->getPath()->copy());
+                        else
+                            currenthighlight = static_cast<SoFullPath*>(sa.getPath()->copy());
                         currenthighlight->ref();
-                        currenthighlightRoot = vp->getRoot();
-                        currenthighlightRoot->ref();
                     }
                 }
             }
@@ -447,13 +445,10 @@ SoFCUnifiedSelection::handleEvent(SoHandleEventAction * action)
                 action.setHighlighted(highlighted);
                 action.setColor(this->colorHighlight.getValue());
                 action.setElement(pp ? pp->getDetail() : 0);
-                action.setSelectionRoot(currenthighlightRoot);
                 action.apply(currenthighlight);
                 if (!highlighted) {
                     currenthighlight->unref();
                     currenthighlight = 0;
-                    currenthighlightRoot->unref();
-                    currenthighlightRoot = 0;
                 }
                 this->touch();
             }
@@ -545,7 +540,6 @@ SoFCUnifiedSelection::handleEvent(SoHandleEventAction * action)
                     SoSelectionElementAction action(type);
                     action.setColor(this->colorSelection.getValue());
                     action.setElement(pp ? pp->getDetail() : 0);
-                    action.setSelectionRoot(currenthighlightRoot);
                     action.apply(currenthighlight);
                     this->touch();
                 }
@@ -591,27 +585,6 @@ void SoFCUnifiedSelection::GLRenderBelowPath(SoGLRenderAction * action)
         }
     }
 }
-
-// ---------------------------------------------------------------
-SelectionActionContext::SelectionActionContext():_root(0)
-{}
-
-SelectionActionContext::~SelectionActionContext() {
-    if(_root) _root->unref();
-}
-
-void SelectionActionContext::setSelectionRoot(SoNode *node) {
-    SoFCSelectionRoot *root = NULL;
-    if(node) {
-        if(!node->getTypeId().isDerivedFrom(SoFCSelectionRoot::getClassTypeId()))
-            return;
-        root = static_cast<SoFCSelectionRoot*>(node);
-        root->ref();
-    }
-    if(_root) _root->unref();
-    _root = root;
-}
-
 
 // ---------------------------------------------------------------
 
@@ -817,7 +790,7 @@ void SoVRMLAction::callDoAction(SoAction *action, SoNode *node)
 
 // ---------------------------------------------------------------------------------
 
-SoFCSelectionRoot * SoFCSelectionRoot::currentRoot = NULL;
+SoFCSelectionRoot::Stack SoFCSelectionRoot::SelStack;
 
 SO_NODE_SOURCE(SoFCSelectionRoot);
 
@@ -842,21 +815,47 @@ void SoFCSelectionRoot::finish()
     atexit_cleanup();
 }
 
-#define SOSELECTROOT_RENDER(_name) \
-void SoFCSelectionRoot::_name(SoGLRenderAction * action) {\
-    if(currentRoot) \
-        inherited::_name(action);\
-    else {\
-        currentRoot = this;\
-        inherited::_name(action);\
-        currentRoot = NULL;\
-    }\
+SoFCSelectionRoot::ContextPtr SoFCSelectionRoot::getContext(SoNode *node, ContextPtr def) {
+    if(SelStack.empty() ||
+       static_cast<SoFCSelectionRoot*>(SelStack.back())->selectionSync.getValue())
+        return def;
+
+    SoFCSelectionRoot *front = static_cast<SoFCSelectionRoot*>(SelStack.front());
+    SelStack.front() = node;
+    auto it = front->contextMap.find(SelStack);
+    SelStack.front() = front;
+    if(it!=front->contextMap.end()) 
+        return it->second;
+    return ContextPtr();
 }
 
-SOSELECTROOT_RENDER(GLRender)
-SOSELECTROOT_RENDER(GLRenderBelowPath)
-SOSELECTROOT_RENDER(GLRenderOffPath)
-SOSELECTROOT_RENDER(GLRenderInPath)
+SoFCSelectionRoot::ContextPtr *SoFCSelectionRoot::getContext(
+        SoAction *action, SoNode *node, ContextPtr *pdef) 
+{
+    const SoPath *path = action->getCurPath();
+    Stack stack;
+    std::stringstream str;
+    for(int i=0,count=path->getLength();i<count;++i) {
+        SoNode *n = path->getNode(i);
+        if(n->getTypeId().isDerivedFrom(SoFCSelectionRoot::getClassTypeId())) {
+            auto sel = static_cast<SoFCSelectionRoot*>(n);
+            stack.push_back(sel);
+        }
+    }
+    if(stack.empty() ||
+       static_cast<SoFCSelectionRoot*>(stack.back())->selectionSync.getValue())
+        return pdef;
+
+    SoFCSelectionRoot *front = static_cast<SoFCSelectionRoot*>(stack.front());
+    stack.front() = node;
+    return &front->contextMap[stack];
+}
+
+void SoFCSelectionRoot::GLRenderBelowPath(SoGLRenderAction * action) {
+    SelStack.push_back(this);
+    inherited::GLRenderBelowPath(action);
+    SelStack.pop_back();
+}
 
 void SoFCSelectionRoot::resetContext() {
     contextMap.clear();

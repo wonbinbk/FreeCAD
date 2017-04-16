@@ -108,16 +108,7 @@ private:
 };
 
 
-class GuiExport SelectionContext {
-public:
-    SelectionContext() {}
-    virtual ~SelectionContext(){}
-};
-
-typedef std::shared_ptr<SelectionContext> SelectionContextPtr;
-typedef std::map<SoNode*,SelectionContextPtr> SelectionContextMap;
-
-class SelectionActionContext;
+class SoFCSelectionRoot;
 
 class GuiExport SoFCSelectionRoot : public SoSeparator {
     typedef SoSeparator inherited;
@@ -131,18 +122,27 @@ public:
 
     SoSFBool selectionSync;
 
-    virtual void GLRender(SoGLRenderAction * action);
     virtual void GLRenderBelowPath(SoGLRenderAction * action);
-    virtual void GLRenderInPath(SoGLRenderAction * action);
-    virtual void GLRenderOffPath(SoGLRenderAction * action);
+    // virtual void GLRender(SoGLRenderAction * action);
+    // virtual void GLRenderInPath(SoGLRenderAction * action);
+    // virtual void GLRenderOffPath(SoGLRenderAction * action);
 
     template<class T>
-    static std::shared_ptr<T> getContext(SoNode *node, std::shared_ptr<T> def) {
-        if(!currentRoot || currentRoot->selectionSync.getValue()) return def;
-        auto it = currentRoot->contextMap.find(node);
-        if(it!=currentRoot->contextMap.end())
-            return std::dynamic_pointer_cast<T>(it->second);
-        return std::shared_ptr<T>();
+    static std::shared_ptr<T> getRenderContext(SoNode *node, std::shared_ptr<T> def) {
+        return std::static_pointer_cast<T>(getContext(node,def));
+    }
+
+    template<class T>
+    static std::shared_ptr<T> getActionContext(
+            SoAction *action, SoNode *node, std::shared_ptr<T> def) 
+    {
+        ContextPtr pdef(def);
+        ContextPtr *pctx = getContext(action,node,&pdef);
+        if(pctx == &pdef)
+            return def;
+        auto &ctx = *pctx;
+        if(!ctx) ctx = std::make_shared<T>();
+        return std::static_pointer_cast<T>(ctx);
     }
 
     void resetContext();
@@ -150,38 +150,21 @@ public:
 protected:
     virtual ~SoFCSelectionRoot();
 
-private:
-    SelectionContextMap contextMap;
-    static SoFCSelectionRoot *currentRoot;
+    typedef std::shared_ptr<void> ContextPtr;
 
-    friend class SelectionActionContext;
-};
+    static ContextPtr getContext(SoNode *node, ContextPtr def);
+    static ContextPtr *getContext(SoAction *action, SoNode *node, ContextPtr *pdef);
 
-
-class GuiExport SelectionActionContext {
-public:
-    SelectionActionContext();
-    virtual ~SelectionActionContext();
-
-    void setSelectionRoot(SoNode *node);
-
-    template<class T>
-    std::shared_ptr<T> getContext(SoNode *node, std::shared_ptr<T> def) {
-        if(!_root || _root->selectionSync.getValue()) return def;
-        SelectionContextPtr &ctx = _root->contextMap[node];
-        if(!ctx) ctx = std::make_shared<T>();
-        return std::static_pointer_cast<T>(ctx);
-    }
-
-private:
-    SoFCSelectionRoot *_root;
+    typedef std::vector<void*> Stack;
+    static Stack SelStack;
+    typedef std::map<Stack,ContextPtr> ContextMap;
+    ContextMap contextMap;
 };
 
 /**
  * @author Werner Mayer
  */
 class GuiExport SoHighlightElementAction : public SoAction
-                                         , public SelectionActionContext
 {
     SO_ACTION_HEADER(SoHighlightElementAction);
 
@@ -214,7 +197,6 @@ private:
  * @author Werner Mayer
  */
 class GuiExport SoSelectionElementAction : public SoAction
-                                         , public SelectionActionContext
 {
     SO_ACTION_HEADER(SoSelectionElementAction);
 

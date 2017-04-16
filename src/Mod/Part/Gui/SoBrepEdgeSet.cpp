@@ -65,7 +65,7 @@ using namespace PartGui;
 
 SO_NODE_SOURCE(SoBrepEdgeSet);
 
-class SoBrepEdgeSet::SelContext: public Gui::SelectionContext {
+class SoBrepEdgeSet::SelContext {
 public:
     SelContext() {
         highlightIndex = -1;
@@ -98,7 +98,7 @@ SoBrepEdgeSet::SoBrepEdgeSet()
 
 void SoBrepEdgeSet::GLRender(SoGLRenderAction *action)
 {
-    SelContextPtr ctx = Gui::SoFCSelectionRoot::getContext<SelContext>(this,selContext);
+    SelContextPtr ctx = Gui::SoFCSelectionRoot::getRenderContext<SelContext>(this,selContext);
 
     if (ctx && ctx->selectionIndex.getNum() > 0)
         renderSelection(action,ctx);
@@ -272,19 +272,19 @@ void SoBrepEdgeSet::doAction(SoAction* action)
 {
     if (action->getTypeId() == Gui::SoHighlightElementAction::getClassTypeId()) {
         Gui::SoHighlightElementAction* hlaction = static_cast<Gui::SoHighlightElementAction*>(action);
-        SelContextPtr ctx = hlaction->getContext<SelContext>(this,selContext);
+        SelContextPtr ctx = Gui::SoFCSelectionRoot::getActionContext<SelContext>(action,this,selContext);
         if (!hlaction->isHighlighted()) {
+            touch();
             ctx->highlightIndex = -1;
             ctx->hl.clear();
-            touch();
             return;
         }
         const SoDetail* detail = hlaction->getElement();
         if (detail) {
+            touch();
             if (!detail->isOfType(SoLineDetail::getClassTypeId())) {
                 ctx->highlightIndex = -1;
                 ctx->hl.clear();
-                touch();
                 return;
             }
 
@@ -294,15 +294,13 @@ void SoBrepEdgeSet::doAction(SoAction* action)
             int numcindices = this->coordIndex.getNum();
 
             createIndexArray(&index, 1, cindices, numcindices, ctx->hl);
-            if(index!=ctx->highlightIndex.getValue()) {
-                touch();
+            if(index!=ctx->highlightIndex.getValue())
                 ctx->highlightIndex.setValue(index);
-            }
         }
     }
     else if (action->getTypeId() == Gui::SoSelectionElementAction::getClassTypeId()) {
         Gui::SoSelectionElementAction* selaction = static_cast<Gui::SoSelectionElementAction*>(action);
-        SelContextPtr ctx = selaction->getContext<SelContext>(this,selContext);
+        SelContextPtr ctx = Gui::SoFCSelectionRoot::getActionContext<SelContext>(action,this,selContext);
         ctx->selectionColor = selaction->getColor();
         touch();
         if (selaction->getType() == Gui::SoSelectionElementAction::All) {

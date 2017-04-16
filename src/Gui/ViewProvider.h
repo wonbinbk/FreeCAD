@@ -46,6 +46,7 @@ class SbMatrix;
 class SoEventCallback;
 class SoPickedPoint;
 class SoDetail;
+class SoFullPath;
 class QString;
 class QMenu;
 class QObject;
@@ -122,7 +123,7 @@ public:
     //@{
 
     /// indicates if the ViewProvider use the new Selection model
-    virtual bool useNewSelectionModel(void) const {return false;}
+    virtual bool useNewSelectionModel(void) const {return true;}
     /// indicates if the ViewProvider can be selected
     virtual bool isSelectable(void) const {return true;}
     /// return a hit element given the picked point which contains the full node path
@@ -130,6 +131,8 @@ public:
     /// return a hit element to the selection path or 0
     virtual std::string getElement(const SoDetail *) const { return std::string(); }
     virtual SoDetail* getDetail(const char*) const { return 0; }
+    virtual SoDetail* getDetailPath(const char *subelement, SoFullPath **) const 
+        { return getDetail(subelement); }
     virtual std::vector<Base::Vector3d> getModelPoints(const SoPickedPoint *) const;
     /// return the higlight lines for a given element or the whole shape
     virtual std::vector<Base::Vector3d> getSelectionShape(const char* Element) const {

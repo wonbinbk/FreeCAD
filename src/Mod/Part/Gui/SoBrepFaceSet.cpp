@@ -78,12 +78,16 @@
 // Should come after glext.h to avoid warnings
 #include <Inventor/C/glue/gl.h>
 
+#include <Base/Console.h>
+
+FC_LOG_LEVEL_INIT("SoBrepFaceSet",true,true)
+
 using namespace PartGui;
 
 
 SO_NODE_SOURCE(SoBrepFaceSet);
 
-class SoBrepFaceSet::SelContext : public Gui::SelectionContext {
+class SoBrepFaceSet::SelContext {
 public:
     SoSFInt32 highlightIndex;
     SoMFInt32 selectionIndex;
@@ -206,7 +210,8 @@ void SoBrepFaceSet::doAction(SoAction* action)
 {
     if (action->getTypeId() == Gui::SoHighlightElementAction::getClassTypeId()) {
         Gui::SoHighlightElementAction* hlaction = static_cast<Gui::SoHighlightElementAction*>(action);
-        SelContextPtr ctx = hlaction->getContext<SelContext>(this,selContext);
+        SelContextPtr ctx = Gui::SoFCSelectionRoot::getActionContext<SelContext>(action,this,selContext);
+        FC_TRACE("preselect " << hlaction->isHighlighted() << " " << (void*)this);
         if (!hlaction->isHighlighted()) {
             ctx->highlightIndex = -1;
             return;
@@ -227,8 +232,9 @@ void SoBrepFaceSet::doAction(SoAction* action)
     }
     else if (action->getTypeId() == Gui::SoSelectionElementAction::getClassTypeId()) {
         Gui::SoSelectionElementAction* selaction = static_cast<Gui::SoSelectionElementAction*>(action);
-        SelContextPtr ctx = selaction->getContext<SelContext>(this,selContext);
+        SelContextPtr ctx = Gui::SoFCSelectionRoot::getActionContext<SelContext>(action,this,selContext);
         ctx->selectionColor = selaction->getColor();
+        FC_TRACE("select " << selaction->getType() << " " << (void*)this);
         if (selaction->getType() == Gui::SoSelectionElementAction::All) {
             //int num = this->partIndex.getNum();
             //this->selectionIndex.setNum(num);
@@ -329,7 +335,7 @@ void SoBrepFaceSet::GLRender(SoGLRenderAction *action)
     if (ctx->coordIndex.getNum() < 3)
         return;
 
-    SelContextPtr ctx = Gui::SoFCSelectionRoot::getContext<SelContext>(this,selContext);
+    SelContextPtr ctx = Gui::SoFCSelectionRoot::getRenderContext<SelContext>(this,selContext);
 
     int32_t hl_idx = ctx?ctx->highlightIndex.getValue():-1;
     int32_t num_selected = ctx?ctx->selectionIndex.getNum():0;
@@ -478,7 +484,7 @@ void SoBrepFaceSet::GLRender(SoGLRenderAction *action)
 
     if (this->coordIndex.getNum() < 3)
         return;
-    SelContextPtr ctx = Gui::SoFCSelectionRoot::getContext<SelContext>(this,selContext);
+    SelContextPtr ctx = Gui::SoFCSelectionRoot::getRenderContext<SelContext>(this,selContext);
     if (ctx && ctx->selectionIndex.getNum() > 0)
         renderSelection(action,ctx);
     if (ctx && ctx->highlightIndex.getValue() >= 0)
