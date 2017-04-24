@@ -234,6 +234,8 @@ public:
     /// Check if selected
     bool isSelected(App::DocumentObject*, const char* pSubName=0) const;
 
+    const char *getSelectedElement(App::DocumentObject*, const char* pSubName) const;
+
     /// set the preselected object (mostly by the 3D view)
     bool setPreselect(const char* pDocName, const char* pObjectName, const char* pSubName, float x=0, float y=0, float z=0);
     /// remove the present preselection

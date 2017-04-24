@@ -50,6 +50,7 @@
 #include "MainWindow.h"
 #include "ViewProviderDocumentObject.h"
 
+FC_LOG_LEVEL_INIT("Selection",true,true)
 
 
 using namespace Gui;
@@ -719,12 +720,14 @@ bool SelectionSingleton::addSelection(const char* pDocName, const char* pObjectN
         Chng.Type      = SelectionChanges::AddSelection;
 
 
+        FC_LOG("Add Selection "<<
+                (pDocName?pDocName:"(null)")<<'.'<<
+                (pObjectName?pObjectName:"(null)")<<'.' <<
+                (pSubName?pSubName:"(null)") <<
+                " ("<<x<<", "<<y<<", "<<z<<')');
+
         Notify(Chng);
         signalSelectionChanged(Chng);
-
-#ifdef FC_DEBUG
-        Base::Console().Log("Sel : Add Selection \"%s.%s.%s(%f,%f,%f)\"\n",pDocName,pObjectName,pSubName,x,y,z);
-#endif
 
         // allow selection
         return true;
@@ -813,13 +816,15 @@ void SelectionSingleton::rmvSelection(const char* pDocName, const char* pObjectN
             Chng.pTypeName = tmpTypName.c_str();
             Chng.Type      = SelectionChanges::RmvSelection;
 
+            FC_LOG("Rmv Selection "<<
+                (pDocName?pDocName:"(null)")<<'.'<<
+                (pObjectName?pObjectName:"(null)")<<'.' <<
+                (pSubName?pSubName:"(null)"));
+
             Notify(Chng);
             signalSelectionChanged(Chng);
       
             rmvList.push_back(Chng);
-#ifdef FC_DEBUG
-            Base::Console().Log("Sel : Rmv Selection \"%s.%s.%s\"\n",pDocName,pObjectName,pSubName);
-#endif
         }
         else {
             ++It;
@@ -932,12 +937,10 @@ void SelectionSingleton::clearSelection(const char* pDocName)
         Chng.pSubName = "";
         Chng.pTypeName = "";
 
+        FC_LOG("Clear selection");
+
         Notify(Chng);
         signalSelectionChanged(Chng);
-
-#ifdef FC_DEBUG
-        Base::Console().Log("Sel : Clear selection\n");
-#endif
     }
 }
 
@@ -952,13 +955,10 @@ void SelectionSingleton::clearCompleteSelection()
     Chng.pSubName = "";
     Chng.pTypeName = "";
 
+    FC_LOG("Clear selection");
 
     Notify(Chng);
     signalSelectionChanged(Chng);
-
-#ifdef FC_DEBUG
-    Base::Console().Log("Sel : Clear selection\n");
-#endif
 }
 
 bool SelectionSingleton::isSelected(const char* pDocName, const char* pObjectName, const char* pSubName) const
@@ -989,6 +989,25 @@ bool SelectionSingleton::isSelected(App::DocumentObject* obj, const char* pSubNa
     }
 
     return false;
+}
+
+const char *SelectionSingleton::getSelectedElement(App::DocumentObject *obj, const char* pSubName) const 
+{
+    if (!obj) return 0;
+
+    for(list<_SelObj>::const_iterator It = _SelList.begin();It != _SelList.end();++It) {
+        if (It->pObject == obj) {
+            if (!pSubName) {
+                if(It->SubName.empty())
+                    return It->SubName.c_str();
+            }else if(strncmp(pSubName,It->SubName.c_str(),It->SubName.length())==0){
+                char c = pSubName[It->SubName.length()];
+                if(c=='.' || c==0)
+                    return It->SubName.c_str();
+            }
+        }
+    }
+    return 0;
 }
 
 void SelectionSingleton::slotDeletedObject(const App::DocumentObject& Obj)

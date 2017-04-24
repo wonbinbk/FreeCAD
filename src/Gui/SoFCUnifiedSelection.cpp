@@ -461,6 +461,8 @@ SoFCUnifiedSelection::handleEvent(SoHandleEventAction * action)
         if (SoMouseButtonEvent::isButtonReleaseEvent(e,SoMouseButtonEvent::BUTTON1)) {
             // check to see if the mouse is over a geometry...
             const SoPickedPoint * pp = this->getPickedPoint(action);
+            const SoDetail *det = pp?pp->getDetail():0;
+            SoDetail *detNext = 0;
             SoFullPath *pPath = (pp != NULL) ? (SoFullPath *) pp->getPath() : NULL;
             ViewProvider *vp = 0;
             ViewProviderDocumentObject* vpd = 0;
@@ -473,15 +475,47 @@ SoFCUnifiedSelection::handleEvent(SoHandleEventAction * action)
                 std::string documentName = vpd->getObject()->getDocument()->getName();
                 std::string objectName = vpd->getObject()->getNameInDocument();
                 std::string subElementName = vpd->getElementPicked(pp);
+
+                const char *subSelected = Gui::Selection().getSelectedElement(
+                                            vpd->getObject(),subElementName.c_str());
+
+                FC_TRACE("select " << (subSelected?subSelected:"'null'") << ", " << 
+                        objectName << ", " << subElementName);
+                bool hasNext = false;
+                std::string nextsub;
+                if(subSelected) {
+                    subElementName = subSelected;
+                    const char *next = strrchr(subSelected,'.');
+                    if(next) 
+                        nextsub = std::string(subSelected,next-subSelected);
+                    if(nextsub.length() || *subSelected!=0) {
+                        SoFullPath *pNextPath = 0;
+                        detNext = vpd->getDetailPath(nextsub.c_str(),&pNextPath);
+                        if(pNextPath) {
+                            hasNext = true;
+                            if(currenthighlight)
+                                currenthighlight->unref();
+                            currenthighlight = pNextPath;
+                            det = detNext;
+                            subElementName = subSelected;
+                            FC_TRACE("select next " << objectName << ", " << nextsub);
+                        }
+                    }
+                }
+
                 const auto &pt = pp->getPoint();
                 if (event->wasCtrlDown()) {
-                    if (Gui::Selection().isSelected(documentName.c_str()
-                                         ,objectName.c_str()
-                                         ,subElementName.c_str())) {
+                    if (subSelected) {
                         Gui::Selection().rmvSelection(documentName.c_str()
                                           ,objectName.c_str()
                                           ,subElementName.c_str());
-                        type = SoSelectionElementAction::Remove;
+                        if(hasNext) {
+                            Gui::Selection().addSelection(documentName.c_str()
+                                            ,objectName.c_str()
+                                            ,nextsub.c_str(), pt[0] ,pt[1] ,pt[2]);
+                            type = SoSelectionElementAction::Append;
+                        }else
+                            type = SoSelectionElementAction::Remove;
                     }
                     else {
                         bool ok = Gui::Selection().addSelection(documentName.c_str()
@@ -503,9 +537,7 @@ SoFCUnifiedSelection::handleEvent(SoHandleEventAction * action)
                     }
                 }
                 else { // Ctrl
-                    if (!Gui::Selection().isSelected(documentName.c_str()
-                                         ,objectName.c_str()
-                                         ,subElementName.c_str())) {
+                    if (!subSelected) {
                         Gui::Selection().clearSelection(documentName.c_str());
                         bool ok = Gui::Selection().addSelection(documentName.c_str()
                                               ,objectName.c_str()
@@ -518,7 +550,7 @@ SoFCUnifiedSelection::handleEvent(SoHandleEventAction * action)
                         Gui::Selection().clearSelection(documentName.c_str());
                         bool ok = Gui::Selection().addSelection(documentName.c_str()
                                               ,objectName.c_str()
-                                              ,0 ,pt[0] ,pt[1] ,pt[2]);
+                                              ,hasNext?nextsub.c_str():0 ,pt[0] ,pt[1] ,pt[2]);
                         if (ok)
                             type = SoSelectionElementAction::All;
                     }
@@ -539,10 +571,11 @@ SoFCUnifiedSelection::handleEvent(SoHandleEventAction * action)
                 if (currenthighlight && checkSelectionStyle(type,vpd)) {
                     SoSelectionElementAction action(type);
                     action.setColor(this->colorSelection.getValue());
-                    action.setElement(pp ? pp->getDetail() : 0);
+                    action.setElement(det);
                     action.apply(currenthighlight);
                     this->touch();
                 }
+                if(detNext) delete detNext;
             } // picked point
         } // mouse release
     }
