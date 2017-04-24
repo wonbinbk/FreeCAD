@@ -253,31 +253,39 @@ public:
      * perform an operation (GuiCommand). The check also detects base types. 
      * E.g. "Part" also fits on "PartImport" or "PartTransform types.
      * If no document name is given the active document is assumed.
+     *
+     * Set 'resolve' to true to resolve any sub object inside selection SubName
+     * field
      */
-    unsigned int countObjectsOfType(const Base::Type& typeId, const char* pDocName=0) const;
+    unsigned int countObjectsOfType(const Base::Type& typeId, 
+            const char* pDocName=0, bool resolve=true) const;
 
     /**
      * Does basically the same as the method above unless that it accepts a string literal as first argument.
      * \a typeName must be a registered type, otherwise 0 is returned.
      */
-    unsigned int countObjectsOfType(const char* typeName, const char* pDocName=0) const;
+    unsigned int countObjectsOfType(const char* typeName, 
+            const char* pDocName=0, bool resolve=true) const;
 
     /** Returns a vector of objects of type \a TypeName selected for the given document name \a pDocName.
      * If no document name is specified the objects from the active document are regarded.
      * If no objects of this document are selected an empty vector is returned.
      * @note The vector reflects the sequence of selection.
      */
-    std::vector<App::DocumentObject*> getObjectsOfType(const Base::Type& typeId, const char* pDocName=0) const;
+    std::vector<App::DocumentObject*> getObjectsOfType(const Base::Type& typeId, 
+            const char* pDocName=0, bool resolve=true) const;
 
     /**
      * Does basically the same as the method above unless that it accepts a string literal as first argument.
      * \a typeName must be a registered type otherwise an empty array is returned.
      */
-    std::vector<App::DocumentObject*> getObjectsOfType(const char* typeName, const char* pDocName=0) const;
+    std::vector<App::DocumentObject*> getObjectsOfType(const char* typeName, 
+            const char* pDocName=0, bool resolve=true) const;
     /**
      * A convenience template-based method that returns an array with the correct types already.
      */
-    template<typename T> inline std::vector<T*> getObjectsOfType(const char* pDocName=0) const;
+    template<typename T> inline std::vector<T*> getObjectsOfType(
+            const char* pDocName=0, bool resolve=true) const;
 
     struct SelObj {
         const char* DocName;
@@ -288,6 +296,10 @@ public:
         App::DocumentObject*  pObject;
         float x,y,z;
     };
+
+    /// Resolve sub objects referenced in the '.' separated 'subname'
+    static App::DocumentObject *resolveObject(App::DocumentObject *pObject, 
+            const char *subname, const char **psubname=0);
 
     /// signal on new object
     boost::signal<void (const SelectionChanges& msg)> signalSelectionChanged;
@@ -369,6 +381,11 @@ protected:
     };
     std::list<_SelObj> _SelList;
 
+    static App::DocumentObject *getObject(const _SelObj &sel, bool resolve) {
+        if(resolve) return resolveObject(sel.pObject, sel.SubName.c_str());
+        return sel.pObject;
+    }
+
     static SelectionSingleton* _pcSingleton;
 
     std::string DocName;
@@ -383,10 +400,10 @@ protected:
  * A convenience template-based method that returns an array with the correct types already.
  */
 template<typename T>
-inline std::vector<T*> SelectionSingleton::getObjectsOfType(const char* pDocName) const
+inline std::vector<T*> SelectionSingleton::getObjectsOfType(const char* pDocName, bool resolve) const
 {
     std::vector<T*> type;
-    std::vector<App::DocumentObject*> obj = this->getObjectsOfType(T::getClassTypeId(), pDocName);
+    std::vector<App::DocumentObject*> obj = this->getObjectsOfType(T::getClassTypeId(), pDocName, resolve);
     type.reserve(obj.size());
     for (std::vector<App::DocumentObject*>::iterator it = obj.begin(); it != obj.end(); ++it)
         type.push_back(static_cast<T*>(*it));

@@ -48,6 +48,7 @@
 #include <App/DocumentObjectPy.h>
 #include <Gui/SelectionObjectPy.h>
 #include "MainWindow.h"
+#include "ViewProviderDocumentObject.h"
 
 
 
@@ -419,7 +420,7 @@ int SelectionSingleton::getAsPropertyLinkSubList(App::PropertyLinkSubList &prop)
     return objs.size();
 }
 
-vector<App::DocumentObject*> SelectionSingleton::getObjectsOfType(const Base::Type& typeId, const char* pDocName) const
+vector<App::DocumentObject*> SelectionSingleton::getObjectsOfType(const Base::Type& typeId, const char* pDocName, bool resolve) const
 {
     std::vector<App::DocumentObject*> temp;
     App::Document *pcDoc;
@@ -430,23 +431,26 @@ vector<App::DocumentObject*> SelectionSingleton::getObjectsOfType(const Base::Ty
         return temp;
 
     for (std::list<_SelObj>::const_iterator It = _SelList.begin();It != _SelList.end();++It) {
-        if (It->pDoc == pcDoc && It->pObject && It->pObject->getTypeId().isDerivedFrom(typeId)) {
-            temp.push_back(It->pObject);
+        App::DocumentObject *pObject;
+        if (It->pDoc == pcDoc && (pObject=getObject(*It,resolve)) && 
+           pObject->getTypeId().isDerivedFrom(typeId)) 
+        {
+            temp.push_back(pObject);
         }
     }
 
     return temp;
 }
 
-std::vector<App::DocumentObject*> SelectionSingleton::getObjectsOfType(const char* typeName, const char* pDocName) const
+std::vector<App::DocumentObject*> SelectionSingleton::getObjectsOfType(const char* typeName, const char* pDocName, bool resolve) const
 {
     Base::Type typeId = Base::Type::fromName(typeName);
     if (typeId == Base::Type::badType())
         return std::vector<App::DocumentObject*>();
-    return getObjectsOfType(typeId, pDocName);
+    return getObjectsOfType(typeId, pDocName, resolve);
 }
 
-unsigned int SelectionSingleton::countObjectsOfType(const Base::Type& typeId, const char* pDocName) const
+unsigned int SelectionSingleton::countObjectsOfType(const Base::Type& typeId, const char* pDocName, bool resolve) const
 {
     unsigned int iNbr=0;
     App::Document *pcDoc;
@@ -457,7 +461,7 @@ unsigned int SelectionSingleton::countObjectsOfType(const Base::Type& typeId, co
         return 0;
 
     for (std::list<_SelObj>::const_iterator It = _SelList.begin();It != _SelList.end();++It) {
-        if (It->pDoc == pcDoc && It->pObject && It->pObject->getTypeId().isDerivedFrom(typeId)) {
+        if (It->pDoc == pcDoc && It->pObject && getObject(*It,resolve)->getTypeId().isDerivedFrom(typeId)) {
             iNbr++;
         }
     }
@@ -465,12 +469,12 @@ unsigned int SelectionSingleton::countObjectsOfType(const Base::Type& typeId, co
     return iNbr;
 }
 
-unsigned int SelectionSingleton::countObjectsOfType(const char* typeName, const char* pDocName) const
+unsigned int SelectionSingleton::countObjectsOfType(const char* typeName, const char* pDocName, bool resolve) const
 {
     Base::Type typeId = Base::Type::fromName(typeName);
     if (typeId == Base::Type::badType())
         return 0;
-    return countObjectsOfType(typeId, pDocName);
+    return countObjectsOfType(typeId, pDocName, resolve);
 }
 
 bool SelectionSingleton::setPreselect(const char* pDocName, const char* pObjectName, const char* pSubName, float x, float y, float z)
@@ -821,6 +825,24 @@ void SelectionSingleton::rmvSelection(const char* pDocName, const char* pObjectN
             ++It;
         }
     }
+}
+
+App::DocumentObject *SelectionSingleton::resolveObject(
+        App::DocumentObject *pObject, const char *subname, const char **psubname)
+{
+    if(psubname) *psubname = subname;
+    if(!pObject || !subname || *subname==0) 
+        return pObject;
+    Document *pDoc = Application::Instance->getDocument(pObject->getDocument());
+    ViewProvider *vp;
+    if(!pDoc || !(vp=pDoc->getViewProvider(pObject)) || 
+       !vp->isDerivedFrom(ViewProviderDocumentObject::getClassTypeId()))
+        return pObject;
+    auto vpd = static_cast<ViewProviderDocumentObject*>(vp);
+    vpd = vpd->getElementView(subname,psubname);
+    if(vpd && vpd!=vp && vpd->getObject()) 
+        return vpd->getObject();
+    return pObject;
 }
 
 void SelectionSingleton::setSelection(const char* pDocName, const std::vector<App::DocumentObject*>& sel)
