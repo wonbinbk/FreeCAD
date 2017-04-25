@@ -284,3 +284,7 @@ PyObject* ViewProviderDocumentObject::getPyObject()
     pyViewObject->IncRef();
     return pyViewObject;
 }
+
+ViewProviderDocumentObject *ViewProviderDocumentObject::getLinkedView(bool) {
+    return this;
+}

@@ -76,36 +76,38 @@ TreeWidget::TreeWidget(QWidget* parent)
     this->setRootIsDecorated(false);
 
     this->createGroupAction = new QAction(this);
-    this->createGroupAction->setText(tr("Create group..."));
-    this->createGroupAction->setStatusTip(tr("Create a group"));
     connect(this->createGroupAction, SIGNAL(triggered()),
             this, SLOT(onCreateGroup()));
 
     this->relabelObjectAction = new QAction(this);
-    this->relabelObjectAction->setText(tr("Rename"));
-    this->relabelObjectAction->setStatusTip(tr("Rename object"));
     this->relabelObjectAction->setShortcut(Qt::Key_F2);
     connect(this->relabelObjectAction, SIGNAL(triggered()),
             this, SLOT(onRelabelObject()));
 
     this->finishEditingAction = new QAction(this);
-    this->finishEditingAction->setText(tr("Finish editing"));
-    this->finishEditingAction->setStatusTip(tr("Finish editing object"));
     connect(this->finishEditingAction, SIGNAL(triggered()),
             this, SLOT(onFinishEditing()));
 
     this->skipRecomputeAction = new QAction(this);
     this->skipRecomputeAction->setCheckable(true);
-    this->skipRecomputeAction->setText(tr("Skip recomputes"));
-    this->skipRecomputeAction->setStatusTip(tr("Enable or disable recomputations of document"));
     connect(this->skipRecomputeAction, SIGNAL(toggled(bool)),
             this, SLOT(onSkipRecompute(bool)));
 
     this->markRecomputeAction = new QAction(this);
-    this->markRecomputeAction->setText(tr("Mark to recompute"));
-    this->markRecomputeAction->setStatusTip(tr("Mark this object to be recomputed"));
     connect(this->markRecomputeAction, SIGNAL(triggered()),
             this, SLOT(onMarkRecompute()));
+
+    this->selectAllInstances = new QAction(this);
+    connect(this->selectAllInstances, SIGNAL(triggered()),
+            this, SLOT(onSelectAllInstances()));
+
+    this->selectLinked = new QAction(this);
+    connect(this->selectLinked, SIGNAL(triggered()),
+            this, SLOT(onSelectLinked()));
+
+    this->selectAllLinks = new QAction(this);
+    connect(this->selectAllLinks, SIGNAL(triggered()),
+            this, SLOT(onSelectAllLinks()));
 
     // Setup connections
     Application::Instance->signalNewDocument.connect(boost::bind(&TreeWidget::slotNewDocument, this, _1));
@@ -114,9 +116,6 @@ TreeWidget::TreeWidget(QWidget* parent)
     Application::Instance->signalActiveDocument.connect(boost::bind(&TreeWidget::slotActiveDocument, this, _1));
     Application::Instance->signalRelabelDocument.connect(boost::bind(&TreeWidget::slotRelabelDocument, this, _1));
 
-    QStringList labels;
-    labels << tr("Labels & Attributes");
-    this->setHeaderLabels(labels);
     // make sure to show a horizontal scrollbar if needed
 #if QT_VERSION >= 0x050000
     this->header()->setSectionResizeMode(0, QHeaderView::ResizeToContents);
@@ -127,7 +126,6 @@ TreeWidget::TreeWidget(QWidget* parent)
 
     // Add the first main label
     this->rootItem = new QTreeWidgetItem(this);
-    this->rootItem->setText(0, tr("Application"));
     this->rootItem->setFlags(Qt::ItemIsEnabled);
     this->expandItem(this->rootItem);
     this->setSelectionMode(QAbstractItemView::ExtendedSelection);
@@ -149,6 +147,7 @@ TreeWidget::TreeWidget(QWidget* parent)
     connect(this, SIGNAL(itemSelectionChanged()),
             this, SLOT(onItemSelectionChanged()));
 
+    setupText();
     onTestStatus();
     documentPixmap = new QPixmap(Gui::BitmapFactory().pixmap("Document"));
 }
@@ -205,6 +204,11 @@ void TreeWidget::contextMenuEvent (QContextMenuEvent * e)
 
         // if only one item is selected setup the edit menu
         if (this->selectedItems().size() == 1) {
+            contextMenu.addAction(this->selectAllInstances);
+            contextMenu.addAction(this->selectAllLinks);
+            if(objitem->isLink())
+                contextMenu.addAction(this->selectLinked);
+
             objitem->object()->setupContextMenu(&editMenu, this, SLOT(onStartEditing()));
             QList<QAction*> editAct = editMenu.actions();
             if (!editAct.isEmpty()) {
@@ -379,6 +383,36 @@ void TreeWidget::onMarkRecompute()
     }
     onTestStatus();
 }
+
+void TreeWidget::onSelectLinked()
+{
+    if (!this->contextItem || this->contextItem->type() != ObjectType) return;
+    auto item = static_cast<DocumentObjectItem*>(this->contextItem);
+    auto it = DocumentMap.find(item->object()->getDocument());
+    if(it == DocumentMap.end()) return;
+    it->second->selectLinkedItem(item);
+}
+
+void TreeWidget::onSelectAllLinks()
+{
+    if (!this->contextItem || this->contextItem->type() != ObjectType) return;
+    auto item = static_cast<DocumentObjectItem*>(this->contextItem);
+    auto it = DocumentMap.find(item->object()->getDocument());
+    if(it == DocumentMap.end()) return;
+    it->second->selectAllLinks(item);
+}
+
+
+void TreeWidget::onSelectAllInstances()
+{
+    if (!this->contextItem || this->contextItem->type() != ObjectType) return;
+    auto item = static_cast<DocumentObjectItem*>(this->contextItem);
+    auto it = DocumentMap.find(item->object()->getDocument());
+    if(it == DocumentMap.end()) return;
+    it->second->selectAllInstances(item);
+}
+
+
 
 void TreeWidget::onActivateDocument(QAction* active)
 {
@@ -814,34 +848,45 @@ void TreeWidget::scrollItemToTop(Gui::Document* doc)
     }
 }
 
+void TreeWidget::setupText() {
+    this->headerItem()->setText(0, tr("Labels & Attributes"));
+    this->rootItem->setText(0, tr("Application"));
+
+    this->createGroupAction->setText(tr("Create group..."));
+    this->createGroupAction->setStatusTip(tr("Create a group"));
+
+    this->relabelObjectAction->setText(tr("Rename"));
+    this->relabelObjectAction->setStatusTip(tr("Rename object"));
+
+    this->finishEditingAction->setText(tr("Finish editing"));
+    this->finishEditingAction->setStatusTip(tr("Finish editing object"));
+
+    this->skipRecomputeAction->setText(tr("Skip recomputes"));
+    this->skipRecomputeAction->setStatusTip(tr("Enable or disable recomputations of document"));
+
+    this->markRecomputeAction->setText(tr("Mark to recompute"));
+    this->markRecomputeAction->setStatusTip(tr("Mark this object to be recomputed"));
+
+    this->selectAllInstances->setText(tr("Select all instances"));
+    this->selectAllInstances->setStatusTip(tr("Select all instances of this object with different parents"));
+
+    this->selectLinked->setText(tr("Select linked object"));
+    this->selectLinked->setStatusTip(tr("Select the object that is linked by this item"));
+
+    this->selectAllLinks->setText(tr("Select all links"));
+    this->selectAllLinks->setStatusTip(tr("Select all links to this object"));
+}
+
 void TreeWidget::changeEvent(QEvent *e)
 {
-    if (e->type() == QEvent::LanguageChange) {
-        this->headerItem()->setText(0, tr("Labels & Attributes"));
-        this->rootItem->setText(0, tr("Application"));
-
-        this->createGroupAction->setText(tr("Create group..."));
-        this->createGroupAction->setStatusTip(tr("Create a group"));
-
-        this->relabelObjectAction->setText(tr("Rename"));
-        this->relabelObjectAction->setStatusTip(tr("Rename object"));
-
-        this->finishEditingAction->setText(tr("Finish editing"));
-        this->finishEditingAction->setStatusTip(tr("Finish editing object"));
-
-        this->skipRecomputeAction->setText(tr("Skip recomputes"));
-        this->skipRecomputeAction->setStatusTip(tr("Enable or disable recomputations of document"));
-
-        this->markRecomputeAction->setText(tr("Mark to recompute"));
-        this->markRecomputeAction->setStatusTip(tr("Mark this object to be recomputed"));
-    }
+    if (e->type() == QEvent::LanguageChange)
+        setupText();
 
     QTreeWidget::changeEvent(e);
 }
 
 void TreeWidget::onItemSelectionChanged ()
 {
-    // we already got notified by the selection to update the tree items
     if (this->isConnectionBlocked())
         return;
 
@@ -852,7 +897,6 @@ void TreeWidget::onItemSelectionChanged ()
         pos->second->updateSelection(pos->second);
     }
     this->blockConnection(lock);
-    onTestStatus();
 }
 
 void TreeWidget::onSelectionChanged(const SelectionChanges& msg)
@@ -1573,6 +1617,147 @@ void DocumentItem::selectItems(void) {
     if(scroll) treeWidget()->scrollToItem(first);
 }
 
+void DocumentItem::selectLinkedItem(DocumentObjectItem *item) { 
+    ViewProviderDocumentObject *linked = item->object()->getLinkedView(false);
+    if(!linked) return;
+
+    auto it = ObjectMap.find(linked->getObject()->getNameInDocument());
+    if(it == ObjectMap.end()) return;
+    auto linkedItem = it->second->rootItem;
+    if(!linkedItem) 
+        linkedItem = *it->second->items.begin();
+
+    item->setSelected(false);
+    linkedItem->setSelected(true);
+
+    treeWidget()->scrollToItem(linkedItem);
+
+    updateSelection();
+}
+
+void DocumentItem::populateParents(ViewProvider *vp, ParentMap &parentMap) {
+    auto it = parentMap.find(vp);
+    if(it == parentMap.end()) return;
+    for(auto parent : it->second) {
+        const char *name = parent->getObject()->getNameInDocument();
+        if(!name) continue;
+        auto it = ObjectMap.find(name);
+        if(it==ObjectMap.end())
+            continue;
+
+        populateParents(parent,parentMap);
+        for(auto item : it->second->items) {
+            if(item->populated) continue;
+            item->populated = true;
+            populateItem(item,true);
+        }
+    }
+}
+
+void DocumentItem::selectAllLinks(DocumentObjectItem *item) {
+    ParentMap parentMap;
+    std::set<ViewProviderDocumentObject *> links;
+    auto pObject = item->object()->getObject();
+
+    // Build a map of object to all its parent, and find all links object at
+    // the same time
+    for(auto &v : ObjectMap) {
+        if(v.second->viewObject == item->object()) continue;
+        if(v.second->viewObject->getLinkedView(false) == item->object()) {
+            links.insert(v.second->viewObject);
+            continue;
+        }
+        // if(!v.second->viewObject->getLinkedView()->getChildRoot())
+        //     continue;
+        for(auto child : v.second->viewObject->claimChildren()) {
+            if(!child || child==pObject || !child->getNameInDocument()) continue;
+            ViewProvider* vp = pDocument->getViewProvider(child);
+            if(!vp || !vp->isDerivedFrom(ViewProviderDocumentObject::getClassTypeId()))
+                continue;
+            parentMap[vp].push_back(v.second->viewObject);
+        }
+    }
+
+    // now make sure all found links' parent items are populated. In order to
+    // do that, we need to populate the oldest parent first
+    for(auto link : links)
+        populateParents(link,parentMap);
+
+    bool found;
+    FOREACH_ITEM_ALL(itemCheck);
+        if(itemCheck->object() != item->object() &&
+           itemCheck->object()->getLinkedView(false) == item->object()) {
+            found =true;
+            showItem(itemCheck,true);
+        }
+    END_FOREACH_ITEM;
+    if(found) {
+        item->setSelected(false);
+        updateSelection();
+    }
+}
+
+void DocumentItem::showItem(DocumentObjectItem *item, bool select) {
+    if(select) item->setSelected(true);
+    for(auto parent=item->parent();
+        parent->type()==TreeWidget::ObjectType;
+        parent=parent->parent())
+    {
+        parent->setExpanded(true);
+    }
+}
+
+void DocumentItem::updateSelection() {
+    bool lock = static_cast<TreeWidget*>(treeWidget())->blockConnection(true);
+    updateSelection(this,false);
+    static_cast<TreeWidget*>(treeWidget())->blockConnection(lock);
+}
+
+void DocumentItem::selectAllInstances(DocumentObjectItem *item) {
+    std::set<ViewProvider *> checkedItems;
+    std::map<ViewProvider *, DocumentObjectItem *> itemsToCheck;
+    FOREACH_ITEM_ALL(itemCheck);
+        if(itemCheck->object() == item->object()) 
+            continue;
+
+        if(itemCheck->populated) {
+            checkedItems.insert(itemCheck->object());
+            auto it = itemsToCheck.find(itemCheck->object());
+            if(it!=itemsToCheck.end())
+                itemsToCheck.erase(it);
+            continue;
+        }
+        auto it = checkedItems.find(itemCheck->object());
+        if(it != checkedItems.end()) continue;
+        itemsToCheck.insert(std::make_pair(itemCheck->object(),itemCheck));
+    END_FOREACH_ITEM;
+
+    for(auto v : itemsToCheck) {
+        auto obj = item->object()->getObject();
+        for(auto o : v.first->claimChildren()) {
+            if(o == obj) {
+                // force populate the item
+                v.second->populated = true;
+                populateItem(v.second,true);
+                break;
+            }
+        }
+    }
+
+    for(auto instance : item->myData->items) {
+        instance->setSelected(true);
+        for(auto parent=instance->parent();
+            parent->type()==TreeWidget::ObjectType;
+            parent=parent->parent())
+        {
+            parent->setExpanded(true);
+        }
+    }
+    bool lock = static_cast<TreeWidget*>(treeWidget())->blockConnection(true);
+    updateSelection(this,false);
+    static_cast<TreeWidget*>(treeWidget())->blockConnection(lock);
+}
+
 // ----------------------------------------------------------------------------
 
 DocumentObjectItem::DocumentObjectItem(DocumentObjectDataPtr data)
@@ -1771,7 +1956,7 @@ bool DocumentObjectItem::isCloneOf(const QTreeWidgetItem *item) const {
 }
 
 bool DocumentObjectItem::isLink() const {
-    return object()->getLinkedView() != object();
+    return object()->getLinkedView(false) != object();
 }
 
 bool DocumentObjectItem::isParentLink() const {

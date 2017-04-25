@@ -109,9 +109,10 @@ public:
     }
 
     /// Return the linked view provider
-    /// Right now only used by ViewProviderLink to return the final linked
-    /// object's view provider
-    virtual ViewProviderDocumentObject *getLinkedView() {return this;}
+    ///
+    /// Set 'recursive' to true to return the final linked view provider. 
+    /// Otherwise only the immediate view provider is returned.
+    virtual ViewProviderDocumentObject *getLinkedView(bool recursive=true); 
 
 protected:
     /*! Get the active mdi view of the document this view provider is part of.

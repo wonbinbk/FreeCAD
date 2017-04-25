@@ -109,6 +109,9 @@ protected Q_SLOTS:
     void onFinishEditing();
     void onSkipRecompute(bool on);
     void onMarkRecompute();
+    void onSelectAllInstances();
+    void onSelectLinked();
+    void onSelectAllLinks();
 
 private Q_SLOTS:
     void onItemSelectionChanged(void);
@@ -125,6 +128,7 @@ private:
     void slotRelabelDocument(const Gui::Document&);
 
     void changeEvent(QEvent *e);
+    void setupText();
 
 private:
     QAction* createGroupAction;
@@ -132,6 +136,9 @@ private:
     QAction* finishEditingAction;
     QAction* skipRecomputeAction;
     QAction* markRecomputeAction;
+    QAction* selectAllInstances;
+    QAction* selectLinked;
+    QAction* selectAllLinks;
     QTreeWidgetItem* contextItem;
 
     QTreeWidgetItem* rootItem;
@@ -157,11 +164,16 @@ public:
     const Gui::Document* document() const;
     void clearSelection(void);
     void updateSelection(QTreeWidgetItem *, bool unselect=false);
+    void updateSelection();
     void updateItemSelection(DocumentObjectItem *);
     void selectItems(void);
     void testStatus(void);
     void setData(int column, int role, const QVariant & value);
     void populateItem(DocumentObjectItem *item, bool refresh = false);
+    void selectLinkedItem(DocumentObjectItem *item);
+    void selectAllInstances(DocumentObjectItem *item);
+    void selectAllLinks(DocumentObjectItem *item);
+    void showItem(DocumentObjectItem *item, bool select);
 
 protected:
     /** Adds a view provider to the document item.
@@ -185,6 +197,9 @@ protected:
                     DocumentObjectDataPtr ptrs = DocumentObjectDataPtr());
 
     void findSelection(DocumentObjectItem *item, const char *subname);
+
+    typedef std::map<ViewProvider *, std::vector<ViewProviderDocumentObject*> > ParentMap;
+    void populateParents(ViewProvider *vp, ParentMap &);
 
 private:
     const Gui::Document* pDocument;

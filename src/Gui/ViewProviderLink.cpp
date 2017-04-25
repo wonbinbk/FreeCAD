@@ -719,9 +719,11 @@ std::string ViewProviderLink::getElementPicked(const SoPickedPoint *pp) const {
     return std::string();
 }
 
-ViewProviderDocumentObject *ViewProviderLink::getLinkedView() {
-    if(linkInfo && linkInfo->pcLinked)
+ViewProviderDocumentObject *ViewProviderLink::getLinkedView(bool recursive) {
+    if(linkInfo && linkInfo->isLinked()) {
+        if(recursive) return linkInfo->pcLinked;
         return linkInfo->pcLinked->getLinkedView();
+    }
     return this;
 }
 

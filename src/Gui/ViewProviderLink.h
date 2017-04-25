@@ -60,7 +60,7 @@ public:
     ViewProviderDocumentObject *getElementView(
             const char *element, const char **subname) override;
 
-    ViewProviderDocumentObject *getLinkedView() override;
+    ViewProviderDocumentObject *getLinkedView(bool recursive=true) override;
 
     QIcon getIcon(void) const override;
 
