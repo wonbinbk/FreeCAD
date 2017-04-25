@@ -311,11 +311,12 @@ public:
         FC_TRACE(getLinkedName() << " display changed");
         int index = pcLinkedSwitch->whichChild.getValue();
         for(size_t i=0;i<pcSwitches.size();++i) {
-            if(!pcSwitches[i] || !pcSwitches[i]->getNumChildren()) 
+            if(!pcSwitches[i]) 
                 continue;
-            if(index<0 && i==SnapshotContainer)
+            int count = pcSwitches[i]->getNumChildren();
+            if((index<0 && i==SnapshotContainer) || !count)
                 pcSwitches[i]->whichChild = -1;
-            else if(pcSwitches[i]->getNumChildren()>pcLinked->getDefaultMode())
+            else if(count>pcLinked->getDefaultMode())
                 pcSwitches[i]->whichChild = pcLinked->getDefaultMode();
             else
                 pcSwitches[i]->whichChild = 0;
@@ -628,6 +629,13 @@ ViewProviderLink::ViewProviderLink()
 {
     DisplayMode.setStatus(App::Property::Status::Hidden, true);
 
+    pcRoot->removeAllChildren();
+    pcRoot->unref();
+    pcRoot = new SoFCSelectionRoot();
+    pcRoot->ref();
+    pcRoot->addChild(pcTransform);
+    pcRoot->addChild(pcModeSwitch);
+
     setDefaultMode(0);
 
     if(!PropConf) {
@@ -725,20 +733,17 @@ SoDetail* ViewProviderLink::getDetailPath(const char *subname, SoFullPath **path
     if(!linkInfo) return 0;
     bool freepath = false;
     if(path && !*path) {
-        SoSearchAction sa;
-        sa.setNode(pcModeSwitch);
-        sa.apply(pcModeSwitch);
-        if(!sa.getPath()) return 0;
-        *path = static_cast<SoFullPath*>(sa.getPath()->copy());
+        *path = (SoFullPath*)(new SoPath(10));
         (*path)->ref();
+        (*path)->append(pcRoot);
+        (*path)->append(pcModeSwitch);
         freepath = true;
     }
     if(!subname || *subname==0) return 0;
 
     SoDetail *det = 0;
     if(!linkInfo->getDetail(false,
-       linkTransform?LinkInfo::SnapshotVisible:LinkInfo::SnapshotTransform,
-       subname,det,path)) 
+       linkTransform?LinkInfo::SnapshotVisible:LinkInfo::SnapshotTransform,subname,det,path)) 
     {
         if(freepath) {
             (*path)->unref();

@@ -123,9 +123,9 @@ public:
     SoSFBool selectionSync;
 
     virtual void GLRenderBelowPath(SoGLRenderAction * action);
-    // virtual void GLRender(SoGLRenderAction * action);
-    // virtual void GLRenderInPath(SoGLRenderAction * action);
-    // virtual void GLRenderOffPath(SoGLRenderAction * action);
+    virtual void GLRender(SoGLRenderAction * action);
+    virtual void GLRenderInPath(SoGLRenderAction * action);
+    virtual void GLRenderOffPath(SoGLRenderAction * action);
 
     template<class T>
     static std::shared_ptr<T> getRenderContext(SoNode *node, std::shared_ptr<T> def) {
@@ -159,6 +159,7 @@ protected:
     static Stack SelStack;
     typedef std::map<Stack,ContextPtr> ContextMap;
     ContextMap contextMap;
+    bool pushed;
 };
 
 /**

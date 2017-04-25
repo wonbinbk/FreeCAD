@@ -828,6 +828,7 @@ SoFCSelectionRoot::Stack SoFCSelectionRoot::SelStack;
 SO_NODE_SOURCE(SoFCSelectionRoot);
 
 SoFCSelectionRoot::SoFCSelectionRoot()
+    :pushed(false)
 {
     SO_NODE_CONSTRUCTOR(SoFCSelectionRoot);
 
@@ -865,9 +866,8 @@ SoFCSelectionRoot::ContextPtr SoFCSelectionRoot::getContext(SoNode *node, Contex
 SoFCSelectionRoot::ContextPtr *SoFCSelectionRoot::getContext(
         SoAction *action, SoNode *node, ContextPtr *pdef) 
 {
-    const SoPath *path = action->getCurPath();
+    const SoFullPath *path = (const SoFullPath*)action->getCurPath();
     Stack stack;
-    std::stringstream str;
     for(int i=0,count=path->getLength();i<count;++i) {
         SoNode *n = path->getNode(i);
         if(n->getTypeId().isDerivedFrom(SoFCSelectionRoot::getClassTypeId())) {
@@ -884,11 +884,23 @@ SoFCSelectionRoot::ContextPtr *SoFCSelectionRoot::getContext(
     return &front->contextMap[stack];
 }
 
-void SoFCSelectionRoot::GLRenderBelowPath(SoGLRenderAction * action) {
-    SelStack.push_back(this);
-    inherited::GLRenderBelowPath(action);
-    SelStack.pop_back();
+#define DEFINE_RENDER(_name) \
+void SoFCSelectionRoot::_name(SoGLRenderAction * action) {\
+    if(pushed)\
+        inherited::_name(action);\
+    else {\
+        pushed = true;\
+        SelStack.push_back(this);\
+        inherited::_name(action);\
+        SelStack.pop_back();\
+        pushed = false;\
+    }\
 }
+
+DEFINE_RENDER(GLRender)
+DEFINE_RENDER(GLRenderBelowPath)
+DEFINE_RENDER(GLRenderInPath)
+DEFINE_RENDER(GLRenderOffPath)
 
 void SoFCSelectionRoot::resetContext() {
     contextMap.clear();

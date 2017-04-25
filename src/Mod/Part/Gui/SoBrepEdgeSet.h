@@ -69,9 +69,12 @@ private:
     void renderHighlight(SoGLRenderAction *action, SelContextPtr ctx);
     void renderSelection(SoGLRenderAction *action, SelContextPtr ctx);
     bool validIndexes(const SoCoordinateElement*, const std::vector<int32_t>&) const;
+    void checkRenderCaching(SoAction *action, SelContextPtr ctx);
 
 private:
     SelContextPtr selContext;
+    int canSetRenderCaching;
+    bool renderCaching;
 };
 
 } // namespace PartGui

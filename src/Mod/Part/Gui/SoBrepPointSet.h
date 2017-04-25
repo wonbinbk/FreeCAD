@@ -67,8 +67,12 @@ private:
 
     bool validIndexes(const SoCoordinateElement*, int32_t, const int32_t *, int) const;
 
+    void checkRenderCaching(SoAction *action, SelContextPtr ctx);
+
 private:
     SelContextPtr selContext;
+    int canSetRenderCaching;
+    bool renderCaching;
 };
 
 } // namespace PartGui

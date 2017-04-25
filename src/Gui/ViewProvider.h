@@ -133,9 +133,9 @@ public:
     /// return the coin node detail and optionally full path to the node of the subelement
     //
     /// Check ppath nullity to see if the caller wants the path. If *ppath==0,
-    /// you can return a new full path starting from the scene graph root all the way
-    /// to your subelement node. If *ppath!=0, you must only append additional path
-    /// starting from the active child node of your mode switch node.
+    /// you can return a new path starting from your root node to your subelement node. 
+    /// If *ppath!=0, you must only append additional path starting from the active child
+    /// node of your mode switch node.
     virtual SoDetail* getDetailPath(const char *subelement, SoFullPath ** /*ppath*/) const 
         { return getDetail(subelement); }
 

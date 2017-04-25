@@ -63,6 +63,12 @@
 
 using namespace PartGui;
 
+namespace PartGui {
+// defined in SoBrepPointSet.cpp
+extern void checkRenderCaching(SoAction *action, bool enable, 
+        int &canSetRenderCaching, bool &renderCaching);
+}
+
 SO_NODE_SOURCE(SoBrepEdgeSet);
 
 class SoBrepEdgeSet::SelContext {
@@ -91,19 +97,32 @@ void SoBrepEdgeSet::initClass()
 }
 
 SoBrepEdgeSet::SoBrepEdgeSet()
+    :selContext(std::make_shared<SelContext>())
+    ,canSetRenderCaching(-1)
+    ,renderCaching(true)
 {
     SO_NODE_CONSTRUCTOR(SoBrepEdgeSet);
-    selContext = std::make_shared<SelContext>();
 }
 
 void SoBrepEdgeSet::GLRender(SoGLRenderAction *action)
 {
     SelContextPtr ctx = Gui::SoFCSelectionRoot::getRenderContext<SelContext>(this,selContext);
 
-    if (ctx && ctx->selectionIndex.getNum() > 0)
-        renderSelection(action,ctx);
-    if (ctx && ctx->highlightIndex.getValue() >= 0)
+    bool checkCaching = !renderCaching;
+    if (ctx && ctx->highlightIndex.getValue() >= 0) {
+        checkCaching = false;
         renderHighlight(action,ctx);
+    }
+    if (ctx && ctx->selectionIndex.getNum() > 0) {
+        checkCaching = false;
+        renderSelection(action,ctx);
+        if(ctx->selectionIndex[0]<0) //full selection
+            return;
+    }
+
+    if(checkCaching) 
+        PartGui::checkRenderCaching(action,true,canSetRenderCaching,renderCaching);
+
     inherited::GLRender(action);
 
     // Workaround for #0000433
@@ -274,17 +293,17 @@ void SoBrepEdgeSet::doAction(SoAction* action)
         Gui::SoHighlightElementAction* hlaction = static_cast<Gui::SoHighlightElementAction*>(action);
         SelContextPtr ctx = Gui::SoFCSelectionRoot::getActionContext<SelContext>(action,this,selContext);
         if (!hlaction->isHighlighted()) {
-            touch();
             ctx->highlightIndex = -1;
             ctx->hl.clear();
+            checkRenderCaching(action,ctx);
             return;
         }
         const SoDetail* detail = hlaction->getElement();
         if (detail) {
-            touch();
             if (!detail->isOfType(SoLineDetail::getClassTypeId())) {
                 ctx->highlightIndex = -1;
                 ctx->hl.clear();
+                checkRenderCaching(action,ctx);
                 return;
             }
 
@@ -294,15 +313,17 @@ void SoBrepEdgeSet::doAction(SoAction* action)
             int numcindices = this->coordIndex.getNum();
 
             createIndexArray(&index, 1, cindices, numcindices, ctx->hl);
-            if(index!=ctx->highlightIndex.getValue())
-                ctx->highlightIndex.setValue(index);
+            if(index!=ctx->highlightIndex.getValue()) {
+                ctx->highlightIndex = index;
+                checkRenderCaching(action,ctx);
+            }
         }
+        return;
     }
     else if (action->getTypeId() == Gui::SoSelectionElementAction::getClassTypeId()) {
         Gui::SoSelectionElementAction* selaction = static_cast<Gui::SoSelectionElementAction*>(action);
         SelContextPtr ctx = Gui::SoFCSelectionRoot::getActionContext<SelContext>(action,this,selContext);
         ctx->selectionColor = selaction->getColor();
-        touch();
         if (selaction->getType() == Gui::SoSelectionElementAction::All) {
             //const int32_t* cindices = this->coordIndex.getValues(0);
             //int numcindices = this->coordIndex.getNum();
@@ -326,11 +347,13 @@ void SoBrepEdgeSet::doAction(SoAction* action)
             ctx->selectionIndex.setValue(-1); // all
             ctx->sl.clear();
             ctx->sl.push_back(-1);
+            checkRenderCaching(action,ctx);
             return;
         }
         else if (selaction->getType() == Gui::SoSelectionElementAction::None) {
             ctx->selectionIndex.setNum(0);
             ctx->sl.clear();
+            checkRenderCaching(action,ctx);
             return;
         }
 
@@ -347,14 +370,17 @@ void SoBrepEdgeSet::doAction(SoAction* action)
                     if (ctx->selectionIndex.find(index) < 0) {
                         int start = ctx->selectionIndex.getNum();
                         ctx->selectionIndex.set1Value(start, index);
+                        checkRenderCaching(action,ctx);
                     }
                 }
                 break;
             case Gui::SoSelectionElementAction::Remove:
                 {
                     int start = ctx->selectionIndex.find(index);
-                    if (start >= 0)
+                    if (start >= 0) {
                         ctx->selectionIndex.deleteValues(start,1);
+                        checkRenderCaching(action,ctx);
+                    }
                 }
                 break;
             default:
@@ -384,4 +410,11 @@ SoDetail * SoBrepEdgeSet::createLineSegmentDetail(SoRayPickAction * action,
     int index = line_detail->getLineIndex();
     line_detail->setPartIndex(index);
     return detail;
+}
+
+void SoBrepEdgeSet::checkRenderCaching(SoAction *action, SelContextPtr ctx) {
+    touch();
+    PartGui::checkRenderCaching(action,
+            ctx->highlightIndex.getValue()<0 && !ctx->selectionIndex.getNum(),
+            canSetRenderCaching, renderCaching);
 }

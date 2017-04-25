@@ -63,6 +63,45 @@
 
 using namespace PartGui;
 
+namespace PartGui {
+// global helper for setting renderCaching in parent SoSeparator
+void checkRenderCaching(SoAction *action, bool enable, 
+        int &canSetRenderCaching, bool &renderCaching) 
+{
+    if(canSetRenderCaching==0) return;
+
+    const SoPath *path = action->getCurPath();
+    if(!path || !path->getLength()) return;
+
+    if(enable && 
+       (Gui::Selection().hasSelection() ||
+        Gui::Selection().getPreselection().pDocName))
+        // only turn caching back on when there is no selection nor preselection
+        enable = false;
+
+    if(canSetRenderCaching==1 && enable==renderCaching)
+        return;
+    renderCaching = enable;
+
+    for(int i=0,c=path->getLength();i<c;++i) {
+        SoNode *node = path->getNodeFromTail(i);
+        if(!node->getTypeId().isDerivedFrom(SoSeparator::getClassTypeId()))
+            continue;
+        SoSeparator *sep = static_cast<SoSeparator*>(node);
+        if(canSetRenderCaching<0) {
+            if(sep->renderCaching.getValue()!=SoSeparator::AUTO) {
+                canSetRenderCaching = 0;
+                return;
+            }
+            canSetRenderCaching = 1;
+        }
+        sep->renderCaching = enable?SoSeparator::AUTO:SoSeparator::OFF;
+        return;
+    }
+}
+}
+
+
 SO_NODE_SOURCE(SoBrepPointSet);
 
 class SoBrepPointSet::SelContext {
@@ -86,9 +125,11 @@ void SoBrepPointSet::initClass()
 }
 
 SoBrepPointSet::SoBrepPointSet()
+    :selContext(std::make_shared<SelContext>())
+    ,canSetRenderCaching(-1)
+    ,renderCaching(true)
 {
     SO_NODE_CONSTRUCTOR(SoBrepPointSet);
-    selContext = std::make_shared<SelContext>();
 }
 
 void SoBrepPointSet::GLRender(SoGLRenderAction *action)
@@ -101,10 +142,21 @@ void SoBrepPointSet::GLRender(SoGLRenderAction *action)
     }
     SelContextPtr ctx = Gui::SoFCSelectionRoot::getRenderContext<SelContext>(this,selContext);
 
-    if (ctx && ctx->selectionIndex.getNum() > 0)
-        renderSelection(action,ctx);
-    if (ctx && ctx->highlightIndex.getValue() >= 0)
+    bool checkCaching = !renderCaching;
+    if (ctx && ctx->highlightIndex.getValue() >= 0){
+        checkCaching = false;
         renderHighlight(action,ctx);
+    }
+    if (ctx && ctx->selectionIndex.getNum() > 0) {
+        checkCaching = false;
+        renderSelection(action,ctx);
+        if(num == ctx->selectionIndex.getNum()) //full selection
+            return;
+    }
+
+    if(checkCaching) 
+        PartGui::checkRenderCaching(action,true,canSetRenderCaching,renderCaching);
+
     inherited::GLRender(action);
 
     // Workaround for #0000433
@@ -221,14 +273,14 @@ void SoBrepPointSet::doAction(SoAction* action)
         SelContextPtr ctx = Gui::SoFCSelectionRoot::getActionContext<SelContext>(action,this,selContext);
         if (!hlaction->isHighlighted()) {
             ctx->highlightIndex = -1;
-            touch();
+            checkRenderCaching(action,ctx);
             return;
         }
         const SoDetail* detail = hlaction->getElement();
         if (detail) {
-            touch();
             if (!detail->isOfType(SoPointDetail::getClassTypeId())) {
                 ctx->highlightIndex = -1;
+                checkRenderCaching(action,ctx);
                 return;
             }
 
@@ -236,14 +288,15 @@ void SoBrepPointSet::doAction(SoAction* action)
             if(index!=ctx->highlightIndex.getValue()) {
                 ctx->highlightIndex.setValue(index);
                 ctx->highlightColor = hlaction->getColor();
+                checkRenderCaching(action,ctx);
             }
         }
+        return;
     }
     else if (action->getTypeId() == Gui::SoSelectionElementAction::getClassTypeId()) {
         Gui::SoSelectionElementAction* selaction = static_cast<Gui::SoSelectionElementAction*>(action);
         SelContextPtr ctx = Gui::SoFCSelectionRoot::getActionContext<SelContext>(action,this,selContext);
         ctx->selectionColor = selaction->getColor();
-        touch();
         if (selaction->getType() == Gui::SoSelectionElementAction::All) {
             const SoCoordinateElement* coords = SoCoordinateElement::getInstance(action->getState());
             int num = coords->getNum() - this->startIndex.getValue();
@@ -253,10 +306,12 @@ void SoBrepPointSet::doAction(SoAction* action)
             for (int i=0; i<num;i++)
                 v[i] = i + s;
             ctx->selectionIndex.finishEditing();
+            checkRenderCaching(action,ctx);
             return;
         }
         else if (selaction->getType() == Gui::SoSelectionElementAction::None) {
             ctx->selectionIndex.setNum(0);
+            checkRenderCaching(action,ctx);
             return;
         }
 
@@ -273,14 +328,17 @@ void SoBrepPointSet::doAction(SoAction* action)
                     if (ctx->selectionIndex.find(index) < 0) {
                         int start = ctx->selectionIndex.getNum();
                         ctx->selectionIndex.set1Value(start, index);
+                        checkRenderCaching(action,ctx);
                     }
                 }
                 break;
             case Gui::SoSelectionElementAction::Remove:
                 {
                     int start = ctx->selectionIndex.find(index);
-                    if (start >= 0)
+                    if (start >= 0) {
                         ctx->selectionIndex.deleteValues(start,1);
+                        checkRenderCaching(action,ctx);
+                    }
                 }
                 break;
             default:
@@ -290,4 +348,11 @@ void SoBrepPointSet::doAction(SoAction* action)
     }
 
     inherited::doAction(action);
+}
+
+void SoBrepPointSet::checkRenderCaching(SoAction *action, SelContextPtr ctx) {
+    touch();
+    PartGui::checkRenderCaching(action,
+            ctx->highlightIndex.getValue()<0 && !ctx->selectionIndex.getNum(),
+            canSetRenderCaching, renderCaching);
 }
