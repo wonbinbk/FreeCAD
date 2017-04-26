@@ -545,31 +545,28 @@ public:
     void slotChangeIcon() {
         if(!isLinked()) return;
         static const char * const feature_link_xpm[]={
-            "9 9 3 1",
+            "8 8 3 1",
             ". c None",
             "# c #000000",
             "a c #ffffff",
-            "#########",
-            "##aaaaaa#",
-            "####aaaa#",
-            "####aaaa#",
-            "###aaaaa#",
-            "##aaa##a#",
-            "#aaa###a#",
-            "#aa######",
-            "#########"};
+            "########",
+            "##aaaaa#",
+            "####aaa#",
+            "###aaaa#",
+            "##aaa#a#",
+            "#aaa##a#",
+            "#aa#####",
+            "########"};
         QPixmap px(feature_link_xpm);
-        int w = QApplication::style()->pixelMetric(QStyle::PM_ListViewIconSize);
+        static int iconSize = -1;
+        if(iconSize < 0) 
+            iconSize = QApplication::style()->standardPixmap(QStyle::SP_DirClosedIcon).width();
         QIcon icon = pcLinked->getIcon();
         iconLink = QIcon();
-        iconLink.addPixmap(BitmapFactory().merge(icon.pixmap(w, w, QIcon::Normal, QIcon::Off),
+        iconLink.addPixmap(BitmapFactory().merge(icon.pixmap(iconSize, iconSize, QIcon::Normal, QIcon::Off),
             px,BitmapFactoryInst::BottomLeft), QIcon::Normal, QIcon::Off);
-        iconLink.addPixmap(BitmapFactory().merge(icon.pixmap(w, w, QIcon::Normal, QIcon::On ),
+        iconLink.addPixmap(BitmapFactory().merge(icon.pixmap(iconSize, iconSize, QIcon::Normal, QIcon::On ),
             px,BitmapFactoryInst::BottomLeft), QIcon::Normal, QIcon::On);
-        // iconLink.addPixmap(BitmapFactory().merge(icon.pixmap(w, w, QIcon::Disabled, QIcon::Off),
-        //     px,BitmapFactoryInst::BottomLeft), QIcon::Disabled, QIcon::Off);
-        // iconLink.addPixmap(BitmapFactory().merge(icon.pixmap(w, w, QIcon::Disabled, QIcon::On ),
-        //     px,BitmapFactoryInst::BottomLeft), QIcon::Disabled, QIcon::On);
 
         for(auto link : links) 
             link->signalChangeIcon();
