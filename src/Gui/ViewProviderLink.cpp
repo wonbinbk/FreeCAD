@@ -47,113 +47,6 @@ FC_LOG_LEVEL_INIT("App::Link",true,true)
 
 using namespace Gui;
 
-static std::map<std::string,ViewProviderLink::DocInfoPtr> DocInfoMap;
-
-class ViewProviderLink::DocInfo : 
-    public std::enable_shared_from_this<ViewProviderLink::DocInfo> 
-{
-public:
-    boost::signals::connection connFinishRestoreDocument;
-    boost::signals::connection connDeleteDocument;
-    boost::signals::connection connSaveDocument;
-
-    std::string filePath;
-    App::Document *pcDoc;
-    std::set<ViewProviderLink*> links;
-
-    static DocInfoPtr get(const std::string &path, ViewProviderLink *l) {
-        DocInfoPtr &info = DocInfoMap[path];
-        if(!info) info = std::make_shared<DocInfo>(path);
-        info->links.insert(l);
-        return info;
-    }
-
-    static QString getFullPath(const char *p) {
-        return QFileInfo(QString::fromUtf8(p)).canonicalFilePath();
-    }
-
-    QString getFullPath() const {
-        return getFullPath(filePath.c_str());
-    }
-
-    DocInfo(const std::string &path)
-        :filePath(path),pcDoc(0) 
-    {
-        App::Application &app = App::GetApplication();
-        connFinishRestoreDocument = app.signalFinishRestoreDocument.connect(
-            boost::bind(&DocInfo::slotFinishRestoreDocument,this,_1));
-        connDeleteDocument = app.signalDeleteDocument.connect(
-            boost::bind(&DocInfo::slotDeleteDocument,this,_1));
-        connSaveDocument = app.signalSaveDocument.connect(
-            boost::bind(&DocInfo::slotSaveDocument,this,_1));
-
-        QString fullpath(getFullPath());
-        if(!fullpath.isEmpty()) {
-            for(App::Document *doc : App::GetApplication().getDocuments()) {
-                if(getFullPath(doc->FileName.getValue()) == fullpath)
-                    pcDoc = doc;
-            }
-        }
-    }
-
-    ~DocInfo() {
-        connFinishRestoreDocument.disconnect();
-        connDeleteDocument.disconnect();
-        connSaveDocument.disconnect();
-    }
-
-    void remove(ViewProviderLink *l) {
-        auto it = links.find(l);
-        if(it != links.end()) {
-            auto me = shared_from_this();
-            links.erase(it);
-            if(links.empty()) {
-                auto it = DocInfoMap.find(filePath);
-                assert(it!=DocInfoMap.end());
-                DocInfoMap.erase(it);
-            }
-        }
-    }
-
-    void slotFinishRestoreDocument(const App::Document &doc) {
-        if(pcDoc) return;
-        QString fullpath(getFullPath());
-        if(!fullpath.isEmpty() && getFullPath(doc.FileName.getValue())==fullpath){
-            FC_MSG("attached document "<<doc.FileName.getValue());
-            pcDoc = const_cast<App::Document*>(&doc);
-            for(ViewProviderLink *link:links) 
-                link->findLink(true);
-        }
-    }
-
-    void unlinkAll() {
-        std::set<ViewProviderLink*> linksTmp;
-        linksTmp.swap(links);
-        for(auto link : linksTmp)
-            link->unlink();
-        pcDoc = 0;
-        auto it = DocInfoMap.find(filePath);
-        assert(it!=DocInfoMap.end());
-        DocInfoMap.erase(it);
-    }
-
-    void slotSaveDocument(const App::Document &doc) {
-        if(!pcDoc) {
-            slotFinishRestoreDocument(doc);
-            return;
-        }
-        if(&doc!=pcDoc) return;
-        QString fullpath(getFullPath());
-        if(getFullPath(doc.FileName.getValue())!=fullpath)
-            unlinkAll();
-    }
-
-    void slotDeleteDocument(const App::Document &doc) {
-        if(pcDoc!=&doc) return;
-        unlinkAll();
-    }
-};
-
 ////////////////////////////////////////////////////////////////////////////
 
 class ViewProviderLink::LinkInfo {
@@ -270,7 +163,6 @@ public:
     }
 
     void clear() {
-        FC_TRACE("link clear " << (isLinked()?getLinkedName():""));
         for(auto &node : pcSnapshots) {
             if(node) {
                 node->removeAllChildren();
@@ -399,10 +291,6 @@ public:
 
     void updateData() {
         update();
-        for(auto link : links) {
-            if(link->docInfo)
-                link->getObject()->touch();
-        }
     }
 
     void update() {
@@ -640,16 +528,12 @@ ViewProviderLink::ViewProviderLink()
         auto &conf = *PropConf;
         conf["LinkPlacement"] = PropNamePlacement;
         conf["LinkedObject"] = PropNameObject;
-        conf["LinkedFile"] = PropNameFile;
-        conf["LinkedObjectName"] = PropNameObjectName;
         conf["LinkTransform"] = PropNameTransform;
         conf["LinkMoveChild"] = PropNameMoveChild;
         conf["LinkScale"] = PropNameScale;
         
         PropTypes[PropNamePlacement] = App::PropertyPlacement::getClassTypeId();
         PropTypes[PropNameObject] = App::PropertyLink::getClassTypeId();
-        PropTypes[PropNameFile] = App::PropertyString::getClassTypeId();
-        PropTypes[PropNameObjectName] = App::PropertyString::getClassTypeId();
         PropTypes[PropNameTransform] = App::PropertyBool::getClassTypeId();
         PropTypes[PropNameMoveChild] = App::PropertyBool::getClassTypeId();
         PropTypes[PropNameScale] = App::PropertyVector::getClassTypeId();
@@ -659,7 +543,7 @@ ViewProviderLink::ViewProviderLink()
 
 ViewProviderLink::~ViewProviderLink()
 {
-    unlink(true);
+    unlink();
 }
 
 void ViewProviderLink::setPropertyNames(std::shared_ptr<PropNameMap> conf) {
@@ -676,8 +560,6 @@ void ViewProviderLink::setPropertyNames(std::shared_ptr<PropNameMap> conf) {
 }
 
 void ViewProviderLink::attach(App::DocumentObject *pcObj) {
-    bool doclink = false;
-
     std::map<std::string,App::Property*> pmap;
     pcObj->getPropertyMap(pmap);
 
@@ -689,14 +571,8 @@ void ViewProviderLink::attach(App::DocumentObject *pcObj) {
      (it=pmap.find(*name))!=pmap.end() && \
      it->second->isDerivedFrom(PropTypes[PropName##_type]))
 
-    doclink = HAS_PROP(File);
-
-    if((doclink && HAS_PROP(ObjectName)) ||
-       (!doclink && HAS_PROP(Object)))
-    {
-    }else{
+    if(!HAS_PROP(Object))
         FC_ERR("ViewProviderLink: Invalid document object");
-    }
 
     inherited::attach(pcObj);
 }
@@ -752,22 +628,18 @@ SoDetail* ViewProviderLink::getDetailPath(const char *subname, SoFullPath **path
     return det;
 }
 
-void ViewProviderLink::unlink(bool unlinkDoc) {
+void ViewProviderLink::unlink() {
     if(linkInfo) {
         pcModeSwitch->whichChild = -1;
         pcModeSwitch->removeAllChildren();
         linkInfo->remove(this);
         linkInfo.reset();
     }
-    if(unlinkDoc && docInfo) {
-        docInfo->remove(this);
-        docInfo.reset();
-    }
 }
 
 bool ViewProviderLink::onDelete(const std::vector<std::string> &svec) {
     if(!inherited::onDelete(svec)) return false;
-    unlink(true);
+    unlink();
     return true;
 }
 
@@ -776,37 +648,10 @@ void ViewProviderLink::onChanged(const App::Property* prop) {
     inherited::onChanged(prop);
 }
 
-void ViewProviderLink::findLink(bool touch) {
-    if(!getObject() || !docInfo || !docInfo->pcDoc) return;
-
-#define GET_PROP(_type) \
-    ((name=&propType2Name->at(PropName##_type)) && name->length() &&\
-     (prop=getObject()->getPropertyByName(name->c_str())) &&\
-     prop->isDerivedFrom(PropTypes[PropName##_type]))
-
-    const std::string *name;
-    const App::Property *prop;
-    if(GET_PROP(ObjectName))
-        touch = findLink(static_cast<const App::PropertyString*>(prop)) && touch;
-    if(touch) getObject()->touch();
-}
-
-bool ViewProviderLink::findLink(const App::PropertyString *prop) {
-    if(!docInfo || !docInfo->pcDoc) return false;
-    const char *name = prop->getValue();
-    if(linkInfo && linkInfo->checkName(name)) 
-        return false;
-    return updateLink(docInfo->pcDoc->getObject(name));
-}
-
 bool ViewProviderLink::findLink(const App::PropertyLink *prop) {
     App::DocumentObject *pcLinkedObj = prop->getValue();
     if(linkInfo && linkInfo->pcLinked->getObject()==pcLinkedObj) 
         return false;
-    return updateLink(pcLinkedObj);
-}
-
-bool ViewProviderLink::updateLink(App::DocumentObject *pcLinkedObj) {
     unlink();
     linkInfo = LinkInfo::get(pcLinkedObj,this);
     setup();
@@ -848,27 +693,6 @@ void ViewProviderLink::checkProperty(const App::Property *prop, bool fromObject)
         case PropNameObject:
             if(fromObject) 
                 findLink(static_cast<const App::PropertyLink*>(prop));
-            break;
-        case PropNameFile: {
-            if(fromObject) {
-                const std::string &value = 
-                    static_cast<const App::PropertyString*>(prop)->getStrValue();
-                if(!docInfo || docInfo->filePath!=value) {
-                    if(docInfo) {
-                        docInfo->remove(this);
-                        docInfo.reset();
-                    }
-                    unlink();
-                }
-                if(value.length()) {
-                    docInfo = DocInfo::get(value,this);
-                    findLink();
-                }
-            }
-            break;
-        } case PropNameObjectName:
-            if(fromObject)
-                findLink(static_cast<const App::PropertyString*>(prop));
             break;
         case PropNamePlacement:
             if(fromObject)

@@ -1264,7 +1264,6 @@ void Application::initTypes(void)
     App ::Part                      ::init();
     App ::Origin                    ::init();
     App ::Link                      ::init();
-    App ::XLink                     ::init();
 
     // Expression classes
     App ::Expression                ::init();

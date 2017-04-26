@@ -42,29 +42,10 @@ public:
         return "Gui::ViewProviderLink";
     }
 
-    PropertyLink LinkedObject;
+    PropertyXLink LinkedObject;
     PropertyPlacement LinkPlacement;
     PropertyVector LinkScale;
     PropertyBool LinkMoveChild;
-    PropertyBool LinkTransform;
-};
-
-class AppExport XLink : public App::DocumentObject
-{
-    PROPERTY_HEADER(App::DocumentObject);
-
-public:
-    XLink(void);
-    virtual ~XLink();
-
-    virtual const char* getViewProviderName(void) const {
-        return "Gui::ViewProviderLink";
-    }
-
-    PropertyString LinkedFile;
-    PropertyString LinkedObjectName;
-    PropertyPlacement LinkPlacement;
-    PropertyVector LinkScale;
     PropertyBool LinkTransform;
 };
 

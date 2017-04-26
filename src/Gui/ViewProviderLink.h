@@ -83,15 +83,9 @@ public:
         LinkInfoPtr linkInfo;
     };
 
-    class DocInfo;
-    friend class DocInfo;
-    typedef std::shared_ptr<DocInfo> DocInfoPtr;
-
     enum PropName {
         PropNamePlacement,
         PropNameObject,
-        PropNameFile,
-        PropNameObjectName,
         PropNameMoveChild,
         PropNameTransform,
         PropNameScale,
@@ -104,11 +98,8 @@ public:
     void setPropertyNames(std::shared_ptr<PropNameMap> conf);
 
 protected:
-    void unlink(bool unlinkDoc=false);
-    void findLink(bool touch=false);
-    bool findLink(const App::PropertyString *prop);
+    void unlink();
     bool findLink(const App::PropertyLink *prop);
-    bool updateLink(App::DocumentObject *pcLinkedObj);
     void setup();
     void checkProperty(const App::Property *prop, bool fromObject);
 
@@ -117,7 +108,6 @@ protected:
     std::shared_ptr<PropNames> propType2Name;
 
     LinkInfoPtr linkInfo;
-    DocInfoPtr docInfo;
 
     bool moveChildFromRoot;
     bool linkTransform;
