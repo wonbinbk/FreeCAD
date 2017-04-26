@@ -27,6 +27,11 @@
 #   include <assert.h>
 #endif
 
+#include <QFileInfo>
+#include <QDir>
+
+#include <boost/bind.hpp>
+
 /// Here the FreeCAD includes sorted by Base,App,Gui......
 #include <CXX/Objects.hxx>
 #include <Base/Exception.h>
@@ -34,11 +39,14 @@
 #include <Base/Writer.h>
 #include <Base/Console.h>
 
+#include "Application.h"
 #include "DocumentObject.h"
 #include "DocumentObjectPy.h"
 #include "Document.h"
 
 #include "PropertyLinks.h"
+
+FC_LOG_LEVEL_INIT("PropertyLink",true,true);
 
 using namespace App;
 using namespace Base;
@@ -939,3 +947,346 @@ unsigned int PropertyLinkSubList::getMemSize (void) const
 
    return size;
 }
+
+//**************************************************************************
+// PropertyXLink::DocInfo
+//++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+typedef std::map<std::string,PropertyXLink::DocInfoPtr> DocInfoMap;
+DocInfoMap _DocInfoMap;
+
+class PropertyXLink::DocInfo : 
+    public std::enable_shared_from_this<PropertyXLink::DocInfo> 
+{
+public:
+    boost::signals::connection connFinishRestoreDocument;
+    boost::signals::connection connDeleteDocument;
+    boost::signals::connection connSaveDocument;
+    boost::signals::connection connDeletedObject;
+    boost::signals::connection connChangedObject;
+    boost::signals::connection connNewObject;
+
+    DocInfoMap::iterator myPos;
+    App::Document *pcDoc;
+    std::set<PropertyXLink*> links;
+
+    static DocInfoPtr get(const char *path, PropertyXLink *l) {
+        // The file path should be absolute, but does not have to exist. This is why
+        // we can't use QFileInfo.canonicalFilePath function which only works for 
+        // existing file. And because of so, different instance of DocInfo may
+        // pointing to the same document object.
+        auto it = _DocInfoMap.find(path);
+        DocInfoPtr info;
+        if(it != _DocInfoMap.end()) 
+            info = it->second;
+        else {
+            info = std::make_shared<DocInfo>();
+            auto ret = _DocInfoMap.insert(std::make_pair(std::string(path),info));
+            info->init(ret.first);
+        }
+        info->links.insert(l);
+        return info;
+    }
+
+    static QString getFullPath(const char *p) {
+        return QFileInfo(QString::fromUtf8(p)).canonicalFilePath();
+    }
+
+    QString getFullPath() const {
+        return getFullPath(myPos->first.c_str());
+    }
+
+    const char *filePath() const {
+        return myPos->first.c_str();
+    }
+
+    DocInfo()
+        :pcDoc(0) 
+    {}
+
+    void init(DocInfoMap::iterator pos) {
+        myPos = pos;
+        App::Application &app = App::GetApplication();
+        connFinishRestoreDocument = app.signalFinishRestoreDocument.connect(
+            boost::bind(&DocInfo::slotFinishRestoreDocument,this,_1));
+        connDeleteDocument = app.signalDeleteDocument.connect(
+            boost::bind(&DocInfo::slotDeleteDocument,this,_1));
+        connSaveDocument = app.signalSaveDocument.connect(
+            boost::bind(&DocInfo::slotSaveDocument,this,_1));
+
+        QString fullpath(getFullPath());
+        if(!fullpath.isEmpty()) {
+            for(App::Document *doc : App::GetApplication().getDocuments()) {
+                if(getFullPath(doc->FileName.getValue()) == fullpath) {
+                    attach(doc);
+                    break;
+                }
+            }
+        }
+    }
+
+    ~DocInfo() {
+    }
+
+    void attach(Document *doc) {
+        assert(!pcDoc);
+        pcDoc = doc;
+        FC_LOG("attaching " << doc->getName() << ", " << doc->FileName.getValue());
+        connNewObject = doc->signalNewObject.connect(
+                boost::bind(&DocInfo::onNewObject,this,_1));
+        connChangedObject = doc->signalChangedObject.connect(
+                boost::bind(&DocInfo::onChangedObject,this,_1));
+        connDeletedObject = doc->signalDeletedObject.connect(
+                boost::bind(&DocInfo::onDeletedObject,this,_1));
+        for(auto link : links)
+            link->setValue(doc->getObject(link->objectName.c_str()));
+    }
+
+    void onNewObject(const DocumentObject &obj) {
+        for(auto link : links) {
+            if(!link->_pcLink && link->objectName==obj.getNameInDocument())
+                link->setValue(const_cast<DocumentObject*>(&obj));
+        }
+    }
+
+    void onDeletedObject(const DocumentObject &obj) {
+        std::set<PropertyXLink *> tmp;
+        tmp.swap(links);
+        for(auto it=tmp.begin(),itNext=it;it!=tmp.end();it=itNext) {
+            ++itNext;
+            auto link = *it;
+            if(link->_pcLink==&obj) {
+                link->setValue(0);
+                tmp.erase(it);
+            }
+        }
+        if(tmp.empty()) 
+            _DocInfoMap.erase(myPos);
+        else
+            links.swap(tmp);
+    }
+
+    void onChangedObject(const DocumentObject &obj) {
+        for(auto link : links) 
+            if(link->_pcLink==&obj)
+                link->touch();
+    }
+
+    void remove(PropertyXLink *l) {
+        auto it = links.find(l);
+        if(it != links.end()) {
+            links.erase(it);
+            if(links.empty())
+                _DocInfoMap.erase(myPos);
+        }
+    }
+
+    void slotFinishRestoreDocument(const App::Document &doc) {
+        if(pcDoc) return;
+        QString fullpath(getFullPath());
+        if(!fullpath.isEmpty() && getFullPath(doc.FileName.getValue())==fullpath)
+            attach(const_cast<App::Document*>(&doc));
+    }
+
+    void slotSaveDocument(const App::Document &doc) {
+        if(!pcDoc) {
+            slotFinishRestoreDocument(doc);
+            return;
+        }
+        if(&doc!=pcDoc) return;
+        QString fullpath(getFullPath());
+        if(getFullPath(doc.FileName.getValue())!=fullpath)
+            slotDeleteDocument(doc);
+    }
+
+    void slotDeleteDocument(const App::Document &doc) {
+        if(pcDoc!=&doc) return;
+        for(auto link : links)
+            link->detach();
+        pcDoc = 0;
+    }
+};
+
+//**************************************************************************
+// PropertyXLink
+//++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+TYPESYSTEM_SOURCE(App::PropertyXLink , App::PropertyLink)
+
+PropertyXLink::PropertyXLink()
+{
+
+}
+
+
+PropertyXLink::~PropertyXLink()
+{
+    unlink();
+}
+
+void PropertyXLink::unlink() {
+    if(docInfo) {
+        docInfo->remove(this);
+        docInfo.reset();
+    }
+    objectName.clear();
+    _pcLink = 0;
+}
+
+void PropertyXLink::detach() {
+    if(docInfo) {
+        aboutToSetValue();
+        _pcLink = 0;
+        hasSetValue();
+    }
+}
+
+void PropertyXLink::setValue(App::DocumentObject * lValue) {
+    setValue(lValue,true);
+}
+
+void PropertyXLink::setValue(App::DocumentObject * lValue, bool relative)
+{
+    if(_pcLink == lValue || 
+       (lValue && !lValue->getNameInDocument()))
+        return;
+
+    auto owner = static_cast<DocumentObject*>(getContainer());
+
+    aboutToSetValue();
+
+#ifndef USE_OLD_DAG
+    if(_pcLink && !docInfo)
+        _pcLink->_removeBackLink(owner);
+#endif
+    if(!lValue) 
+        unlink();
+    else{
+        if(lValue->getDocument() == owner->getDocument())
+            unlink();
+        else if(!docInfo || lValue->getDocument()!=docInfo->pcDoc) {
+            unlink();
+            QString path(QFileInfo(QString::fromUtf8(
+                    lValue->getDocument()->FileName.getValue())).absoluteFilePath());
+            if(relative) 
+                path = QDir(QFileInfo(QString::fromUtf8(
+                    owner->getDocument()->FileName.getValue())).filePath()).relativeFilePath(path);
+            docInfo = DocInfo::get(path.toUtf8().constData(),this);
+            assert(docInfo && docInfo->pcDoc == lValue->getDocument());
+        }
+        objectName = lValue->getNameInDocument();
+    }
+    _pcLink=lValue;
+
+#ifndef USE_OLD_DAG
+    if(_pcLink && !docInfo)
+        _pcLink->_addBackLink(owner);
+#endif
+    hasSetValue();
+}
+
+void PropertyXLink::setValue(const char *path, const char *name) {
+    if(!name || *name==0) {
+        setValue(0);
+        return;
+    }
+    DocumentObject *pObject=0;
+    DocInfoPtr info;
+    if(path && *path!=0) {
+        info = DocInfo::get(path,this);
+        if(info->pcDoc) 
+            pObject = info->pcDoc->getObject(name);
+    }else{
+        DocumentObject* parent = static_cast<DocumentObject*>(getContainer());
+        Document *document = parent->getDocument();
+        if(document)
+            pObject = document->getObject(name);
+    }
+    if(pObject || !info) {
+        setValue(pObject);
+        return;
+    }
+    if(docInfo!=info || objectName!=name) {
+        aboutToSetValue();
+        if(docInfo!=info) {
+            unlink();
+            docInfo = info;
+        }
+        objectName = name;
+        hasSetValue();
+    }
+}
+
+App::Document *PropertyXLink::getDocument() const {
+    return docInfo?docInfo->pcDoc:0;
+}
+
+const char *PropertyXLink::getDocumentPath() const {
+    return docInfo?docInfo->filePath():0;
+}
+
+const char *PropertyXLink::getObjectName() const {
+    return objectName.c_str();
+}
+
+void PropertyXLink::Save (Base::Writer &writer) const
+{
+    writer.Stream() << writer.ind() << "<XLink value=\"";
+    if(docInfo && objectName.size())
+        writer.Stream() << '*' << docInfo->filePath() << '*';
+    writer.Stream() << objectName <<"\"/>" << std::endl;
+}
+
+void PropertyXLink::Restore(Base::XMLReader &reader)
+{
+    // read my element
+    reader.readElement("XLink");
+    // get the value of my attribute
+    std::string name = reader.getAttribute("value");
+
+    // Property not in a DocumentObject!
+    assert(getContainer()->getTypeId().isDerivedFrom(App::DocumentObject::getClassTypeId()) );
+
+    if (name.empty()) 
+        setValue(0);
+    else{
+        if(name[0] != '*') {
+            DocumentObject* parent = static_cast<DocumentObject*>(getContainer());
+            Document *document = parent->getDocument();
+            DocumentObject* object = document ? document->getObject(name.c_str()) : 0;
+            if(!object) {
+                if(reader.isVerbose()) {
+                    FC_WARN("Lost link to '" << name << "' while loading, maybe "
+                            "an object was not loaded correctly");
+                }
+            }
+            setValue(object);
+        }else{
+            auto pos = name.find('*',1);
+            if(pos == std::string::npos) {
+                FC_ERR("invalid xlink reference " << name);
+                setValue(0);
+            }else
+                setValue(name.substr(1,pos-1).c_str(),name.c_str()+pos+1);
+        }
+    }
+}
+
+Property *PropertyXLink::Copy(void) const
+{
+    PropertyXLink *p= new PropertyXLink();
+    p->_pcLink = _pcLink;
+    p->docInfo = docInfo;
+    p->objectName = objectName;
+    return p;
+}
+
+void PropertyXLink::Paste(const Property &from)
+{
+    if(!from.isDerivedFrom(PropertyXLink::getClassTypeId()))
+        throw Base::Exception("Incompatible proeprty to paste to");
+
+    const auto &other = static_cast<const PropertyXLink&>(from);
+    setValue(other.docInfo?other.docInfo->filePath():0,other.objectName.c_str());
+}
+

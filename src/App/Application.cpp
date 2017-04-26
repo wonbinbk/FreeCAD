@@ -1204,6 +1204,7 @@ void Application::initTypes(void)
     App ::PropertyFont              ::init();
     App ::PropertyStringList        ::init();
     App ::PropertyLink              ::init();
+    App ::PropertyXLink             ::init();
     App ::PropertyLinkSub           ::init();
     App ::PropertyLinkList          ::init();
     App ::PropertyLinkSubList       ::init();
