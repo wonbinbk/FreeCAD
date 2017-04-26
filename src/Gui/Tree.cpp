@@ -388,7 +388,11 @@ void TreeWidget::onSelectLinked()
 {
     if (!this->contextItem || this->contextItem->type() != ObjectType) return;
     auto item = static_cast<DocumentObjectItem*>(this->contextItem);
-    auto it = DocumentMap.find(item->object()->getDocument());
+
+    ViewProviderDocumentObject *linked = item->object()->getLinkedView(false);
+    if(!linked || linked == item->object()) return;
+
+    auto it = DocumentMap.find(linked->getDocument());
     if(it == DocumentMap.end()) return;
     it->second->selectLinkedItem(item);
 }
@@ -397,9 +401,9 @@ void TreeWidget::onSelectAllLinks()
 {
     if (!this->contextItem || this->contextItem->type() != ObjectType) return;
     auto item = static_cast<DocumentObjectItem*>(this->contextItem);
-    auto it = DocumentMap.find(item->object()->getDocument());
-    if(it == DocumentMap.end()) return;
-    it->second->selectAllLinks(item);
+
+    for(auto &v : DocumentMap)
+        v.second->selectAllLinks(item);
 }
 
 
@@ -1633,6 +1637,9 @@ void DocumentItem::selectLinkedItem(DocumentObjectItem *item) {
     treeWidget()->scrollToItem(linkedItem);
 
     updateSelection();
+
+    MDIView *view = pDocument->getActiveView();
+    if (view) getMainWindow()->setActiveWindow(view);
 }
 
 void DocumentItem::populateParents(ViewProvider *vp, ParentMap &parentMap) {
