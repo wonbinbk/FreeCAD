@@ -81,6 +81,7 @@ public:
     NodeMap nodeMap;
 
     QIcon iconLink;
+    QIcon iconXLink;
 
     static ViewProviderDocumentObject *getView(App::DocumentObject *obj) {
         if(obj && obj->getNameInDocument()) {
@@ -432,6 +433,8 @@ public:
 
     void slotChangeIcon() {
         if(!isLinked()) return;
+
+        // right top pointing arrow for normal link
         static const char * const feature_link_xpm[]={
             "8 8 3 1",
             ". c None",
@@ -445,16 +448,55 @@ public:
             "#aaa##a#",
             "#aa#####",
             "########"};
-        QPixmap px(feature_link_xpm);
+
+        // left bottom pointing arrow, not looking good?
+        // static const char * const feature_xlink_xpm[]={
+        //     "8 8 3 1",
+        //     ". c None",
+        //     "# c #000000",
+        //     "a c #ffffff",
+        //     "########",
+        //     "#####aa#",
+        //     "#a##aaa#",
+        //     "#a#aaa##",
+        //     "#aaaa###",
+        //     "#aaa####",
+        //     "#aaaaa##",
+        //     "########"};
+
+        // left top pointing arrow for xlink
+        static const char * const feature_xlink_xpm[]={
+            "8 8 3 1",
+            ". c None",
+            "# c #000000",
+            "a c #ffffff",
+            "########",
+            "#aaaaa##",
+            "#aaa####",
+            "#aaaa###",
+            "#a#aaa##",
+            "#a##aaa#",
+            "#####aa#",
+            "########"};
+
         static int iconSize = -1;
         if(iconSize < 0) 
             iconSize = QApplication::style()->standardPixmap(QStyle::SP_DirClosedIcon).width();
+
+        QPixmap px(feature_link_xpm);
         QIcon icon = pcLinked->getIcon();
         iconLink = QIcon();
         iconLink.addPixmap(BitmapFactory().merge(icon.pixmap(iconSize, iconSize, QIcon::Normal, QIcon::Off),
             px,BitmapFactoryInst::BottomLeft), QIcon::Normal, QIcon::Off);
         iconLink.addPixmap(BitmapFactory().merge(icon.pixmap(iconSize, iconSize, QIcon::Normal, QIcon::On ),
             px,BitmapFactoryInst::BottomLeft), QIcon::Normal, QIcon::On);
+
+        QPixmap xpx(feature_xlink_xpm);
+        iconXLink = QIcon();
+        iconXLink.addPixmap(BitmapFactory().merge(icon.pixmap(iconSize, iconSize, QIcon::Normal, QIcon::Off),
+            xpx,BitmapFactoryInst::BottomLeft), QIcon::Normal, QIcon::Off);
+        iconXLink.addPixmap(BitmapFactory().merge(icon.pixmap(iconSize, iconSize, QIcon::Normal, QIcon::On ),
+            xpx,BitmapFactoryInst::BottomLeft), QIcon::Normal, QIcon::On);
 
         for(auto link : links) 
             link->signalChangeIcon();
@@ -510,7 +552,7 @@ std::map<std::shared_ptr<ViewProviderLink::PropNameMap>,
     std::shared_ptr<ViewProviderLink::PropNames> > PropNameMaps;
 
 ViewProviderLink::ViewProviderLink()
-    :moveChildFromRoot(false),linkTransform(false)
+    :moveChildFromRoot(false),linkTransform(false),isXLink(false)
 {
     DisplayMode.setStatus(App::Property::Status::Hidden, true);
 
@@ -652,6 +694,8 @@ bool ViewProviderLink::findLink(const App::PropertyLink *prop) {
     App::DocumentObject *pcLinkedObj = prop->getValue();
     if(linkInfo && linkInfo->pcLinked->getObject()==pcLinkedObj) 
         return false;
+    isXLink = prop->isDerivedFrom(App::PropertyXLink::getClassTypeId()) &&
+              static_cast<const App::PropertyXLink*>(prop)->getDocumentPath();
     unlink();
     linkInfo = LinkInfo::get(pcLinkedObj,this);
     setup();
@@ -727,7 +771,7 @@ std::vector<App::DocumentObject*> ViewProviderLink::claimChildren(void) const
 
 QIcon ViewProviderLink::getIcon() const{
     if(linkInfo && linkInfo->isLinked())
-        return linkInfo->iconLink;
+        return isXLink?linkInfo->iconXLink:linkInfo->iconLink;
     return Gui::BitmapFactory().pixmap("link");
 }
 

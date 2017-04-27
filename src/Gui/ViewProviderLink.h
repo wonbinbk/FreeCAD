@@ -111,6 +111,7 @@ protected:
 
     bool moveChildFromRoot;
     bool linkTransform;
+    bool isXLink;
 };
 
 typedef Gui::ViewProviderPythonFeatureT<ViewProviderLink> ViewProviderLinkPython;
