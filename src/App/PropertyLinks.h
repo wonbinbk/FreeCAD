@@ -305,12 +305,13 @@ public:
     virtual ~PropertyXLink();
 
     void setValue(App::DocumentObject *) override;
-    void setValue(App::DocumentObject *, bool relativePath);
-    void setValue(const char *filePath, const char *objectName);
+    void setValue(App::DocumentObject *, bool relative);
+    void setValue(const char *filePath, const char *objectName, int relative);
 
     App::Document *getDocument() const;
     const char *getDocumentPath() const;
     const char *getObjectName() const;
+    bool isRestored() const;
 
     virtual void Save (Base::Writer &writer) const;
     virtual void Restore(Base::XMLReader &reader);
@@ -329,6 +330,7 @@ protected:
 protected:
     std::string filePath;
     std::string objectName;
+    std::int64_t stamp;
 
     DocInfoPtr docInfo;
 };
