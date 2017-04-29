@@ -75,6 +75,14 @@ TreeWidget::TreeWidget(QWidget* parent)
     this->setDropIndicatorShown(false);
     this->setRootIsDecorated(false);
 
+    ParameterGrp::handle hGrp = App::GetApplication().GetParameterGroupByPath("User parameter:BaseApp/Preferences/TreeView");
+    bool sync = hGrp->GetBool("SyncSelection",false);
+    this->syncSelection = new QAction(this);
+    this->syncSelection->setCheckable(true);
+    this->syncSelection->setChecked(sync);
+    connect(this->syncSelection, SIGNAL(triggered()),
+            this, SLOT(onSyncSelection()));
+
     this->createGroupAction = new QAction(this);
     connect(this->createGroupAction, SIGNAL(triggered()),
             this, SLOT(onCreateGroup()));
@@ -104,6 +112,10 @@ TreeWidget::TreeWidget(QWidget* parent)
     this->selectLinked = new QAction(this);
     connect(this->selectLinked, SIGNAL(triggered()),
             this, SLOT(onSelectLinked()));
+
+    this->selectLinkedFinal = new QAction(this);
+    connect(this->selectLinkedFinal, SIGNAL(triggered()),
+            this, SLOT(onSelectLinkedFinal()));
 
     this->selectAllLinks = new QAction(this);
     connect(this->selectAllLinks, SIGNAL(triggered()),
@@ -173,6 +185,8 @@ void TreeWidget::contextMenuEvent (QContextMenuEvent * e)
 
     // get the current item
     this->contextItem = itemAt(e->pos());
+    contextMenu.addAction(this->syncSelection);
+
     if (this->contextItem && this->contextItem->type() == DocumentType) {
         if (!contextMenu.actions().isEmpty())
             contextMenu.addSeparator();
@@ -206,8 +220,11 @@ void TreeWidget::contextMenuEvent (QContextMenuEvent * e)
         if (this->selectedItems().size() == 1) {
             contextMenu.addAction(this->selectAllInstances);
             contextMenu.addAction(this->selectAllLinks);
-            if(objitem->isLink())
+            if(objitem->isLink()) {
                 contextMenu.addAction(this->selectLinked);
+                if(!objitem->isLinkFinal())
+                    contextMenu.addAction(this->selectLinkedFinal);
+            }
 
             objitem->object()->setupContextMenu(&editMenu, this, SLOT(onStartEditing()));
             QList<QAction*> editAct = editMenu.actions();
@@ -384,17 +401,29 @@ void TreeWidget::onMarkRecompute()
     onTestStatus();
 }
 
+DocumentItem *TreeWidget::getDocumentItem(const Gui::Document *doc) const {
+    auto it = DocumentMap.find(doc);
+    if(it != DocumentMap.end())
+        return it->second;
+    return 0;
+}
+
 void TreeWidget::onSelectLinked()
 {
     if (!this->contextItem || this->contextItem->type() != ObjectType) return;
     auto item = static_cast<DocumentObjectItem*>(this->contextItem);
+    auto docItem = getDocumentItem(item->object()->getDocument());
+    if(docItem)
+        docItem->selectLinkedItem(item,false);
+}
 
-    ViewProviderDocumentObject *linked = item->object()->getLinkedView(false);
-    if(!linked || linked == item->object()) return;
-
-    auto it = DocumentMap.find(linked->getDocument());
-    if(it == DocumentMap.end()) return;
-    it->second->selectLinkedItem(item);
+void TreeWidget::onSelectLinkedFinal()
+{
+    if (!this->contextItem || this->contextItem->type() != ObjectType) return;
+    auto item = static_cast<DocumentObjectItem*>(this->contextItem);
+    auto docItem = getDocumentItem(item->object()->getDocument());
+    if(docItem)
+        docItem->selectLinkedItem(item,true);
 }
 
 void TreeWidget::onSelectAllLinks()
@@ -838,9 +867,18 @@ void TreeWidget::onItemExpanded(QTreeWidgetItem * item)
 
 void TreeWidget::scrollItemToTop(Gui::Document* doc)
 {
+    if(!isConnectionAttached()) 
+        return;
+
     std::map<const Gui::Document*,DocumentItem*>::iterator it;
     it = DocumentMap.find(doc);
     if (it != DocumentMap.end()) {
+        if(!syncSelection->isChecked()) {
+            bool lock = this->blockConnection(true);
+            it->second->selectItems(true);
+            this->blockConnection(lock);
+            return;
+        }
         DocumentItem* root = it->second;
         QTreeWidgetItemIterator it(root, QTreeWidgetItemIterator::Selected);
         for (; *it; ++it) {
@@ -855,6 +893,9 @@ void TreeWidget::scrollItemToTop(Gui::Document* doc)
 void TreeWidget::setupText() {
     this->headerItem()->setText(0, tr("Labels & Attributes"));
     this->rootItem->setText(0, tr("Application"));
+
+    this->syncSelection->setText(tr("Sync selection"));
+    this->syncSelection->setStatusTip(tr("Auto expand item when selected in 3D view"));
 
     this->createGroupAction->setText(tr("Create group..."));
     this->createGroupAction->setStatusTip(tr("Create a group"));
@@ -877,8 +918,16 @@ void TreeWidget::setupText() {
     this->selectLinked->setText(tr("Select linked object"));
     this->selectLinked->setStatusTip(tr("Select the object that is linked by this item"));
 
+    this->selectLinkedFinal->setText(tr("Select final linked object"));
+    this->selectLinkedFinal->setStatusTip(tr("Select the deepest object that is linked by this item"));
+
     this->selectAllLinks->setText(tr("Select all links"));
     this->selectAllLinks->setStatusTip(tr("Select all links to this object"));
+}
+
+void TreeWidget::onSyncSelection() {
+    ParameterGrp::handle hGrp = App::GetApplication().GetParameterGroupByPath("User parameter:BaseApp/Preferences/TreeView");
+    hGrp->SetBool("SyncSelection",syncSelection->isChecked());
 }
 
 void TreeWidget::changeEvent(QEvent *e)
@@ -891,7 +940,7 @@ void TreeWidget::changeEvent(QEvent *e)
 
 void TreeWidget::onItemSelectionChanged ()
 {
-    if (this->isConnectionBlocked())
+    if (this->isConnectionAttached() && this->isConnectionBlocked())
         return;
 
     // block tmp. the connection to avoid to notify us ourself
@@ -926,7 +975,7 @@ NEXT:
             it = DocumentMap.find(pDoc);
             if (it != DocumentMap.end()) {
                 bool lock = this->blockConnection(true);
-                it->second->selectItems();
+                it->second->selectItems(syncSelection->isChecked());
                 this->blockConnection(lock);
             }
         }   break;
@@ -1055,6 +1104,10 @@ DocumentItem::~DocumentItem()
     connectResObject.disconnect();
     connectHltObject.disconnect();
     connectExpObject.disconnect();
+}
+
+TreeWidget *DocumentItem::getTree() {
+    return static_cast<TreeWidget*>(treeWidget());
 }
 
 #define FOREACH_ITEM(_item, _obj) \
@@ -1298,7 +1351,7 @@ void DocumentItem::populateItem(DocumentObjectItem *item, bool refresh) {
         }
         delete ci;
     }
-    static_cast<TreeWidget*>(treeWidget())->updateGeometries();
+    getTree()->updateGeometries();
 }
 
 void DocumentItem::slotChangeObject(const Gui::ViewProviderDocumentObject& view)
@@ -1330,7 +1383,7 @@ void DocumentItem::slotChangeObject(const Gui::ViewProviderDocumentObject& view)
         }
         if(!found) createNewItem(view);
     }
-    static_cast<TreeWidget*>(treeWidget())->onTestStatus();
+    getTree()->onTestStatus();
 }
 
 void DocumentItem::slotRenameObject(const Gui::ViewProviderDocumentObject& obj)
@@ -1349,7 +1402,7 @@ void DocumentItem::slotActiveObject(const Gui::ViewProviderDocumentObject& obj)
         f.setBold(item->object() == &obj);
         item->setFont(0,f);
     END_FOREACH_ITEM
-    static_cast<TreeWidget*>(treeWidget())->onTestStatus();
+    getTree()->onTestStatus();
 }
 
 void DocumentItem::slotHighlightObject (const Gui::ViewProviderDocumentObject& obj,const Gui::HighlightMode& high,bool set)
@@ -1379,7 +1432,7 @@ void DocumentItem::slotHighlightObject (const Gui::ViewProviderDocumentObject& o
 
         item->setFont(0,f);
     END_FOREACH_ITEM
-    static_cast<TreeWidget*>(treeWidget())->onTestStatus();
+    getTree()->onTestStatus();
 }
 
 void DocumentItem::slotExpandObject (const Gui::ViewProviderDocumentObject& obj,const Gui::TreeItemMode& mode)
@@ -1406,7 +1459,7 @@ void DocumentItem::slotExpandObject (const Gui::ViewProviderDocumentObject& obj,
         }
         populateItem(item);
     END_FOREACH_ITEM
-    static_cast<TreeWidget*>(treeWidget())->onTestStatus();
+    getTree()->onTestStatus();
 }
 
 const Gui::Document* DocumentItem::document() const
@@ -1535,7 +1588,7 @@ void DocumentItem::updateItemSelection(DocumentObjectItem *item) {
     }
 }
 
-void DocumentItem::findSelection(DocumentObjectItem *item, const char *subname) 
+void DocumentItem::findSelection(bool sync, DocumentObjectItem *item, const char *subname) 
 {
     if(!subname || *subname==0) {
         item->selected=2;
@@ -1563,6 +1616,12 @@ void DocumentItem::findSelection(DocumentObjectItem *item, const char *subname)
         dot = subname+strlen(subname);
     }
 
+    if(!item->populated && sync) {
+        //force populate the item
+        item->populated = true;
+        populateItem(item,true);
+    }
+
     for(int i=0,count=item->childCount();i<count;++i) {
         auto ti = item->child(i);
         if(!ti || ti->type()!=TreeWidget::ObjectType) continue;
@@ -1576,13 +1635,13 @@ void DocumentItem::findSelection(DocumentObjectItem *item, const char *subname)
         for(s=subname;*name && s!=dot;++name,++s)
             if(*s!=*name) break;
         if(*name==0 && s==dot) {
-            findSelection(child,nextsub);
+            findSelection(sync,child,nextsub);
             break;
         }
     }
 }
 
-void DocumentItem::selectItems(void) {
+void DocumentItem::selectItems(bool sync) {
     const auto &sels = Selection().getSelection(pDocument->getDocument()->getName());
     for(const auto &sel : sels) {
         auto it = ObjectMap.find(sel.FeatName);
@@ -1595,11 +1654,10 @@ void DocumentItem::selectItems(void) {
             if(item->isParentLink() && item->isParentGroup())
                 continue;
 
-            findSelection(item,sel.SubName);
+            findSelection(sync,item,sel.SubName);
         }
     }
 
-    bool scroll = true;
     DocumentObjectItem *first = 0;
 
     FOREACH_ITEM_ALL(item)
@@ -1612,18 +1670,19 @@ void DocumentItem::selectItems(void) {
             item->selected = 1;
             item->setSelected(true);
             if(first) 
-                scroll = false;
+                sync = false;
             else
                 first = item;
         }
     END_FOREACH_ITEM;
 
-    if(scroll) treeWidget()->scrollToItem(first);
+    if(sync && first) 
+        treeWidget()->scrollToItem(first);
 }
 
-void DocumentItem::selectLinkedItem(DocumentObjectItem *item) { 
-    ViewProviderDocumentObject *linked = item->object()->getLinkedView(false);
-    if(!linked) return;
+void DocumentItem::selectLinkedItem(DocumentObjectItem *item, bool recurse) { 
+    ViewProviderDocumentObject *linked = item->object()->getLinkedView(recurse);
+    if(!linked || linked == item->object()) return;
 
     auto it = ObjectMap.find(linked->getObject()->getNameInDocument());
     if(it == ObjectMap.end()) return;
@@ -1638,8 +1697,15 @@ void DocumentItem::selectLinkedItem(DocumentObjectItem *item) {
 
     updateSelection();
 
-    MDIView *view = pDocument->getActiveView();
-    if (view) getMainWindow()->setActiveWindow(view);
+    if(linked->getDocument()!=pDocument) {
+        auto docItem = static_cast<TreeWidget*>(
+            treeWidget())->getDocumentItem(linked->getDocument());
+        if(docItem) {
+            docItem->updateSelection();
+            MDIView *view = docItem->pDocument->getActiveView();
+            if (view) getMainWindow()->setActiveWindow(view);
+        }
+    }
 }
 
 void DocumentItem::populateParents(ViewProvider *vp, ParentMap &parentMap) {
@@ -1666,6 +1732,10 @@ void DocumentItem::selectAllLinks(DocumentObjectItem *item) {
     std::set<ViewProviderDocumentObject *> links;
     auto pObject = item->object()->getObject();
 
+    // We are trying to select all link objects to a given item, not only the
+    // link object, but all apperance of those link objects inside their
+    // repective parent group objects
+    //
     // Build a map of object to all its parent, and find all links object at
     // the same time
     for(auto &v : ObjectMap) {
@@ -1715,9 +1785,9 @@ void DocumentItem::showItem(DocumentObjectItem *item, bool select) {
 }
 
 void DocumentItem::updateSelection() {
-    bool lock = static_cast<TreeWidget*>(treeWidget())->blockConnection(true);
+    bool lock = getTree()->blockConnection(true);
     updateSelection(this,false);
-    static_cast<TreeWidget*>(treeWidget())->blockConnection(lock);
+    getTree()->blockConnection(lock);
 }
 
 void DocumentItem::selectAllInstances(DocumentObjectItem *item) {
@@ -1760,9 +1830,9 @@ void DocumentItem::selectAllInstances(DocumentObjectItem *item) {
             parent->setExpanded(true);
         }
     }
-    bool lock = static_cast<TreeWidget*>(treeWidget())->blockConnection(true);
+    bool lock = getTree()->blockConnection(true);
     updateSelection(this,false);
-    static_cast<TreeWidget*>(treeWidget())->blockConnection(lock);
+    getTree()->blockConnection(lock);
 }
 
 // ----------------------------------------------------------------------------
@@ -1973,6 +2043,11 @@ bool DocumentObjectItem::isCloneOf(const QTreeWidgetItem *item) const {
 bool DocumentObjectItem::isLink() const {
     return object()->getLinkedView(false) != object();
 }
+
+bool DocumentObjectItem::isLinkFinal() const {
+    return object()->getLinkedView(false) == object()->getLinkedView(true);
+}
+
 
 bool DocumentObjectItem::isParentLink() const {
     auto pi = getParentItem();

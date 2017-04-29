@@ -97,6 +97,8 @@ protected:
     void keyPressEvent(QKeyEvent *event);
     void mouseDoubleClickEvent(QMouseEvent * event);
 
+    DocumentItem *getDocumentItem(const Gui::Document *) const;
+
 protected:
     void showEvent(QShowEvent *) override;
     void hideEvent(QHideEvent *) override;
@@ -111,7 +113,9 @@ protected Q_SLOTS:
     void onMarkRecompute();
     void onSelectAllInstances();
     void onSelectLinked();
+    void onSelectLinkedFinal();
     void onSelectAllLinks();
+    void onSyncSelection();
 
 private Q_SLOTS:
     void onItemSelectionChanged(void);
@@ -138,7 +142,9 @@ private:
     QAction* markRecomputeAction;
     QAction* selectAllInstances;
     QAction* selectLinked;
+    QAction* selectLinkedFinal;
     QAction* selectAllLinks;
+    QAction* syncSelection;
     QTreeWidgetItem* contextItem;
 
     QTreeWidgetItem* rootItem;
@@ -166,14 +172,16 @@ public:
     void updateSelection(QTreeWidgetItem *, bool unselect=false);
     void updateSelection();
     void updateItemSelection(DocumentObjectItem *);
-    void selectItems(void);
+    void selectItems(bool sync);
     void testStatus(void);
     void setData(int column, int role, const QVariant & value);
     void populateItem(DocumentObjectItem *item, bool refresh = false);
-    void selectLinkedItem(DocumentObjectItem *item);
+    void selectLinkedItem(DocumentObjectItem *item, bool recurse);
     void selectAllInstances(DocumentObjectItem *item);
     void selectAllLinks(DocumentObjectItem *item);
     void showItem(DocumentObjectItem *item, bool select);
+
+    TreeWidget *getTree();
 
 protected:
     /** Adds a view provider to the document item.
@@ -196,7 +204,7 @@ protected:
                     QTreeWidgetItem *parent=0, int index=-1, 
                     DocumentObjectDataPtr ptrs = DocumentObjectDataPtr());
 
-    void findSelection(DocumentObjectItem *item, const char *subname);
+    void findSelection(bool sync, DocumentObjectItem *item, const char *subname);
 
     typedef std::map<ViewProvider *, std::vector<ViewProviderDocumentObject*> > ParentMap;
     void populateParents(ViewProvider *vp, ParentMap &);
@@ -245,6 +253,7 @@ public:
     const char *getFullName(std::string &subname) const;
 
     bool isLink() const;
+    bool isLinkFinal() const;
     bool isParentLink() const;
     bool isGroup() const;
     bool isParentGroup() const;

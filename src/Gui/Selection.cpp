@@ -82,6 +82,11 @@ bool SelectionObserver::isConnectionBlocked() const
     return connectSelection.blocked();
 }
 
+bool SelectionObserver::isConnectionAttached() const
+{
+    return connectSelection.connected();
+}
+
 void SelectionObserver::attachSelection()
 {
     if (!connectSelection.connected()) {
