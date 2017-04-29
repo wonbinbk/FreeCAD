@@ -464,6 +464,7 @@ SoFCUnifiedSelection::handleEvent(SoHandleEventAction * action)
             const SoDetail *det = pp?pp->getDetail():0;
             SoDetail *detNext = 0;
             SoFullPath *pPath = (pp != NULL) ? (SoFullPath *) pp->getPath() : NULL;
+            if(pPath) pPath->ref();
             ViewProvider *vp = 0;
             ViewProviderDocumentObject* vpd = 0;
             if (this->pcDocument && pPath && pPath->containsPath(action->getCurPath()))
@@ -476,6 +477,17 @@ SoFCUnifiedSelection::handleEvent(SoHandleEventAction * action)
                 std::string objectName = vpd->getObject()->getNameInDocument();
                 std::string subElementName = vpd->getElementPicked(pp);
 
+                // Hierarchy acending
+                //
+                // If the clicked subelement is already selected, check if there
+                // is an upper hierarchy, and select that hierarchy instead. 
+                //
+                // For example, let's suppose getElementPicked above reports 
+                // 'link.link2.box.Face1', and below Selection().getSelectedElement
+                // returns 'link.link2.box', meaning that 'box' is the current
+                // selected hierarchy, and the user is clicking the box again.
+                // So we shall go up one level, and select 'link.link2'
+                //
                 const char *subSelected = Gui::Selection().getSelectedElement(
                                             vpd->getObject(),subElementName.c_str());
 
@@ -493,9 +505,7 @@ SoFCUnifiedSelection::handleEvent(SoHandleEventAction * action)
                         detNext = vpd->getDetailPath(nextsub.c_str(),&pNextPath);
                         if(pNextPath) {
                             hasNext = true;
-                            if(currenthighlight)
-                                currenthighlight->unref();
-                            currenthighlight = pNextPath;
+                            pPath = pNextPath;
                             det = detNext;
                             subElementName = subSelected;
                             FC_TRACE("select next " << objectName << ", " << nextsub);
@@ -568,15 +578,16 @@ SoFCUnifiedSelection::handleEvent(SoHandleEventAction * action)
                 }
 
                 action->setHandled(); 
-                if (currenthighlight && checkSelectionStyle(type,vpd)) {
+                if (pPath && checkSelectionStyle(type,vpd)) {
                     SoSelectionElementAction action(type);
                     action.setColor(this->colorSelection.getValue());
                     action.setElement(det);
-                    action.apply(currenthighlight);
+                    action.apply(pPath);
                     this->touch();
                 }
-                if(detNext) delete detNext;
             } // picked point
+            if(detNext) delete detNext;
+            if(pPath) pPath->unref();
         } // mouse release
     }
 
