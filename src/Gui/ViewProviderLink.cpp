@@ -54,6 +54,8 @@ class ViewProviderLink::LinkInfo {
 public:
     int ref;
 
+    int vref; //visibility ref counter
+
     boost::signals::connection connChangeIcon;
 
     ViewProviderDocumentObject *pcLinked;
@@ -80,8 +82,7 @@ public:
     typedef std::map<SoNode *, Pointer> NodeMap;
     NodeMap nodeMap;
 
-    QIcon iconLink;
-    QIcon iconXLink;
+    std::map<const void *, QIcon> iconMap;
 
     static ViewProviderDocumentObject *getView(App::DocumentObject *obj) {
         if(obj && obj->getNameInDocument()) {
@@ -101,18 +102,22 @@ public:
 
     static Pointer get(ViewProviderDocumentObject *vp, ViewProviderLink *l=0) {
         if(!vp) return Pointer();
-        auto ext = vp->getExtensionByType<ViewProviderLink::Observer>();
+        auto ext = vp->getExtensionByType<ViewProviderLink::Observer>(true);
         if(!ext) {
             ext = new ViewProviderLink::Observer();
             ext->linkInfo = Pointer(new LinkInfo(vp));
             ext->initExtension(vp);
         }
-        if(l) ext->linkInfo->links.insert(l);
+        if(l) {
+            ext->linkInfo->links.insert(l);
+            if(l->visible)
+                ext->linkInfo->setVisible(true);
+        }
         return ext->linkInfo;
     }
 
     LinkInfo(ViewProviderDocumentObject *vp)
-        :ref(0),pcLinked(vp),pcLinkedSwitch(0),pcChildGroup(0) 
+        :ref(0),vref(0),pcLinked(vp),pcLinkedSwitch(0),pcChildGroup(0) 
     {
         FC_TRACE("new link to " << pcLinked->getObject()->getNameInDocument());
         connChangeIcon = vp->signalChangeIcon.connect(
@@ -125,6 +130,16 @@ public:
 
     ~LinkInfo() {
         clear();
+    }
+
+    void setVisible(bool visible) {
+        if(visible) {
+            if(++vref == 1)
+                update();
+        }else if(vref>0)
+            --vref;
+        else
+            FC_WARN("visibility ref count error");
     }
 
     void getNodeNames(Document *pDocument, QMap<SoNode*, QString> &nodeNames) const {
@@ -146,8 +161,11 @@ public:
 
     void remove(ViewProviderLink *l) {
         auto it = links.find(l);
-        if(it!=links.end())
+        if(it!=links.end()) {
+            if(l->visible) 
+                setVisible(false);
             links.erase(it);
+        }
     }
 
     bool isLinked() const {
@@ -197,11 +215,13 @@ public:
             link->unlink();
         clear();
         pcLinked = 0;
+        vref = 0;
     }
 
-    void onDisplayChanged() {
+    void updateSwitch(const char *propName = 0) {
         if(!isLinked() || !pcLinkedSwitch) return;
-        FC_TRACE(getLinkedName() << " display changed");
+        if(propName)
+            FC_TRACE(getLinkedName() << " display changed " << propName);
         int index = pcLinkedSwitch->whichChild.getValue();
         for(size_t i=0;i<pcSwitches.size();++i) {
             if(!pcSwitches[i]) 
@@ -251,8 +271,6 @@ public:
             pcLinkedSwitch = 0;
         }
 
-        FC_TRACE("update node (" << type << ") " << getLinkedName());
-
         pcSnapshot->removeAllChildren();
         if(!Gui::Selection().hasSelection() &&
            !Gui::Selection().getPreselection().pDocName)
@@ -286,35 +304,39 @@ public:
             for(int i=0,count=pcLinkedSwitch->getNumChildren();i<count;++i)
                 pcModeSwitch->addChild(pcLinkedSwitch->getChild(i));
         }
-        onDisplayChanged();
+        updateSwitch();
         return pcSnapshot;
     }
 
-    void updateData() {
-        update();
-    }
-
-    void update() {
+    void update(const App::Property *prop = nullptr) {
         if(!isLinked()) return;
-        FC_TRACE("update " << getLinkedName());
+        
+        const char *propName = prop?prop->getName():"";
+        if(pcLinked->isRestoring()) {
+            FC_TRACE("restoring '" << getLinkedName() << "' " << propName);
+            return;
+        }
 
-        if(pcLinked->getChildRoot()) {
+        if(vref)
+            pcLinked->forceUpdate();
+
+        if(!pcLinked->getChildRoot())
+            FC_TRACE("update '" << getLinkedName() << "' " << propName);
+        else{
+            FC_TRACE("update group '" << getLinkedName() << "' " << propName);
+
             if(!pcChildGroup) {
                 pcChildGroup = new SoGroup;
                 pcChildGroup->ref();
             }else
                 pcChildGroup->removeAllChildren();
 
-            const auto &children = pcLinked->claimChildren3D();
-            SnapshotType type = SnapshotContainer;
-            FC_TRACE("update group (" << type << ") " << getLinkedName());
-
             NodeMap nodeMap;
 
-            for(auto child : children) {
+            for(auto child : pcLinked->claimChildren3D()) {
                 Pointer info = get(child);
                 if(!info) continue;
-                SoNode *node = info->getSnapshot(type);
+                SoNode *node = info->getSnapshot(SnapshotContainer);
                 if(!node) continue;
                 nodeMap[node] = info;
                 pcChildGroup->addChild(node);
@@ -433,73 +455,27 @@ public:
 
     void slotChangeIcon() {
         if(!isLinked()) return;
+        iconMap.clear();
+        for(auto link : links) 
+            link->signalChangeIcon();
+    }
 
-        // right top pointing arrow for normal link
-        static const char * const feature_link_xpm[]={
-            "8 8 3 1",
-            ". c None",
-            "# c #000000",
-            "a c #ffffff",
-            "########",
-            "##aaaaa#",
-            "####aaa#",
-            "###aaaa#",
-            "##aaa#a#",
-            "#aaa##a#",
-            "#aa#####",
-            "########"};
-
-        // left bottom pointing arrow, not looking good?
-        // static const char * const feature_xlink_xpm[]={
-        //     "8 8 3 1",
-        //     ". c None",
-        //     "# c #000000",
-        //     "a c #ffffff",
-        //     "########",
-        //     "#####aa#",
-        //     "#a##aaa#",
-        //     "#a#aaa##",
-        //     "#aaaa###",
-        //     "#aaa####",
-        //     "#aaaaa##",
-        //     "########"};
-
-        // left top pointing arrow for xlink
-        static const char * const feature_xlink_xpm[]={
-            "8 8 3 1",
-            ". c None",
-            "# c #000000",
-            "a c #ffffff",
-            "########",
-            "#aaaaa##",
-            "#aaa####",
-            "#aaaa###",
-            "#a#aaa##",
-            "#a##aaa#",
-            "#####aa#",
-            "########"};
-
+    QIcon getIcon(const char * const * xpm) {
         static int iconSize = -1;
         if(iconSize < 0) 
             iconSize = QApplication::style()->standardPixmap(QStyle::SP_DirClosedIcon).width();
 
-        QPixmap px(feature_link_xpm);
-        QIcon icon = pcLinked->getIcon();
-        iconLink = QIcon();
-        iconLink.addPixmap(BitmapFactory().merge(icon.pixmap(iconSize, iconSize, QIcon::Normal, QIcon::Off),
-            px,BitmapFactoryInst::BottomLeft), QIcon::Normal, QIcon::Off);
-        iconLink.addPixmap(BitmapFactory().merge(icon.pixmap(iconSize, iconSize, QIcon::Normal, QIcon::On ),
-            px,BitmapFactoryInst::BottomLeft), QIcon::Normal, QIcon::On);
-
-        QPixmap xpx(feature_xlink_xpm);
-        iconXLink = QIcon();
-        iconXLink.addPixmap(BitmapFactory().merge(icon.pixmap(iconSize, iconSize, QIcon::Normal, QIcon::Off),
-            xpx,BitmapFactoryInst::BottomLeft), QIcon::Normal, QIcon::Off);
-        iconXLink.addPixmap(BitmapFactory().merge(icon.pixmap(iconSize, iconSize, QIcon::Normal, QIcon::On ),
-            xpx,BitmapFactoryInst::BottomLeft), QIcon::Normal, QIcon::On);
-
-        for(auto link : links) 
-            link->signalChangeIcon();
+        QIcon &iconLink = iconMap[xpm];
+        if(iconLink.isNull()) {
+            QPixmap px(xpm);
+            QIcon icon = pcLinked->getIcon();
+            iconLink = QIcon();
+            iconLink.addPixmap(BitmapFactory().merge(icon.pixmap(iconSize, iconSize, QIcon::Normal, QIcon::Off),
+                px,BitmapFactoryInst::BottomLeft), QIcon::Normal, QIcon::Off);
+            iconLink.addPixmap(BitmapFactory().merge(icon.pixmap(iconSize, iconSize, QIcon::Normal, QIcon::On ),
+                px,BitmapFactoryInst::BottomLeft), QIcon::Normal, QIcon::On);
+        }
+        return iconLink;
     }
 };
 
@@ -518,11 +494,11 @@ void ViewProviderLink::Observer::extensionOnDeleting() {
 }
 
 void ViewProviderLink::Observer::extensionShow() {
-    if(linkInfo) linkInfo->onDisplayChanged();
+    if(linkInfo) linkInfo->updateSwitch("Visibility");
 }
 
 void ViewProviderLink::Observer::extensionHide() {
-    if(linkInfo) linkInfo->onDisplayChanged();
+    if(linkInfo) linkInfo->updateSwitch("Visibility");
 }
 
 void ViewProviderLink::Observer::extensionOnChanged(const App::Property *prop) {
@@ -531,16 +507,24 @@ void ViewProviderLink::Observer::extensionOnChanged(const App::Property *prop) {
         if(strcmp(prop->getName(),"Visibility")==0)
             return;
         if(strcmp(prop->getName(),"DisplayMode")==0) {
-            linkInfo->onDisplayChanged();
+            linkInfo->updateSwitch("DisplayMode");
             return;
         }
     }
-    linkInfo->update();
+    linkInfo->update(prop);
 }
 
-void ViewProviderLink::Observer::extensionUpdateData(const App::Property *) {
-    if(linkInfo) linkInfo->updateData();
+void ViewProviderLink::Observer::extensionUpdateData(const App::Property *prop) {
+    if(linkInfo) linkInfo->update(prop);
 }
+
+void ViewProviderLink::Observer::extensionFinishRestoring() {
+    if(linkInfo) {
+        FC_TRACE("linked finish restoing");
+        linkInfo->update();
+    }
+}
+
 
 ///////////////////////////////////////////////////////////////////////////////////
 
@@ -552,8 +536,10 @@ std::map<std::shared_ptr<ViewProviderLink::PropNameMap>,
     std::shared_ptr<ViewProviderLink::PropNames> > PropNameMaps;
 
 ViewProviderLink::ViewProviderLink()
-    :moveChildFromRoot(false),linkTransform(false),isXLink(false)
+    :moveChildFromRoot(false),linkTransform(false),isXLink(false),visible(false)
 {
+    sPixmap = "link";
+
     DisplayMode.setStatus(App::Property::Status::Hidden, true);
 
     pcRoot->removeAllChildren();
@@ -686,7 +672,14 @@ bool ViewProviderLink::onDelete(const std::vector<std::string> &svec) {
 }
 
 void ViewProviderLink::onChanged(const App::Property* prop) {
-    checkProperty(prop,false);
+    if(prop == &Visibility) {
+        if(visible!=Visibility.getValue()) {
+            visible = !visible;
+            if(linkInfo) 
+                linkInfo->setVisible(visible);
+        }
+    }else
+        checkProperty(prop,false);
     inherited::onChanged(prop);
 }
 
@@ -704,22 +697,40 @@ bool ViewProviderLink::findLink(const App::PropertyLink *prop) {
 }
 
 void ViewProviderLink::setup() {
+    if(!linkInfo || !getObject() || !getObject()->getNameInDocument()) {
+        pcModeSwitch->whichChild = -1;
+        pcModeSwitch->removeAllChildren();
+        return;
+    }
+
+    if(isRestoring()) {
+        FC_TRACE("restoring '" << getObject()->getNameInDocument() << "'");
+        return;
+    }
+
     pcModeSwitch->whichChild = -1;
     pcModeSwitch->removeAllChildren();
 
-    if(!linkInfo || !getObject() || !getObject()->getNameInDocument()) 
-        return;
+    FC_TRACE("setup '" << getObject()->getNameInDocument() << "'");
 
     SoNode *node = linkInfo->getSnapshot(
         linkTransform?LinkInfo::SnapshotVisible:LinkInfo::SnapshotTransform,false);
     if(node) {
         pcModeSwitch->addChild(node);
-        if(Visibility.getValue()) 
+        if(Visibility.getValue())
             show();
     }
 }
 
+void ViewProviderLink::finishRestoring() {
+    FC_TRACE("finish restoring");
+    setup();
+}
+
 void ViewProviderLink::checkProperty(const App::Property *prop, bool fromObject) {
+
+    FC_TRACE("check property '" << getObject()->getNameInDocument() << "': " << prop->getName());
+
     auto it = propName2Type->find(prop->getName());
     if(it!=propName2Type->end() && prop->isDerivedFrom(PropTypes[it->second])) {
         switch(it->second) {
@@ -739,9 +750,12 @@ void ViewProviderLink::checkProperty(const App::Property *prop, bool fromObject)
                 findLink(static_cast<const App::PropertyLink*>(prop));
             break;
         case PropNamePlacement:
-            if(fromObject)
+            if(fromObject) {
+                auto v = pcTransform->scaleFactor.getValue();
                 ViewProviderGeometryObject::updateTransform(
                     static_cast<const App::PropertyPlacement*>(prop)->getValue(), pcTransform);
+                pcTransform->scaleFactor.setValue(v);
+            }
             break;
 
         case PropNameMoveChild: 
@@ -754,10 +768,8 @@ void ViewProviderLink::checkProperty(const App::Property *prop, bool fromObject)
 }
 
 void ViewProviderLink::updateData(const App::Property *prop) {
-    if(getObject() && getObject()->getNameInDocument()) {
-        FC_TRACE("updateData " << getObject()->getNameInDocument() << ": " << prop->getName());
+    if(getObject() && getObject()->getNameInDocument())
         checkProperty(prop,true);
-    }
     inherited::updateData(prop);
 }
 
@@ -771,8 +783,8 @@ std::vector<App::DocumentObject*> ViewProviderLink::claimChildren(void) const
 
 QIcon ViewProviderLink::getIcon() const{
     if(linkInfo && linkInfo->isLinked())
-        return isXLink?linkInfo->iconXLink:linkInfo->iconLink;
-    return Gui::BitmapFactory().pixmap("link");
+        return linkInfo->getIcon(getOverlayPixmap(isXLink));
+    return Gui::BitmapFactory().pixmap(sPixmap);
 }
 
 ViewProviderDocumentObject *ViewProviderLink::getElementView(
@@ -785,6 +797,54 @@ ViewProviderDocumentObject *ViewProviderLink::getElementView(
     return linkInfo->getElementView(false,element,subname);
 }
 
+const char * const * ViewProviderLink::getOverlayPixmap(bool xlink) const{
+    // right top pointing arrow for normal link
+    static const char * const feature_link_xpm[]={
+        "8 8 3 1",
+        ". c None",
+        "# c #000000",
+        "a c #ffffff",
+        "########",
+        "##aaaaa#",
+        "####aaa#",
+        "###aaaa#",
+        "##aaa#a#",
+        "#aaa##a#",
+        "#aa#####",
+        "########"};
+
+    // left bottom pointing arrow, not looking good?
+    // static const char * const feature_xlink_xpm[]={
+    //     "8 8 3 1",
+    //     ". c None",
+    //     "# c #000000",
+    //     "a c #ffffff",
+    //     "########",
+    //     "#####aa#",
+    //     "#a##aaa#",
+    //     "#a#aaa##",
+    //     "#aaaa###",
+    //     "#aaa####",
+    //     "#aaaaa##",
+    //     "########"};
+
+    // left top pointing arrow for xlink
+    static const char * const feature_xlink_xpm[]={
+        "8 8 3 1",
+        ". c None",
+        "# c #000000",
+        "a c #ffffff",
+        "########",
+        "#aaaaa##",
+        "#aaa####",
+        "#aaaa###",
+        "#a#aaa##",
+        "#a##aaa#",
+        "#####aa#",
+        "########"};
+
+    return xlink?feature_xlink_xpm:feature_link_xpm;
+}
 
 // Python object -----------------------------------------------------------------------
 

@@ -25,31 +25,135 @@
 #ifndef _PreComp_
 #endif
 
+#include "GeoFeatureGroupExtension.h"
 #include "Link.h"
+#include "LinkExtensionPy.h"
 
 using namespace App;
 
-PROPERTY_SOURCE(App::Link, App::DocumentObject)
+EXTENSION_PROPERTY_SOURCE(App::LinkExtension, App::DocumentObjectExtension)
 
-Link::Link(void)
+LinkExtension::LinkExtension(void)
 {
+    initExtensionType(LinkExtension::getExtensionClassTypeId());
+
     // Note: Because PropertyView will merge linked object's properties into
     // ours, we set group name as ' Link' with a leading space to try to make
     // our group before others
-    ADD_PROPERTY_TYPE(LinkedObject, (0), " Link", Prop_None, "Linked object");
-    ADD_PROPERTY_TYPE(LinkMoveChild, (false), " Link", Prop_None, 
-            "Remove child object(s) from root");
-    ADD_PROPERTY_TYPE(LinkTransform, (false), " Link", Prop_None,
+    EXTENSION_ADD_PROPERTY_TYPE(LinkedObject, (0), " Link", Prop_None, "Linked object");
+    // EXTENSION_ADD_PROPERTY_TYPE(LinkMoveChild, (true), " Link", Prop_None, "Remove child object(s) from root");
+    EXTENSION_ADD_PROPERTY_TYPE(LinkTransform, (false), " Link", Prop_None,
             "Link child placement. If false, the child object's placement is ignored.");
-    ADD_PROPERTY_TYPE(LinkScale,(Base::Vector3d(1.0,1.0,1.0))," Link",Prop_None,
+    EXTENSION_ADD_PROPERTY_TYPE(LinkScale,(Base::Vector3d(1.0,1.0,1.0))," Link",Prop_None,
             "Scale factor for view provider. It does not actually scale the geometry data.");
-    ADD_PROPERTY_TYPE(LinkPlacement,(Base::Placement())," Link",Prop_None,
+    EXTENSION_ADD_PROPERTY_TYPE(LinkPlacement,(Base::Placement())," Link",Prop_None,
             "The placement of this link. If LinkTransform is 'true', then the final\n"
             "placement is the composite of this and the child's placement.");
 }
 
-Link::~Link(void)
+LinkExtension::~LinkExtension(void)
 {
 }
 
+std::vector<PyObject *> LinkExtension::getExtendedPySubObjects(
+    const std::vector<std::string>& elements, const Base::Matrix4D &mat, bool transform) const 
+{
+    std::vector<PyObject *> ret;
+    auto object = LinkedObject.getValue();
+    if(!object) return ret;
+
+    Base::Matrix4D matNext = mat;
+    if(transform)
+        matNext *= LinkPlacement.getValue().toMatrix();
+    Base::Matrix4D s;
+    s.scale(LinkScale.getValue());
+    matNext *= s;
+
+    auto ext = object->getExtensionByType<GeoFeatureGroupExtension>(true);
+    if(!ext)
+        return object->getPySubObjects(elements,matNext,LinkTransform.getValue());
+
+    if(LinkTransform.getValue()) 
+        matNext *= ext->placement().getValue().toMatrix();
+
+    //TODO: shall we put this into GeoFeatureGroupExtension itself?
+    auto children = ext->getGeoSubObjects();
+    for(const std::string &element : elements) {
+        auto pos = element.find('.');
+        std::string name(pos==std::string::npos?element:element.substr(0,pos));
+        for(auto child : children) {
+            if(!child || !child->getNameInDocument() || 
+               name!=child->getNameInDocument())
+                continue;
+            std::vector<std::string> sub;
+            sub.emplace_back(pos==std::string::npos?std::string():element.substr(pos+1));
+            auto cret = child->getPySubObjects(sub,matNext,true);
+            ret.insert(ret.end(),cret.begin(),cret.end());
+            break;
+        }
+    }
+    return ret;
+}
+
+DocumentObject *LinkExtension::getLinkedObjectExt(bool recurse, Base::Matrix4D *mat, bool transform)
+{
+    auto object = LinkedObject.getValue();
+
+    if(mat) {
+        if(transform)
+            *mat *= LinkPlacement.getValue().toMatrix();
+        Base::Matrix4D s;
+        s.scale(LinkScale.getValue());
+        *mat *= s;
+    }
+
+    if(!object) return 0;
+    if(!recurse) return object;
+    return object->getLinkedObject(recurse,mat,LinkTransform.getValue());
+}
+
+
+PyObject *LinkExtension::getExtensionPyObject(void) {
+    if (ExtensionPythonObject.is(Py::_None())){
+        auto ext = new LinkExtensionPy(this);
+        ExtensionPythonObject = Py::Object(ext,true);
+    }
+    return Py::new_reference_to(ExtensionPythonObject);
+}
+
+
+
+//-------------------------------------------------------------------------------
+
+PROPERTY_SOURCE_WITH_EXTENSIONS(App::Link, App::DocumentObject)
+
+Link::Link() {
+    LinkExtension::initExtension(this);
+}
+
+DocumentObject *Link::getLinkedObject(bool recurse, Base::Matrix4D *mat, bool transform)
+{
+    return getLinkedObjectExt(recurse,mat,transform);
+}
+
+//--------------------------------------------------------------------------------
+
+// namespace App {
+// /// @cond DOXERR
+// PROPERTY_SOURCE_TEMPLATE(LinkPython, Part::Feature)
+// template<> const char* LinkPython::getViewProviderName(void) const {
+//     return "App::ViewProviderLinkPython";
+// }
+// template<> PyObject* LinkPython::getPyObject(void) {
+//     if (PythonObject.is(Py::_None())) {
+//         // ref counter is set to 1
+//         PythonObject = Py::Object(new FeaturePythonPyT<LinkPy>(this),true);
+//     }
+//     return Py::new_reference_to(PythonObject);
+// }
+// /// @endcond
+//
+// // explicit template instantiation
+// template class AppExport FeaturePythonT<Link>;
+// }
 

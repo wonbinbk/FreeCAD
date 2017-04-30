@@ -122,6 +122,7 @@
 #include "FaceMaker.h"
 #include "FaceMakerCheese.h"
 #include "FaceMakerBullseye.h"
+#include "PartLink.h"
 
 namespace Part {
 extern PyObject* initModule();
@@ -450,6 +451,7 @@ PyMOD_INIT_FUNC(Part)
     Part::Helix                 ::init();
     Part::Spiral                ::init();
     Part::Wedge                 ::init();
+    Part::Link                  ::init();
 
     Part::Part2DObject          ::init();
     Part::Part2DObjectPython    ::init();

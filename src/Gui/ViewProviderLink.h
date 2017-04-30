@@ -57,12 +57,16 @@ public:
         return moveChildFromRoot;
     }
 
+    void finishRestoring() override;
+
     ViewProviderDocumentObject *getElementView(
             const char *element, const char **subname) override;
 
     ViewProviderDocumentObject *getLinkedView(bool recursive=true) override;
 
     QIcon getIcon(void) const override;
+
+    virtual const char * const * getOverlayPixmap(bool xlink) const;
 
     void getNodeNames(QMap<SoNode*, QString> &nodeNames) const;
 
@@ -79,6 +83,7 @@ public:
         void extensionUpdateData(const App::Property*) override;
         void extensionHide(void) override;
         void extensionShow(void) override;
+        void extensionFinishRestoring() override;
 
         LinkInfoPtr linkInfo;
     };
@@ -112,6 +117,7 @@ protected:
     bool moveChildFromRoot;
     bool linkTransform;
     bool isXLink;
+    bool visible;
 };
 
 typedef Gui::ViewProviderPythonFeatureT<ViewProviderLink> ViewProviderLinkPython;

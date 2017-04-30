@@ -81,6 +81,7 @@ generate_from_xml(GeoFeaturePy)
 generate_from_xml(GeoFeatureGroupExtensionPy)
 generate_from_xml(OriginGroupExtensionPy)
 generate_from_xml(PartPy)
+generate_from_xml(LinkExtensionPy)
 
 generate_from_xml(ComplexGeoDataPy)
 generate_from_xml(PropertyContainerPy)
@@ -104,6 +105,7 @@ SET(FreeCADApp_XML_SRCS
     PropertyContainerPy.xml
     ComplexGeoDataPy.xml
     MaterialPy.xml
+    LinkExtensionPy.xml
 )
 SOURCE_GROUP("XML" FILES ${FreeCADApp_XML_SRCS})
 
@@ -151,6 +153,7 @@ SET(Document_CPP_SRCS
     MaterialObject.cpp
     MergeDocuments.cpp
     Link.cpp
+    LinkExtensionPyImp.cpp
 )
 
 SET(Document_HPP_SRCS

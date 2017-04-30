@@ -19,57 +19,24 @@
  *   Suite 330, Boston, MA  02111-1307, USA                                 *
  *                                                                          *
  ****************************************************************************/
+#ifndef PARTGUI_VIEWPROVIDER_LINK_H
+#define PARTGUI_VIEWPROVIDER_LINK_H
 
-#ifndef APP_LINK_H
-#define APP_LINK_H
+#include <Gui/ViewProviderLink.h>
 
-#include "DocumentObject.h"
-#include "FeaturePython.h"
-#include "PropertyLinks.h"
-#include "DocumentObjectExtension.h"
+namespace PartGui {
 
-namespace App
+class PartGuiExport ViewProviderPartLink : public Gui::ViewProviderLink
 {
-
-class AppExport LinkExtension : public App::DocumentObjectExtension
-{
-    EXTENSION_PROPERTY_HEADER(App::LinkExtension);
+    PROPERTY_HEADER(PartGui::ViewProviderPartLink);
+    typedef Gui::ViewProviderLink inherited;
 
 public:
-    LinkExtension();
-    virtual ~LinkExtension();
-
-    PropertyXLink LinkedObject;
-    PropertyPlacement LinkPlacement;
-    PropertyVector LinkScale;
-    // PropertyBool LinkMoveChild;
-    PropertyBool LinkTransform;
-
-    PyObject* getExtensionPyObject(void) override;
-
-    std::vector<PyObject *> getExtendedPySubObjects(const std::vector<std::string>&, 
-            const Base::Matrix4D &mat, bool transform) const override;
-
-protected:
-    DocumentObject *getLinkedObjectExt(bool recurse, Base::Matrix4D *mat, bool transform);
+    ViewProviderPartLink();
+    virtual const char * const * getOverlayPixmap(bool xlink) const;
 };
 
-class AppExport Link : public App::DocumentObject, public App::LinkExtension
-{
-    PROPERTY_HEADER_WITH_EXTENSIONS(App::Link);
-public:
-    Link(void);
+}
 
-    const char* getViewProviderName(void) const override{
-        return "Gui::ViewProviderLink";
-    }
+#endif
 
-    DocumentObject *getLinkedObject(bool recurse, Base::Matrix4D *mat, bool transform) override;
-};
-
-// typedef FeaturePythonT<Link> LinkPython;
-
-} //namespace App
-
-
-#endif // APP_LINK_H

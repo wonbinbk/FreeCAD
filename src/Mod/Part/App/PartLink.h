@@ -20,56 +20,44 @@
  *                                                                          *
  ****************************************************************************/
 
-#ifndef APP_LINK_H
-#define APP_LINK_H
+#ifndef PART_LINK_H
+#define PART_LINK_H
 
-#include "DocumentObject.h"
-#include "FeaturePython.h"
-#include "PropertyLinks.h"
-#include "DocumentObjectExtension.h"
+#include <App/Link.h>
+#include "PartFeature.h"
 
-namespace App
+namespace Part {
+
+class Link : public Part::Feature, public App::LinkExtension
 {
-
-class AppExport LinkExtension : public App::DocumentObjectExtension
-{
-    EXTENSION_PROPERTY_HEADER(App::LinkExtension);
+    PROPERTY_HEADER_WITH_EXTENSIONS(Part::Link);
 
 public:
-    LinkExtension();
-    virtual ~LinkExtension();
 
-    PropertyXLink LinkedObject;
-    PropertyPlacement LinkPlacement;
-    PropertyVector LinkScale;
-    // PropertyBool LinkMoveChild;
-    PropertyBool LinkTransform;
+    App::PropertyBool LinkShape;
 
-    PyObject* getExtensionPyObject(void) override;
+    Link();
 
-    std::vector<PyObject *> getExtendedPySubObjects(const std::vector<std::string>&, 
-            const Base::Matrix4D &mat, bool transform) const override;
-
-protected:
-    DocumentObject *getLinkedObjectExt(bool recurse, Base::Matrix4D *mat, bool transform);
-};
-
-class AppExport Link : public App::DocumentObject, public App::LinkExtension
-{
-    PROPERTY_HEADER_WITH_EXTENSIONS(App::Link);
-public:
-    Link(void);
-
-    const char* getViewProviderName(void) const override{
-        return "Gui::ViewProviderLink";
+    const char* getViewProviderName(void) const override {
+        return "PartGui::ViewProviderPartLink";
     }
 
-    DocumentObject *getLinkedObject(bool recurse, Base::Matrix4D *mat, bool transform) override;
+    App::DocumentObjectExecReturn *execute(void) override;
+
+    void onChanged(const App::Property* prop) override;
+
+    void onDocumentRestored() override;
+
+    std::vector<PyObject *> getPySubObjects(const std::vector<std::string>&, 
+            const Base::Matrix4D &mat, bool transform) const override;
+
+    App::DocumentObject *getLinkedObject(bool recurse, Base::Matrix4D *mat, bool transform) override;
+
+protected:
+    App::DocumentObjectExecReturn *buildShape(bool silent);
 };
 
-// typedef FeaturePythonT<Link> LinkPython;
+}
 
-} //namespace App
+#endif
 
-
-#endif // APP_LINK_H

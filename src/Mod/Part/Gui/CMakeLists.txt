@@ -221,6 +221,8 @@ SET(PartGui_SRCS
     ViewProviderBoolean.h
     ViewProviderRuledSurface.cpp
     ViewProviderRuledSurface.h
+    ViewProviderPartLink.cpp
+    ViewProviderPartLink.h
     Workbench.cpp
     Workbench.h
     TaskFaceColors.cpp
