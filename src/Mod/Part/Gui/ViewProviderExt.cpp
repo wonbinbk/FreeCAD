@@ -874,6 +874,15 @@ void ViewProviderPartExt::unsetEdit(int ModNum)
     }
 }
 
+void ViewProviderPartExt::forceUpdate() {
+    if(!VisualTouched) return;
+    Part::Feature* feature = dynamic_cast<Part::Feature*>(pcObject);
+    if(!feature) return;
+    const TopoDS_Shape &shape = feature->Shape.getValue();
+    if(shape.IsNull()) return;
+    updateVisual(shape);
+}
+
 void ViewProviderPartExt::updateVisual(const TopoDS_Shape& inputShape)
 {
     // Clear selection

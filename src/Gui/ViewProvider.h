@@ -224,6 +224,13 @@ public:
     virtual void updateData(const App::Property*);
     bool isUpdatesEnabled () const;
     void setUpdatesEnabled (bool enable);
+    
+
+    /// Force update visual
+    /// This method exists because some view provider skips visual update when
+    /// hidden (e.g. PartGui::ViewProviderPartExt). Call this function to force
+    /// visual update.
+    virtual void forceUpdate() {}
 
     /// return the status bits
     unsigned long getStatus() const {return StatusBits.to_ulong();}

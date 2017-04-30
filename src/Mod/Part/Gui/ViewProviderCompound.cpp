@@ -93,17 +93,19 @@ void ViewProviderCompound::updateData(const App::Property* prop)
             TopTools_IndexedMapOfShape baseMap;
             TopExp::MapShapes(baseShape, TopAbs_FACE, baseMap);
 
-            Gui::ViewProvider* vpBase = Gui::Application::Instance->getViewProvider(objBase);
-            std::vector<App::Color> baseCol = static_cast<PartGui::ViewProviderPart*>(vpBase)->DiffuseColor.getValues();
-            applyTransparency(static_cast<PartGui::ViewProviderPart*>(vpBase)->Transparency.getValue(),baseCol);
-            if (static_cast<int>(baseCol.size()) == baseMap.Extent()) {
-                applyColor(hist[index], baseCol, compCol);
-                setColor = true;
-            }
-            else if (!baseCol.empty() && baseCol[0] != this->ShapeColor.getValue()) {
-                baseCol.resize(baseMap.Extent(), baseCol[0]);
-                applyColor(hist[index], baseCol, compCol);
-                setColor = true;
+            auto vpBase = Gui::Application::Instance->getLinkedViewOfType<ViewProviderPart>(objBase);
+            if(vpBase) {
+                std::vector<App::Color> baseCol = vpBase->DiffuseColor.getValues();
+                applyTransparency(vpBase->Transparency.getValue(),baseCol);
+                if (static_cast<int>(baseCol.size()) == baseMap.Extent()) {
+                    applyColor(hist[index], baseCol, compCol);
+                    setColor = true;
+                }
+                else if (!baseCol.empty() && baseCol[0] != this->ShapeColor.getValue()) {
+                    baseCol.resize(baseMap.Extent(), baseCol[0]);
+                    applyColor(hist[index], baseCol, compCol);
+                    setColor = true;
+                }
             }
         }
 

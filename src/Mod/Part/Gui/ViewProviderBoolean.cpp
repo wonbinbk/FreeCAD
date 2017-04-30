@@ -100,15 +100,16 @@ void ViewProviderBoolean::updateData(const App::Property* prop)
             TopExp::MapShapes(toolShape, TopAbs_FACE, toolMap);
             TopExp::MapShapes(boolShape, TopAbs_FACE, boolMap);
 
-            Gui::ViewProvider* vpBase = Gui::Application::Instance->getViewProvider(objBase);
-            Gui::ViewProvider* vpTool = Gui::Application::Instance->getViewProvider(objTool);
-            if (vpBase && vpTool) {
-                std::vector<App::Color> colBase = static_cast<PartGui::ViewProviderPart*>(vpBase)->DiffuseColor.getValues();
-                std::vector<App::Color> colTool = static_cast<PartGui::ViewProviderPart*>(vpTool)->DiffuseColor.getValues();
+            auto vpBase = Gui::Application::Instance->getLinkedViewOfType<ViewProviderPart>(objBase);
+            auto vpTool = Gui::Application::Instance->getLinkedViewOfType<ViewProviderPart>(objTool);
+            if(vpBase && vpTool)
+            {
+                std::vector<App::Color> colBase = vpBase->DiffuseColor.getValues();
+                std::vector<App::Color> colTool = vpTool->DiffuseColor.getValues();
                 std::vector<App::Color> colBool;
                 colBool.resize(boolMap.Extent(), this->ShapeColor.getValue());
-                applyTransparency(static_cast<PartGui::ViewProviderPart*>(vpBase)->Transparency.getValue(),colBase);
-                applyTransparency(static_cast<PartGui::ViewProviderPart*>(vpTool)->Transparency.getValue(),colTool);
+                applyTransparency(vpBase->Transparency.getValue(),colBase);
+                applyTransparency(vpTool->Transparency.getValue(),colTool);
 
                 bool setColor=false;
                 if (static_cast<int>(colBase.size()) == baseMap.Extent()) {
@@ -205,10 +206,10 @@ void ViewProviderMultiFuse::updateData(const App::Property* prop)
             TopTools_IndexedMapOfShape baseMap;
             TopExp::MapShapes(baseShape, TopAbs_FACE, baseMap);
 
-            Gui::ViewProvider* vpBase = Gui::Application::Instance->getViewProvider(objBase);
-            if (vpBase) {
-                std::vector<App::Color> colBase = static_cast<PartGui::ViewProviderPart*>(vpBase)->DiffuseColor.getValues();
-                applyTransparency(static_cast<PartGui::ViewProviderPart*>(vpBase)->Transparency.getValue(),colBase);
+            auto vpBase = Gui::Application::Instance->getLinkedViewOfType<ViewProviderPart>(objBase);
+            if(vpBase) {
+                std::vector<App::Color> colBase = vpBase->DiffuseColor.getValues();
+                applyTransparency(vpBase->Transparency.getValue(),colBase);
                 if (static_cast<int>(colBase.size()) == baseMap.Extent()) {
                     applyColor(hist[index], colBase, colBool);
                     setColor = true;
@@ -337,10 +338,10 @@ void ViewProviderMultiCommon::updateData(const App::Property* prop)
             TopTools_IndexedMapOfShape baseMap;
             TopExp::MapShapes(baseShape, TopAbs_FACE, baseMap);
 
-            Gui::ViewProvider* vpBase = Gui::Application::Instance->getViewProvider(objBase);
-            if (vpBase) {
-                std::vector<App::Color> colBase = static_cast<PartGui::ViewProviderPart*>(vpBase)->DiffuseColor.getValues();
-                applyTransparency(static_cast<PartGui::ViewProviderPart*>(vpBase)->Transparency.getValue(),colBase);
+            auto vpBase = Gui::Application::Instance->getLinkedViewOfType<ViewProviderPart>(objBase);
+            if(vpBase) {
+                std::vector<App::Color> colBase = vpBase->DiffuseColor.getValues();
+                applyTransparency(vpBase->Transparency.getValue(),colBase);
                 if (static_cast<int>(colBase.size()) == baseMap.Extent()) {
                     applyColor(hist[index], colBase, colBool);
                     setColor = true;
