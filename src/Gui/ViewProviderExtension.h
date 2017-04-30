@@ -83,8 +83,11 @@ public:
     //update data of extended opject
     virtual void extensionUpdateData(const App::Property*);
 
-    // Called when the extended ViewProvider itselves is changed
+    // Called when the extended ViewProvider itself is changed
     virtual void extensionOnChanged(const App::Property*) {}
+
+    virtual void extensionStartRestoring() {}
+    virtual void extensionFinishRestoring() {}
     
 private:
   //Gui::ViewProviderDocumentObject* m_viewBase = nullptr;
