@@ -87,3 +87,10 @@ DocumentObject* DocumentObjectExtension::getExtendedObject() {
     assert(getExtendedContainer()->isDerivedFrom(DocumentObject::getClassTypeId())); 
     return static_cast<DocumentObject*>(getExtendedContainer());
 }
+
+std::vector<PyObject *> DocumentObjectExtension::getExtendedPySubObjects(
+            const std::vector<std::string>&, const Base::Matrix4D &, bool) const
+{
+    return std::vector<PyObject*>();
+}
+

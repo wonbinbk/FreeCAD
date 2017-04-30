@@ -63,7 +63,8 @@ public:
     virtual const App::PropertyComplexGeoData* getPropertyOfGeometry() const;
 
     virtual PyObject* getPyObject(void);
-    virtual std::vector<PyObject *> getPySubObjects(const std::vector<std::string>&) const;
+    virtual std::vector<PyObject *> getPySubObjects(const std::vector<std::string>&, 
+            const Base::Matrix4D &mat, bool transform) const;
 
     TopLoc_Location getLocation() const;
     
@@ -84,6 +85,7 @@ protected:
         const TopoDS_Shape& newS, const TopoDS_Shape& oldS);
     ShapeHistory joinHistory(const ShapeHistory&, const ShapeHistory&);
 };
+
 
 class FilletBase : public Part::Feature
 {

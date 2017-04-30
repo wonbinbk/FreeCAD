@@ -434,10 +434,20 @@ PyObject *DocumentObject::getPyObject(void)
     return Py::new_reference_to(PythonObject);
 }
 
-std::vector<PyObject *> DocumentObject::getPySubObjects(const std::vector<std::string>&) const
+std::vector<PyObject *> DocumentObject::getPySubObjects(
+    const std::vector<std::string>& elements, const Base::Matrix4D &mat, bool transform) const
 {
-    // default implementation returns nothing
-    return std::vector<PyObject *>();
+    std::vector<PyObject *> ret;
+    auto exts = getExtensionsDerivedFromType<App::DocumentObjectExtension>();
+    for(auto ext : exts) {
+        auto eret = ext->getExtendedPySubObjects(elements,mat,transform);
+        ret.insert(ret.end(),eret.begin(),eret.end());
+    }
+    return ret;
+}
+
+DocumentObject *DocumentObject::getLinkedObject(bool, Base::Matrix4D *, bool) {
+    return this;
 }
 
 void DocumentObject::touch(void)

@@ -30,6 +30,7 @@
 #include <App/PropertyExpressionEngine.h>
 
 #include <Base/TimeInfo.h>
+#include <Base/Matrix.h>
 #include <CXX/Objects.hxx>
 
 #include <bitset>
@@ -197,8 +198,40 @@ public:
      */
     virtual void onLostLinkToObject(DocumentObject*);
     virtual PyObject *getPyObject(void);
-    /// its used to get the python sub objects by name (e.g. by the selection)
-    virtual std::vector<PyObject *> getPySubObjects(const std::vector<std::string>&) const;
+
+    /** Get the python sub objects by name (e.g. by the selection)
+     *
+     * @param elements: vector of strings which are dot separated names to
+     * refer to a sub object. An empty string can be used to refer to the
+     * object itself
+     *
+     * @param mat: the transformation matrix to be applied to the returned
+     * returned object
+     *
+     * @param transform: if ture, apply object's own placement on to returned
+     * shape before appling \c mat.
+     */
+    virtual std::vector<PyObject *> getPySubObjects(const std::vector<std::string> &elements,
+            const Base::Matrix4D &mat = Base::Matrix4D(), bool transform=true) const;
+
+    /** Return the linked object with optional transformation
+     * 
+     * @param recurse: If false, return the immediate linked object, or else
+     * recursively call this function to return the final linked object, which
+     * return itself as the linked object.
+     *
+     * @param mat: If non zero, it is current transformation matrix on input.
+     * The object shall multiple the \c mat with its own transformation matrix
+     * if \c transform is \c true
+     *
+     * @param transform: whether to append the object's own transformation
+     * matrix.
+     *
+     * @return If this object is not a link type of object, it shall return itself.
+     * Otherwise, it may return 0 if the link is not valid.
+     */
+    virtual DocumentObject *getLinkedObject(bool recurse=false, 
+            Base::Matrix4D *mat=0, bool transform=false);
 
     friend class Document;
     friend class Transaction;

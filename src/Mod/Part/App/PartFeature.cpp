@@ -105,15 +105,27 @@ PyObject *Feature::getPyObject(void)
     return Py::new_reference_to(PythonObject); 
 }
 
-std::vector<PyObject *> Feature::getPySubObjects(const std::vector<std::string>& NameVec) const
+namespace Part {
+Py::Object shape2pyshape(const TopoDS_Shape &shape);
+}
+
+std::vector<PyObject *> Feature::getPySubObjects(
+    const std::vector<std::string>& elements, const Base::Matrix4D &mat, bool transform) const 
 {
-    std::vector<PyObject *> temp;
-    for(std::vector<std::string>::const_iterator it=NameVec.begin();it!=NameVec.end();++it){
-        PyObject *obj = Shape.getShape().getPySubShape((*it).c_str());
-        if(obj)
-            temp.push_back(obj);
+    std::vector<PyObject *> ret;
+
+    TopoDS_Shape shape = Shape.getValue();
+    if(!transform)
+        shape.Location(TopLoc_Location());
+    TopoShape s(shape);
+
+    for(const auto &element : elements) {
+        const TopoDS_Shape &sub = element.empty()?shape:s.getSubShape(element.c_str());
+        if(sub.IsNull()) continue;
+        ret.push_back(Py::new_reference_to(
+                    shape2pyshape(TopoShape(sub).transformGShape(mat))));
     }
-    return temp;
+    return ret;
 }
 
 void Feature::onChanged(const App::Property* prop)

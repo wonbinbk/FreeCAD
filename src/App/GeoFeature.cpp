@@ -27,6 +27,7 @@
 #endif
 
 #include "GeoFeature.h"
+#include "DocumentObjectExtension.h"
 
 using namespace App;
 
@@ -57,4 +58,11 @@ void GeoFeature::transformPlacement(const Base::Placement &transform)
 const PropertyComplexGeoData* GeoFeature::getPropertyOfGeometry() const
 {
     return nullptr;
+}
+
+DocumentObject *GeoFeature::getLinkedObject(bool, Base::Matrix4D *mat, bool transform)
+{
+    if(mat && transform)
+        *mat *= Placement.getValue().toMatrix();
+    return this;
 }

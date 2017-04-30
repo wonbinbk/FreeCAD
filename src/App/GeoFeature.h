@@ -61,6 +61,8 @@ public:
      * The default implementation returns null.
      */
     virtual const PropertyComplexGeoData* getPropertyOfGeometry() const;
+
+    DocumentObject *getLinkedObject(bool recurse, Base::Matrix4D *mat, bool transform) override;
 };
 
 } //namespace App

@@ -65,6 +65,12 @@ public:
     /// returns the type name of the ViewProviderExtension which is automatically attached 
     /// to the viewprovider object when it is initiated
     virtual const char* getViewProviderExtensionName(void) const {return "";}
+
+    /** Get the python sub objects by name (e.g. by the selection)
+     * @sa DocumentObject::getPySubObjects()
+     */
+    virtual std::vector<PyObject *> getExtendedPySubObjects(
+            const std::vector<std::string>&, const Base::Matrix4D &, bool transform) const;
 };
 
 } //App
