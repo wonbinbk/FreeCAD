@@ -55,6 +55,15 @@
                 <UserDocu>Recomputes this object</UserDocu>
             </Documentation>
         </Methode>
+        <Methode Name="getSubObject">
+            <Documentation>
+                <UserDocu>
+                    getSubObject(element): return subobject(s).\n
+                    \nelement(string|list|tuple): dot separated string or sequence of strings referencing subobject.\n
+                    \nReturns the found subobject or tuple of subobjects
+                </UserDocu>
+            </Documentation>
+        </Methode>
     <Attribute Name="OutList" ReadOnly="true">
       <Documentation>
         <UserDocu>A list of all objects this object links to.</UserDocu>

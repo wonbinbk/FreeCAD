@@ -306,6 +306,45 @@ PyObject*  DocumentObjectPy::recompute(PyObject *args)
     }
 }
 
+PyObject*  DocumentObjectPy::getSubObject(PyObject *args)
+{
+    PyObject *obj;
+    if (!PyArg_ParseTuple(args, "O", &obj))
+        return NULL;
+
+    std::vector<std::string> subs;
+    bool single=true;
+    if (PyString_Check(obj))
+        subs.push_back(PyString_AsString(obj));
+    else if (PyObject_TypeCheck(obj, &(PyList_Type)) ||
+             PyObject_TypeCheck(obj, &(PyTuple_Type))) {
+        single=false;
+        Py::Sequence shapeSeq(obj);
+        for (Py::Sequence::iterator it = shapeSeq.begin(); it != shapeSeq.end(); ++it) {
+            PyObject* item = (*it).ptr();
+            if(!PyString_Check(item)) {
+                PyErr_SetString(PyExc_TypeError, "non-string object in sequence");
+                return 0;
+            }
+            subs.push_back(PyString_AsString(item));
+        }
+    }
+    auto ret = getDocumentObjectPtr()->getPySubObjects(subs);
+    if(ret.empty())
+        Py_Return;
+    if(single)
+        return ret[0];
+    Py::Tuple tuple(ret.size());
+    for(size_t i=0;i<ret.size();++i) {
+        if(ret[i])
+            tuple.setItem(i, Py::Object(ret[i]));
+        else
+            tuple.setItem(i, Py::Object());
+    }
+    return Py::new_reference_to(tuple);
+}
+
+
 PyObject *DocumentObjectPy::getCustomAttributes(const char* attr) const
 {
     // search for dynamic property
