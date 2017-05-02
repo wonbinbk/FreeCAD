@@ -75,13 +75,26 @@ TreeWidget::TreeWidget(QWidget* parent)
     this->setDropIndicatorShown(false);
     this->setRootIsDecorated(false);
 
-    ParameterGrp::handle hGrp = App::GetApplication().GetParameterGroupByPath("User parameter:BaseApp/Preferences/TreeView");
+#define GET_TREEVIEW_PARAM(_name) \
+    ParameterGrp::handle _name = App::GetApplication().GetParameterGroupByPath("User parameter:BaseApp/Preferences/TreeView")
+
+    GET_TREEVIEW_PARAM(hGrp);
     bool sync = hGrp->GetBool("SyncSelection",false);
     this->syncSelection = new QAction(this);
     this->syncSelection->setCheckable(true);
     this->syncSelection->setChecked(sync);
     connect(this->syncSelection, SIGNAL(triggered()),
             this, SLOT(onSyncSelection()));
+
+    this->showHiddenAction = new QAction(this);
+    this->showHiddenAction->setCheckable(true);
+    connect(this->showHiddenAction, SIGNAL(triggered()),
+            this, SLOT(onShowHidden()));
+
+    this->hideInTreeAction = new QAction(this);
+    this->hideInTreeAction->setCheckable(true);
+    connect(this->hideInTreeAction, SIGNAL(triggered()),
+            this, SLOT(onHideInTree()));
 
     this->createGroupAction = new QAction(this);
     connect(this->createGroupAction, SIGNAL(triggered()),
@@ -127,6 +140,9 @@ TreeWidget::TreeWidget(QWidget* parent)
     Application::Instance->signalRenameDocument.connect(boost::bind(&TreeWidget::slotRenameDocument, this, _1));
     Application::Instance->signalActiveDocument.connect(boost::bind(&TreeWidget::slotActiveDocument, this, _1));
     Application::Instance->signalRelabelDocument.connect(boost::bind(&TreeWidget::slotRelabelDocument, this, _1));
+    Application::Instance->signalShowHidden.connect(boost::bind(&TreeWidget::slotShowHidden, this, _1));
+    Application::Instance->signalChangedObject.connect(
+            boost::bind(&TreeWidget::slotChangedViewObject, this, _1,_2));
 
     // make sure to show a horizontal scrollbar if needed
 #if QT_VERSION >= 0x050000
@@ -192,6 +208,8 @@ void TreeWidget::contextMenuEvent (QContextMenuEvent * e)
             contextMenu.addSeparator();
         DocumentItem* docitem = static_cast<DocumentItem*>(this->contextItem);
         App::Document* doc = docitem->document()->getDocument();
+        showHiddenAction->setChecked(docitem->showHidden());
+        contextMenu.addAction(this->showHiddenAction);
         this->skipRecomputeAction->setChecked(doc->testStatus(App::Document::SkipRecompute));
         contextMenu.addAction(this->skipRecomputeAction);
         contextMenu.addAction(this->markRecomputeAction);
@@ -213,6 +231,8 @@ void TreeWidget::contextMenuEvent (QContextMenuEvent * e)
         }
         if (!contextMenu.actions().isEmpty())
             contextMenu.addSeparator();
+        hideInTreeAction->setChecked(!objitem->object()->showInTree());
+        contextMenu.addAction(this->hideInTreeAction);
         contextMenu.addAction(this->markRecomputeAction);
         contextMenu.addAction(this->relabelObjectAction);
 
@@ -791,6 +811,25 @@ void TreeWidget::slotRenameDocument(const Gui::Document& Doc)
     Q_UNUSED(Doc); 
 }
 
+void TreeWidget::slotChangedViewObject(const Gui::ViewProvider& vp, const App::Property &prop)
+{
+    if(!vp.isDerivedFrom(ViewProviderDocumentObject::getClassTypeId())) 
+        return;
+    const auto &vpd = static_cast<const ViewProviderDocumentObject&>(vp);
+    if(&prop == &vpd.ShowInTree) {
+        auto it = DocumentMap.find(vpd.getDocument());
+        if (it != DocumentMap.end()) 
+            it->second->setItemVisibility(vpd);
+    }
+}
+
+void TreeWidget::slotShowHidden(const Gui::Document& Doc)
+{
+    std::map<const Gui::Document*, DocumentItem*>::iterator it = DocumentMap.find(&Doc);
+    if (it != DocumentMap.end())
+        it->second->updateItemsVisibility(it->second,it->second->showHidden());
+}
+
 void TreeWidget::slotRelabelDocument(const Gui::Document& Doc)
 {
     std::map<const Gui::Document*, DocumentItem*>::iterator it = DocumentMap.find(&Doc);
@@ -897,6 +936,12 @@ void TreeWidget::setupText() {
     this->syncSelection->setText(tr("Sync selection"));
     this->syncSelection->setStatusTip(tr("Auto expand item when selected in 3D view"));
 
+    this->showHiddenAction->setText(tr("Show hidden items"));
+    this->showHiddenAction->setStatusTip(tr("Show hidden tree view items"));
+
+    this->hideInTreeAction->setText(tr("Hide item"));
+    this->hideInTreeAction->setStatusTip(tr("Hide the item in tree"));
+
     this->createGroupAction->setText(tr("Create group..."));
     this->createGroupAction->setStatusTip(tr("Create a group"));
 
@@ -926,9 +971,24 @@ void TreeWidget::setupText() {
 }
 
 void TreeWidget::onSyncSelection() {
-    ParameterGrp::handle hGrp = App::GetApplication().GetParameterGroupByPath("User parameter:BaseApp/Preferences/TreeView");
+    GET_TREEVIEW_PARAM(hGrp);
     hGrp->SetBool("SyncSelection",syncSelection->isChecked());
 }
+
+void TreeWidget::onShowHidden() {
+    if (this->contextItem && this->contextItem->type() == DocumentType) {
+        DocumentItem *docItem = static_cast<DocumentItem*>(contextItem);
+        docItem->setShowHidden(showHiddenAction->isChecked());
+    }
+}
+
+void TreeWidget::onHideInTree() {
+    if (this->contextItem && this->contextItem->type() == ObjectType) {
+        auto item = static_cast<DocumentObjectItem*>(contextItem);
+        item->object()->ShowInTree.setValue(!hideInTreeAction->isChecked());
+    }
+}
+
 
 void TreeWidget::changeEvent(QEvent *e)
 {
@@ -1115,7 +1175,7 @@ TreeWidget *DocumentItem::getTree() {
     if(_obj.getObject()->getNameInDocument())\
         _it = ObjectMap.find(_obj.getObject()->getNameInDocument());\
     if(_it != ObjectMap.end()) {\
-        for(auto _item : _it->second->items){
+        for(auto _item : _it->second->items) {
 
 #define FOREACH_ITEM_ALL(_item) \
     for(auto _v : ObjectMap) {\
@@ -1151,7 +1211,7 @@ bool DocumentItem::createNewItem(const Gui::ViewProviderDocumentObject& obj,
             QTreeWidgetItem *parent, int index, DocumentObjectDataPtr data)
 {
     const char *name;
-    if (!obj.showInTree() || !(name=obj.getObject()->getNameInDocument())) 
+    if (!(name=obj.getObject()->getNameInDocument())) 
         return false;
 
     if(!data) {
@@ -1177,6 +1237,7 @@ bool DocumentItem::createNewItem(const Gui::ViewProviderDocumentObject& obj,
         parent->insertChild(index,item);
     item->setIcon(0, obj.getIcon());
     item->setText(0, QString::fromUtf8(displayName.c_str()));
+    item->setHidden(!obj.showInTree() && !showHidden());
     populateItem(item);
     return true;
 }
@@ -1356,33 +1417,11 @@ void DocumentItem::populateItem(DocumentObjectItem *item, bool refresh) {
 
 void DocumentItem::slotChangeObject(const Gui::ViewProviderDocumentObject& view)
 {
-    if(!view.showInTree()) {
-        slotDeleteObject(view);
-        return;
-    }
-    bool found = false;
     QString displayName = QString::fromUtf8(view.getObject()->Label.getValue());
     FOREACH_ITEM(item,view)
         item->setText(0, displayName);
         populateItem(item,true);
-        found = true;
     END_FOREACH_ITEM;
-
-    if(!found && canCreateItem(view.getObject(),pDocument)) {
-        //showInTree changed?
-
-        for(const auto &v : ObjectMap) {
-            if(v.second->viewObject == &view) continue;
-            for(auto child : v.second->viewObject->claimChildren()) {
-                if(child != view.getObject()) continue;
-                found = true;
-                for(auto item : v.second->items)
-                    populateItem(item,true);
-                break;
-            }
-        }
-        if(!found) createNewItem(view);
-    }
     getTree()->onTestStatus();
 }
 
@@ -1590,6 +1629,9 @@ void DocumentItem::updateItemSelection(DocumentObjectItem *item) {
 
 void DocumentItem::findSelection(bool sync, DocumentObjectItem *item, const char *subname) 
 {
+    if(item->isHidden())
+        return;
+
     if(!subname || *subname==0) {
         item->selected=2;
         return;
@@ -1698,8 +1740,7 @@ void DocumentItem::selectLinkedItem(DocumentObjectItem *item, bool recurse) {
     updateSelection();
 
     if(linked->getDocument()!=pDocument) {
-        auto docItem = static_cast<TreeWidget*>(
-            treeWidget())->getDocumentItem(linked->getDocument());
+        auto docItem = getTree()->getDocumentItem(linked->getDocument());
         if(docItem) {
             docItem->updateSelection();
             MDIView *view = docItem->pDocument->getActiveView();
@@ -1720,9 +1761,10 @@ void DocumentItem::populateParents(ViewProvider *vp, ParentMap &parentMap) {
 
         populateParents(parent,parentMap);
         for(auto item : it->second->items) {
-            if(item->populated) continue;
-            item->populated = true;
-            populateItem(item,true);
+            if(!item->isHidden() && !item->populated) {
+                item->populated = true;
+                populateItem(item,true);
+            }
         }
     }
 }
@@ -1762,7 +1804,8 @@ void DocumentItem::selectAllLinks(DocumentObjectItem *item) {
 
     bool found;
     FOREACH_ITEM_ALL(itemCheck);
-        if(itemCheck->object() != item->object() &&
+        if(!itemCheck->isHidden() &&
+           itemCheck->object() != item->object() &&
            itemCheck->object()->getLinkedView(false) == item->object()) {
             found =true;
             showItem(itemCheck,true);
@@ -1774,6 +1817,14 @@ void DocumentItem::selectAllLinks(DocumentObjectItem *item) {
     }
 }
 
+bool DocumentItem::showHidden() const {
+    return pDocument->getDocument()->ShowHidden.getValue();
+}
+
+void DocumentItem::setShowHidden(bool show) {
+    pDocument->getDocument()->ShowHidden.setValue(show);
+}
+
 void DocumentItem::showItem(DocumentObjectItem *item, bool select) {
     if(select) item->setSelected(true);
     for(auto parent=item->parent();
@@ -1781,6 +1832,24 @@ void DocumentItem::showItem(DocumentObjectItem *item, bool select) {
         parent=parent->parent())
     {
         parent->setExpanded(true);
+    }
+}
+
+void DocumentItem::setItemVisibility(const ViewProviderDocumentObject &vpd) {
+    bool show = showHidden();
+    FOREACH_ITEM(item,vpd);
+        item->setHidden(!vpd.showInTree() && !show);
+        item->testStatus(false);
+    END_FOREACH_ITEM;
+}
+
+void DocumentItem::updateItemsVisibility(QTreeWidgetItem *item, bool show) {
+    for(int i=0;i<item->childCount();++i) {
+        auto child = item->child(i);
+        if(child->type()!=TreeWidget::ObjectType) continue;
+        auto childItem = static_cast<DocumentObjectItem*>(child);
+        childItem->setHidden(!show && !childItem->object()->showInTree());
+        updateItemsVisibility(childItem,show);
     }
 }
 
@@ -1871,6 +1940,7 @@ void DocumentObjectItem::testStatus(bool resetStatus,QIcon &icon)
 {
     App::DocumentObject* pObject = object()->getObject();
     int currentStatus =
+        ((object()->showInTree() ? 0 : 1) << 3) |
         ((pObject->isError()          ? 1 : 0) << 2) |
         ((pObject->mustExecute() == 1 ? 1 : 0) << 1) |
         (object()->isShow()         ? 1 : 0);
@@ -1958,17 +2028,39 @@ void DocumentObjectItem::testStatus(bool resetStatus,QIcon &icon)
         static int w = -1;
         if(w < 0) w = QApplication::style()->standardPixmap(QStyle::SP_DirClosedIcon).width();
 
+        QPixmap pxOn,pxOff;
+
         // if needed show small pixmap inside
         if (!px.isNull()) {
-            icon.addPixmap(BitmapFactory().merge(icon_org.pixmap(w, w, mode, QIcon::Off),
-                px,BitmapFactoryInst::TopRight), QIcon::Normal, QIcon::Off);
-            icon.addPixmap(BitmapFactory().merge(icon_org.pixmap(w, w, mode, QIcon::On ),
-                px,BitmapFactoryInst::TopRight), QIcon::Normal, QIcon::Off);
+            pxOff = BitmapFactory().merge(icon_org.pixmap(w, w, mode, QIcon::Off),
+                px,BitmapFactoryInst::TopRight);
+            pxOn = BitmapFactory().merge(icon_org.pixmap(w, w, mode, QIcon::On ),
+                px,BitmapFactoryInst::TopRight);
+        } else {
+            pxOff = icon_org.pixmap(w, w, mode, QIcon::Off);
+            pxOn = icon_org.pixmap(w, w, mode, QIcon::On);
         }
-        else {
-            icon.addPixmap(icon_org.pixmap(w, w, mode, QIcon::Off), QIcon::Normal, QIcon::Off);
-            icon.addPixmap(icon_org.pixmap(w, w, mode, QIcon::On ), QIcon::Normal, QIcon::On );
+
+        if(currentStatus & 8)  {// hidden item
+            static const char * const feature_hidden_xpm[]={
+                "9 7 3 1",
+                ". c None",
+                "# c #000000",
+                "a c #ffffff",
+                "...###...",
+                "..#####..",
+                ".##aaa##.",
+                "###aaa###",
+                ".##aaa##.",
+                "..#####..",
+                "...###..."};
+            px = QPixmap(feature_hidden_xpm);
+            pxOff = BitmapFactory().merge(pxOff, px, BitmapFactoryInst::TopLeft);
+            pxOn = BitmapFactory().merge(pxOn, px, BitmapFactoryInst::TopLeft);
         }
+
+        icon.addPixmap(pxOn, QIcon::Normal, QIcon::On);
+        icon.addPixmap(pxOff, QIcon::Normal, QIcon::Off);
     }
 
     this->setIcon(0, icon);

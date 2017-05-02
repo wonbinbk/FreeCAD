@@ -116,6 +116,8 @@ protected Q_SLOTS:
     void onSelectLinkedFinal();
     void onSelectAllLinks();
     void onSyncSelection();
+    void onShowHidden();
+    void onHideInTree();
 
 private Q_SLOTS:
     void onItemSelectionChanged(void);
@@ -130,6 +132,8 @@ private:
     void slotRenameDocument(const Gui::Document&);
     void slotActiveDocument(const Gui::Document&);
     void slotRelabelDocument(const Gui::Document&);
+    void slotShowHidden(const Gui::Document &);
+    void slotChangedViewObject(const Gui::ViewProvider &, const App::Property &);
 
     void changeEvent(QEvent *e);
     void setupText();
@@ -145,6 +149,8 @@ private:
     QAction* selectLinkedFinal;
     QAction* selectAllLinks;
     QAction* syncSelection;
+    QAction* showHiddenAction;
+    QAction* hideInTreeAction;
     QTreeWidgetItem* contextItem;
 
     QTreeWidgetItem* rootItem;
@@ -180,6 +186,11 @@ public:
     void selectAllInstances(DocumentObjectItem *item);
     void selectAllLinks(DocumentObjectItem *item);
     void showItem(DocumentObjectItem *item, bool select);
+    void updateItemsVisibility(QTreeWidgetItem *item, bool show);
+    void setItemVisibility(const Gui::ViewProviderDocumentObject&);
+
+    bool showHidden() const;
+    void setShowHidden(bool show);
 
     TreeWidget *getTree();
 

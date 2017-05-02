@@ -60,6 +60,7 @@ public:
     // Display properties
     App::PropertyEnumeration DisplayMode;
     App::PropertyBool Visibility;
+    App::PropertyBool ShowInTree;
 
     virtual void attach(App::DocumentObject *pcObject);
     virtual void updateData(const App::Property*);
@@ -69,6 +70,8 @@ public:
     virtual void hide(void);
     /// Show the object in the view
     virtual void show(void);
+
+    virtual bool showInTree() const;
 
     /// Get a list of TaskBoxes associated with this object
     virtual void getTaskViewContent(std::vector<Gui::TaskView::TaskContent*>&) const;

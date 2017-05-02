@@ -57,6 +57,7 @@ ViewProviderDocumentObject::ViewProviderDocumentObject()
 {
     ADD_PROPERTY(DisplayMode,((long)0));
     ADD_PROPERTY(Visibility,(true));
+    ADD_PROPERTY(ShowInTree,(true));
 
     sPixmap = "Feature";
 }
@@ -293,4 +294,8 @@ PyObject* ViewProviderDocumentObject::getPyObject()
 
 ViewProviderDocumentObject *ViewProviderDocumentObject::getLinkedView(bool) {
     return this;
+}
+
+bool ViewProviderDocumentObject::showInTree() const {
+    return ShowInTree.getValue();
 }
