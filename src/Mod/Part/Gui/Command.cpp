@@ -1754,6 +1754,45 @@ bool CmdPartThickness::isActive(void)
 }
 
 //===========================================================================
+// Part_Link
+//===========================================================================
+
+DEF_STD_CMD_A(CmdPartLink);
+
+CmdPartLink::CmdPartLink()
+  : Command("Part_Link")
+{
+    sAppModule    = "Part";
+    sGroup        = QT_TR_NOOP("Part");
+    sMenuText     = QT_TR_NOOP("Link...");
+    sToolTipText  = QT_TR_NOOP("Create a link to an object");
+    sWhatsThis    = "Part_Link";
+    sStatusTip    = sToolTipText;
+    sPixmap       = "Tree_Part_Link";
+}
+
+void CmdPartLink::activated(int iMsg)
+{
+    Q_UNUSED(iMsg);
+    // get the selected object
+    const auto &result = getSelection().getSelection();
+    std::string link = getUniqueObjectName("PartLink");
+
+    openCommand("Make Link");
+    doCommand(Doc,"App.ActiveDocument.addObject(\"Part::Link\",\"%s\")",link.c_str());
+    if(result.size() && result.front().FeatName && result.front().DocName)
+        doCommand(Doc,"App.ActiveDocument.%s.LinkedObject = App.getDocument('%s').getObject('%s')" ,link.c_str(), 
+                result.front().DocName, result.front().FeatName);
+    commitCommand();
+    updateActive();
+}
+
+bool CmdPartLink::isActive(void)
+{
+    return !!App::GetApplication().getActiveDocument();
+}
+
+//===========================================================================
 // Part_ShapeInfo
 //===========================================================================
 
@@ -2266,4 +2305,5 @@ void CreatePartCommands(void)
     rcCmdMgr.addCommand(new CmdMeasureToggleAll());
     rcCmdMgr.addCommand(new CmdMeasureToggle3d());
     rcCmdMgr.addCommand(new CmdMeasureToggleDelta());
+    rcCmdMgr.addCommand(new CmdPartLink());
 } 
