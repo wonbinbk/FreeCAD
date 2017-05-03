@@ -30,6 +30,7 @@
 #include <vector>
 #include <string>
 #include <memory>
+#include <cinttypes>
 #include "Property.h"
 
 namespace Base {
