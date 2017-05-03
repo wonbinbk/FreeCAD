@@ -88,6 +88,8 @@ public:
 
     virtual void extensionStartRestoring() {}
     virtual void extensionFinishRestoring() {}
+
+    virtual void extensionGetLinks(std::vector<ViewProviderDocumentObject*> &) const {}
     
 private:
   //Gui::ViewProviderDocumentObject* m_viewBase = nullptr;

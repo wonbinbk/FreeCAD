@@ -102,11 +102,19 @@ public:
 
     static Pointer get(ViewProviderDocumentObject *vp, ViewProviderLink *l=0) {
         if(!vp) return Pointer();
+
+        if(vp==l || vp->getLinkedView(true)==l)
+            throw Base::Exception("cyclic links");
+
         auto ext = vp->getExtensionByType<ViewProviderLink::Observer>(true);
         if(!ext) {
             ext = new ViewProviderLink::Observer();
-            ext->linkInfo = Pointer(new LinkInfo(vp));
             ext->initExtension(vp);
+        }
+        if(!ext->linkInfo) {
+            // extension can be created automatically when restored from document,
+            // with an empty linkInfo. So we need to check here.
+            ext->linkInfo = Pointer(new LinkInfo(vp));
         }
         if(l) {
             ext->linkInfo->links.insert(l);
@@ -525,6 +533,12 @@ void ViewProviderLink::Observer::extensionFinishRestoring() {
     }
 }
 
+void ViewProviderLink::Observer::extensionGetLinks(std::vector<ViewProviderDocumentObject*> &links) const {
+    if(!linkInfo) return;
+    links.reserve(links.size()+linkInfo->links.size());
+    for(auto link : linkInfo->links)
+        links.push_back(link);
+}
 
 ///////////////////////////////////////////////////////////////////////////////////
 
@@ -601,7 +615,6 @@ void ViewProviderLink::attach(App::DocumentObject *pcObj) {
 
     if(!HAS_PROP(Object))
         FC_ERR("ViewProviderLink: Invalid document object");
-
     inherited::attach(pcObj);
 }
 
@@ -622,8 +635,8 @@ std::string ViewProviderLink::getElementPicked(const SoPickedPoint *pp) const {
 
 ViewProviderDocumentObject *ViewProviderLink::getLinkedView(bool recursive) {
     if(linkInfo && linkInfo->isLinked()) {
-        if(recursive) return linkInfo->pcLinked;
-        return linkInfo->pcLinked->getLinkedView();
+        if(!recursive) return linkInfo->pcLinked;
+        return linkInfo->pcLinked->getLinkedView(true);
     }
     return this;
 }

@@ -188,6 +188,7 @@ public:
     void showItem(DocumentObjectItem *item, bool select);
     void updateItemsVisibility(QTreeWidgetItem *item, bool show);
     void setItemVisibility(const Gui::ViewProviderDocumentObject&);
+    void updateLinks(const ViewProviderDocumentObject &view);
 
     bool showHidden() const;
     void setShowHidden(bool show);
@@ -222,7 +223,7 @@ protected:
 
 private:
     const Gui::Document* pDocument;
-    std::map<std::string,DocumentObjectDataPtr> ObjectMap;
+    std::map<App::DocumentObject*,DocumentObjectDataPtr> ObjectMap;
 
     typedef boost::BOOST_SIGNALS_NAMESPACE::connection Connection;
     Connection connectNewObject;

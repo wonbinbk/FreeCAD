@@ -62,7 +62,7 @@ public:
     ViewProviderDocumentObject *getElementView(
             const char *element, const char **subname) override;
 
-    ViewProviderDocumentObject *getLinkedView(bool recursive=true) override;
+    ViewProviderDocumentObject *getLinkedView(bool recursive) override;
 
     QIcon getIcon(void) const override;
 
@@ -84,6 +84,7 @@ public:
         void extensionHide(void) override;
         void extensionShow(void) override;
         void extensionFinishRestoring() override;
+        void extensionGetLinks(std::vector<ViewProviderDocumentObject*> &) const override;
 
         LinkInfoPtr linkInfo;
     };

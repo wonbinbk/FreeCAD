@@ -117,6 +117,9 @@ public:
     /// Otherwise only the immediate view provider is returned.
     virtual ViewProviderDocumentObject *getLinkedView(bool recursive=true); 
 
+    /// Return all links that directly links to this view provider.
+    virtual std::vector<ViewProviderDocumentObject *> getLinks() const;
+
 protected:
     /*! Get the active mdi view of the document this view provider is part of.
       @note The returned mdi view doesn't need to be a 3d view but can be e.g.

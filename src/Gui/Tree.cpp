@@ -57,7 +57,7 @@
 #include "View3DInventor.h"
 #include "View3DInventorViewer.h"
 
-FC_LOG_LEVEL_INIT("Gui::Tree",true,true);
+FC_LOG_LEVEL_INIT("Gui::Tree",true,true,true);
 
 using namespace Gui;
 
@@ -141,6 +141,10 @@ TreeWidget::TreeWidget(QWidget* parent)
     Application::Instance->signalActiveDocument.connect(boost::bind(&TreeWidget::slotActiveDocument, this, _1));
     Application::Instance->signalRelabelDocument.connect(boost::bind(&TreeWidget::slotRelabelDocument, this, _1));
     Application::Instance->signalShowHidden.connect(boost::bind(&TreeWidget::slotShowHidden, this, _1));
+    
+    // Gui::Document::signalChangedObject informs the App::Document property
+    // change, not view provider's own property, which is what the signal below
+    // for
     Application::Instance->signalChangedObject.connect(
             boost::bind(&TreeWidget::slotChangedViewObject, this, _1,_2));
 
@@ -1094,6 +1098,8 @@ public:
     DocumentObjectItems items;
     ViewProviderDocumentObject *viewObject;
     DocumentObjectItem *rootItem;
+    std::vector<App::DocumentObject*> children;
+    std::string label;
 
     typedef boost::BOOST_SIGNALS_NAMESPACE::connection Connection;
 
@@ -1172,19 +1178,14 @@ TreeWidget *DocumentItem::getTree() {
 
 #define FOREACH_ITEM(_item, _obj) \
     auto _it = ObjectMap.end();\
-    if(_obj.getObject()->getNameInDocument())\
-        _it = ObjectMap.find(_obj.getObject()->getNameInDocument());\
+    if(_obj.getObject() && _obj.getObject()->getNameInDocument())\
+        _it = ObjectMap.find(_obj.getObject());\
     if(_it != ObjectMap.end()) {\
         for(auto _item : _it->second->items) {
 
 #define FOREACH_ITEM_ALL(_item) \
     for(auto _v : ObjectMap) {\
         for(auto _item : _v.second->items) {
-
-#define FOREACH_ITEM_NAME(_item,_name) \
-    auto _it = ObjectMap.find(_name);\
-    if(_it != ObjectMap.end()) {\
-        for(auto _item : _it->second->items) {
 
 #define END_FOREACH_ITEM }}
 
@@ -1215,9 +1216,11 @@ bool DocumentItem::createNewItem(const Gui::ViewProviderDocumentObject& obj,
         return false;
 
     if(!data) {
-        auto &pdata = ObjectMap[name];
+        auto &pdata = ObjectMap[obj.getObject()];
         if(!pdata) {
             pdata = std::make_shared<DocumentObjectData>(const_cast<ViewProviderDocumentObject*>(&obj));
+            pdata->children = obj.claimChildren();
+            pdata->label = obj.getObject()->Label.getValue();
         }else if(pdata->rootItem && parent==NULL) {
             Base::Console().Warning("DocumentItem::slotNewObject: Cannot add view provider twice.\n");
             return false;
@@ -1257,7 +1260,7 @@ static inline bool canCreateItem(const App::DocumentObject *obj, const Document 
 
 void DocumentItem::slotDeleteObject(const Gui::ViewProviderDocumentObject& view)
 {
-    auto it = ObjectMap.find(std::string(view.getObject()->getNameInDocument()));
+    auto it = ObjectMap.find(view.getObject());
     if(it == ObjectMap.end() || it->second->items.empty()) return;
     auto &items = it->second->items;
     for(auto cit=items.begin(),citNext=cit;cit!=items.end();cit=citNext) {
@@ -1273,7 +1276,7 @@ void DocumentItem::slotDeleteObject(const Gui::ViewProviderDocumentObject& view)
     for(auto child : children) {
         if(!canCreateItem(child,pDocument)) 
             continue;
-        auto it = ObjectMap.find(child->getNameInDocument());
+        auto it = ObjectMap.find(child);
         if(it==ObjectMap.end() || it->second->items.empty()) {
             ViewProvider* vp = pDocument->getViewProvider(child);
             if(!vp || !vp->isDerivedFrom(ViewProviderDocumentObject::getClassTypeId()))
@@ -1295,17 +1298,15 @@ void DocumentItem::populateItem(DocumentObjectItem *item, bool refresh) {
     // a) the item is expanded, or b) there is at least one free child, i.e.
     // child originally located at root.
 
-    const auto &children = item->object()->claimChildren();
-
-    item->setChildIndicatorPolicy(children.empty()?
+    item->setChildIndicatorPolicy(item->myData->children.empty()?
             QTreeWidgetItem::DontShowIndicator:QTreeWidgetItem::ShowIndicator);
 
     if(!item->populated && !item->isExpanded()) {
         bool doPopulate = false;
-        for(auto child : children) {
+        for(auto child : item->myData->children) {
             if(!canCreateItem(child,pDocument)) 
                 continue;
-            auto it = ObjectMap.find(child->getNameInDocument());
+            auto it = ObjectMap.find(child);
             if(it == ObjectMap.end() || it->second->items.empty()) {
                 ViewProvider* vp = pDocument->getViewProvider(child);
                 if(!vp || !vp->isDerivedFrom(ViewProviderDocumentObject::getClassTypeId()))
@@ -1331,7 +1332,7 @@ void DocumentItem::populateItem(DocumentObjectItem *item, bool refresh) {
     int i=-1;
     // iterate through the claimed children, and try to synchronize them with the 
     // children tree item with the same order of apperance. 
-    for(auto child : children) {
+    for(auto child : item->myData->children) {
         if(!canCreateItem(child,pDocument)) continue;
 
         ++i; // the current index of the claimed child
@@ -1364,10 +1365,10 @@ void DocumentItem::populateItem(DocumentObjectItem *item, bool refresh) {
         // This algo will be recursively applied to newly created child items
         // through slotNewObject -> populateItem
 
-        auto it = ObjectMap.find(child->getNameInDocument());
+        auto it = ObjectMap.find(child);
         if(it==ObjectMap.end() || it->second->items.empty()) {
             ViewProvider* vp = pDocument->getViewProvider(child);
-            if(!vp || !vp->isDerivedFrom(ViewProviderDocumentObject::getClassTypeId()) || 
+            if(!vp || !vp->isDerivedFrom(ViewProviderDocumentObject::getClassTypeId()) ||
                !createNewItem(static_cast<ViewProviderDocumentObject&>(*vp),item,i,
                         it==ObjectMap.end()?DocumentObjectDataPtr():it->second))
                 --i;
@@ -1417,12 +1418,59 @@ void DocumentItem::populateItem(DocumentObjectItem *item, bool refresh) {
 
 void DocumentItem::slotChangeObject(const Gui::ViewProviderDocumentObject& view)
 {
-    QString displayName = QString::fromUtf8(view.getObject()->Label.getValue());
-    FOREACH_ITEM(item,view)
-        item->setText(0, displayName);
-        populateItem(item,true);
-    END_FOREACH_ITEM;
+    auto it = ObjectMap.find(view.getObject());
+    if(it == ObjectMap.end())
+        return;
+
+    bool changeLabel = false;
+    const char *label = view.getObject()->Label.getValue();
+    if(it->second->label != label) {
+        changeLabel = true;
+        it->second->label = label;
+    }
+    auto children = view.claimChildren();
+    bool doPopulate = false;
+    if(children!=it->second->children) {
+        doPopulate = true;
+        it->second->children.swap(children);
+    }
+    if(!changeLabel && !doPopulate) return;
+
+    QString displayName;
+    if(changeLabel)
+        displayName = QString::fromUtf8(label);
+
+    for(auto item : it->second->items) {
+        if(changeLabel)
+            item->setText(0, displayName);
+        if(doPopulate)
+            populateItem(item,true);
+    }
+
+    // there is no signal propagation when PropertyLink'ed object changes
+    // so we have do it by ourselves. We do not enforce that the link
+    // object must claim the same children as the linked. So we do not
+    // pass around the children just obtained here.
+    if(doPopulate) 
+        updateLinks(view);
     getTree()->onTestStatus();
+}
+
+void DocumentItem::updateLinks(const ViewProviderDocumentObject &view) {
+    for(auto link : view.getLinks()) {
+        auto it = ObjectMap.find(link->getObject());
+        if(it == ObjectMap.end() && it->second->items.size())
+            return;
+
+        auto children = view.claimChildren();
+        if(children==it->second->children) 
+            continue;
+
+        it->second->children.swap(children);
+        for(auto item : it->second->items)
+            populateItem(item,true);
+        updateLinks(*link);
+    }
 }
 
 void DocumentItem::slotRenameObject(const Gui::ViewProviderDocumentObject& obj)
@@ -1433,8 +1481,7 @@ void DocumentItem::slotRenameObject(const Gui::ViewProviderDocumentObject& obj)
 
 void DocumentItem::slotActiveObject(const Gui::ViewProviderDocumentObject& obj)
 {
-    std::string objectName = obj.getObject()->getNameInDocument();
-    if(ObjectMap.find(objectName) == ObjectMap.end())
+    if(ObjectMap.find(obj.getObject()) == ObjectMap.end())
         return; // signal is emitted before the item gets created
     FOREACH_ITEM_ALL(item);
         QFont f = item->font(0);
@@ -1513,7 +1560,7 @@ const Gui::Document* DocumentItem::document() const
 //
 //
 //    std::map<std::string,DocumentObjectItem*>::iterator pos;
-//    pos = ObjectMap.find(Obj->getNameInDocument());
+//    pos = ObjectMap.find(Obj);
 //    if (pos != ObjectMap.end()) {
 //        QFont f = pos->second->font(0);
 //        f.setUnderline(mark);
@@ -1528,7 +1575,7 @@ const Gui::Document* DocumentItem::document() const
 //
 //
 //    std::map<std::string,DocumentObjectItem*>::iterator pos;
-//    pos = ObjectMap.find(Obj->getNameInDocument());
+//    pos = ObjectMap.find(Obj);
 //    if (pos != ObjectMap.end()) {
 //        QFont f = pos->second->font(0);
 //        f.setUnderline(mark);
@@ -1686,7 +1733,7 @@ void DocumentItem::findSelection(bool sync, DocumentObjectItem *item, const char
 void DocumentItem::selectItems(bool sync) {
     const auto &sels = Selection().getSelection(pDocument->getDocument()->getName());
     for(const auto &sel : sels) {
-        auto it = ObjectMap.find(sel.FeatName);
+        auto it = ObjectMap.find(sel.pObject);
         if(it == ObjectMap.end()) continue;
         FC_TRACE("find select " << sel.FeatName);
         for(auto item : it->second->items) {
@@ -1726,7 +1773,7 @@ void DocumentItem::selectLinkedItem(DocumentObjectItem *item, bool recurse) {
     ViewProviderDocumentObject *linked = item->object()->getLinkedView(recurse);
     if(!linked || linked == item->object()) return;
 
-    auto it = ObjectMap.find(linked->getObject()->getNameInDocument());
+    auto it = ObjectMap.find(linked->getObject());
     if(it == ObjectMap.end()) return;
     auto linkedItem = it->second->rootItem;
     if(!linkedItem) 
@@ -1753,9 +1800,7 @@ void DocumentItem::populateParents(ViewProvider *vp, ParentMap &parentMap) {
     auto it = parentMap.find(vp);
     if(it == parentMap.end()) return;
     for(auto parent : it->second) {
-        const char *name = parent->getObject()->getNameInDocument();
-        if(!name) continue;
-        auto it = ObjectMap.find(name);
+        auto it = ObjectMap.find(parent->getObject());
         if(it==ObjectMap.end())
             continue;
 
@@ -1786,8 +1831,6 @@ void DocumentItem::selectAllLinks(DocumentObjectItem *item) {
             links.insert(v.second->viewObject);
             continue;
         }
-        // if(!v.second->viewObject->getLinkedView()->getChildRoot())
-        //     continue;
         for(auto child : v.second->viewObject->claimChildren()) {
             if(!child || child==pObject || !child->getNameInDocument()) continue;
             ViewProvider* vp = pDocument->getViewProvider(child);
@@ -2048,11 +2091,11 @@ void DocumentObjectItem::testStatus(bool resetStatus,QIcon &icon)
                 "# c #000000",
                 "a c #ffffff",
                 "...###...",
-                "..#####..",
-                ".##aaa##.",
-                "###aaa###",
-                ".##aaa##.",
-                "..#####..",
+                "..#aaa#..",
+                ".#a###a#.",
+                "#aa###aa#",
+                ".#a###a#.",
+                "..#aaa#..",
                 "...###..."};
             px = QPixmap(feature_hidden_xpm);
             pxOff = BitmapFactory().merge(pxOff, px, BitmapFactoryInst::TopLeft);
@@ -2147,7 +2190,7 @@ bool DocumentObjectItem::isParentLink() const {
 }
 
 bool DocumentObjectItem::isGroup() const {
-    return object()->getLinkedView()->getChildRoot()!=0;
+    return object()->getLinkedView(true)->getChildRoot()!=0;
 }
 
 bool DocumentObjectItem::isParentGroup() const {

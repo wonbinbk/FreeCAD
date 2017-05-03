@@ -296,6 +296,15 @@ ViewProviderDocumentObject *ViewProviderDocumentObject::getLinkedView(bool) {
     return this;
 }
 
+std::vector<ViewProviderDocumentObject *> ViewProviderDocumentObject::getLinks() const {
+    std::vector<ViewProviderDocumentObject*> ret;
+    auto exts = getExtensionsDerivedFromType<Gui::ViewProviderExtension>();
+    for(auto ext : exts) 
+        ext->extensionGetLinks(ret);
+    return ret;
+}
+
+
 bool ViewProviderDocumentObject::showInTree() const {
     return ShowInTree.getValue();
 }
