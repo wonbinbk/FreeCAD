@@ -50,7 +50,7 @@
 #include "MainWindow.h"
 #include "ViewProviderDocumentObject.h"
 
-FC_LOG_LEVEL_INIT("Selection",true,true)
+FC_LOG_LEVEL_INIT("Selection",true,true,true)
 
 
 using namespace Gui;
@@ -732,7 +732,9 @@ bool SelectionSingleton::addSelection(const char* pDocName, const char* pObjectN
                 " ("<<x<<", "<<y<<", "<<z<<')');
 
         Notify(Chng);
+        FC_TRACE("signaling add selection");
         signalSelectionChanged(Chng);
+        FC_TRACE("done signaling add selection");
 
         // allow selection
         return true;
@@ -782,8 +784,11 @@ bool SelectionSingleton::addSelection(const char* pDocName, const char* pObjectN
         Chng.z         = 0;
         Chng.Type      = SelectionChanges::AddSelection;
 
+        FC_TRACE("notifying add selection");
         Notify(Chng);
+        FC_TRACE("signaling add selection");
         signalSelectionChanged(Chng);
+        FC_TRACE("done signaling add selection");
 
         // allow selection
         return true;
@@ -942,10 +947,11 @@ void SelectionSingleton::clearSelection(const char* pDocName)
         Chng.pSubName = "";
         Chng.pTypeName = "";
 
-        FC_LOG("Clear selection");
-
+        FC_TRACE("notifying clear selection");
         Notify(Chng);
+        FC_TRACE("signaling clear selection");
         signalSelectionChanged(Chng);
+        FC_TRACE("done signaling clear selection");
     }
 }
 

@@ -91,7 +91,7 @@
 #include "ViewProviderDocumentObject.h"
 #include "ViewProviderGeometryObject.h"
 
-FC_LOG_LEVEL_INIT("SoFCUnifiedSelection",true,true);
+FC_LOG_LEVEL_INIT("SoFCUnifiedSelection",true,true,true);
 
 using namespace Gui;
 
@@ -548,7 +548,9 @@ SoFCUnifiedSelection::handleEvent(SoHandleEventAction * action)
                 }
                 else { // Ctrl
                     if (!subSelected) {
+                        FC_TRACE("claring selection");
                         Gui::Selection().clearSelection(documentName.c_str());
+                        FC_TRACE("adding selection");
                         bool ok = Gui::Selection().addSelection(documentName.c_str()
                                               ,objectName.c_str()
                                               ,subElementName.c_str()
@@ -579,10 +581,12 @@ SoFCUnifiedSelection::handleEvent(SoHandleEventAction * action)
 
                 action->setHandled(); 
                 if (pPath && checkSelectionStyle(type,vpd)) {
+                    FC_TRACE("applying action");
                     SoSelectionElementAction action(type);
                     action.setColor(this->colorSelection.getValue());
                     action.setElement(det);
                     action.apply(pPath);
+                    FC_TRACE("applied action");
                     this->touch();
                 }
             } // picked point
@@ -603,6 +607,20 @@ bool SoFCUnifiedSelection::checkSelectionStyle(int type, ViewProvider *vp) {
         bool selected = type==SoSelectionElementAction::All;
         static_cast<ViewProviderGeometryObject*>(vp)->showBoundingBox(selected);
         if(selected) return false;
+    }else if(type == SoSelectionElementAction::None &&
+             vp->getRoot()->getTypeId().isDerivedFrom(SoFCSelectionRoot::getClassTypeId()))
+    {
+        //NOTE: this is a critical performance improvement. The original way of
+        //clearing selection is to apply the action to the entire scene graph.
+        //It gets noticablely slow when the scene graph gets larger. We can take
+        //advantage of the fact that viewprovider with root node of type
+        //SoFCSelectionRoot stores the selection context inside the root node
+        //itself. Clearing selection/highlight can be done by simply clearing
+        //the root node's context.
+        auto node = static_cast<SoFCSelectionRoot*>(vp->getRoot());
+        node->resetContext();
+        node->touch();
+        return false;
     }
     return true;
 }
