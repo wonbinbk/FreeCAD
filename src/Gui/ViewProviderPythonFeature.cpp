@@ -435,8 +435,8 @@ SoDetail* ViewProviderPythonFeatureImp::getDetail(const char* name) const
     return 0;
 }
 
-SoDetail* ViewProviderPythonFeatureImp::getDetailPath(
-        const char* name, SoFullPath **ppath) const
+ViewProviderPythonFeatureImp::ValueT ViewProviderPythonFeatureImp::getDetailPath(
+        const char* name, SoFullPath **ppath, SoDetail **pdet) const
 {
     bool freepath = false;
     // Run the onChanged method of the proxy object.
@@ -461,7 +461,8 @@ SoDetail* ViewProviderPythonFeatureImp::getDetailPath(
                 void* ptr = 0;
                 Base::Interpreter().convertSWIGPointerObj("pivy.coin", "SoDetail *", det.ptr(), &ptr, 0);
                 SoDetail* detail = reinterpret_cast<SoDetail*>(ptr);
-                return detail ? detail->copy() : 0;
+                *pdet = detail ? detail->copy() : 0;
+                return Accepted;
             }
         }
     }
@@ -477,7 +478,7 @@ SoDetail* ViewProviderPythonFeatureImp::getDetailPath(
         (*ppath)->unref();
         *ppath = 0;
     }
-    return object->getDetailPath(name,ppath);
+    return NotImplemented;
 }
 
 

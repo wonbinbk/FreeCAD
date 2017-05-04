@@ -55,7 +55,7 @@ public:
     std::string getElementPicked(const SoPickedPoint *pp) const;
     std::string getElement(const SoDetail *det) const;
     SoDetail* getDetail(const char*) const;
-    SoDetail* getDetailPath(const char *name, SoFullPath **path) const;
+    ValueT getDetailPath(const char *name, SoFullPath **path, SoDetail **det) const;
     std::vector<Base::Vector3d> getSelectionShape(const char* Element) const;
     ValueT setEdit(int ModNum);
     ValueT unsetEdit(int ModNum);
@@ -170,7 +170,10 @@ public:
     }
     virtual SoDetail* getDetailPath(const char *name, SoFullPath **ppath) const {
         if(!ppath) return getDetail(name);
-        return imp->getDetailPath(name,ppath);
+        SoDetail *det = 0;
+        if(imp->getDetailPath(name,ppath,&det) != ViewProviderPythonFeatureImp::NotImplemented)
+            return det;
+        return ViewProviderT::getDetailPath(name,ppath);
     }
     virtual std::vector<Base::Vector3d> getSelectionShape(const char* Element) const {
         return ViewProviderT::getSelectionShape(Element);
