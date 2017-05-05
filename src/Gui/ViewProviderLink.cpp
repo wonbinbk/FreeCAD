@@ -859,6 +859,46 @@ const char * const * ViewProviderLink::getOverlayPixmap(bool xlink) const{
     return xlink?feature_xlink_xpm:feature_link_xpm;
 }
 
+bool ViewProviderLink::canDragObject(App::DocumentObject* obj) const {
+    if(!linkInfo || !linkInfo->isLinked()) return false;
+    return linkInfo->pcLinked->canDragObject(obj);
+}
+
+bool ViewProviderLink::canDragObjects() const {
+    if(!linkInfo || !linkInfo->isLinked()) return false;
+    return linkInfo->pcLinked->canDragObjects();
+}
+
+void ViewProviderLink::dragObject(App::DocumentObject* obj) {
+    if(!linkInfo || !linkInfo->isLinked())
+        throw Base::RuntimeError("ViewProviderLink::dragObject: invalid link");
+    linkInfo->pcLinked->dragObject(obj);
+}
+
+bool ViewProviderLink::canDropObject(App::DocumentObject* obj) const {
+    if(!linkInfo || !linkInfo->isLinked()) return true;
+    return linkInfo->pcLinked->canDropObject(obj);
+}
+
+bool ViewProviderLink::canDropObjects() const {
+    if(!linkInfo || !linkInfo->isLinked()) return true;
+    return linkInfo->pcLinked->canDropObjects();
+}
+
+void ViewProviderLink::dropObject(App::DocumentObject* obj) {
+    if(linkInfo && linkInfo->isLinked()) {
+        linkInfo->pcLinked->dropObject(obj);
+        return;
+    }
+    std::map<std::string,App::Property*> pmap;
+    getObject()->getPropertyMap(pmap);
+    auto it = pmap.end();
+    const std::string *name;
+    if(!HAS_PROP(Object))
+        throw Base::RuntimeError("ViewProviderLink::dropObject: no link property");
+    static_cast<App::PropertyLink*>(it->second)->setValue(obj);
+}
+
 // Python object -----------------------------------------------------------------------
 
 namespace Gui {

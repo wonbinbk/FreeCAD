@@ -65,6 +65,13 @@ public:
     ViewProviderDocumentObject *getLinkedView(bool recursive) override;
 
     QIcon getIcon(void) const override;
+    
+    bool canDragObjects() const override;
+    bool canDragObject(App::DocumentObject*) const override;
+    void dragObject(App::DocumentObject*) override;
+    bool canDropObjects() const override;
+    bool canDropObject(App::DocumentObject*) const override;
+    void dropObject(App::DocumentObject*) override;
 
     virtual const char * const * getOverlayPixmap(bool xlink) const;
 
