@@ -280,13 +280,10 @@ public:
         }
 
         pcSnapshot->removeAllChildren();
-        if(!Gui::Selection().hasSelection() &&
-           !Gui::Selection().getPreselection().pDocName)
-        {
-            pcSnapshot->resetContext();
-        }
         pcModeSwitch->whichChild = -1;
         pcModeSwitch->removeAllChildren();
+
+        auto childRoot = pcLinked->getChildRoot();
 
         for(int i=0,count=root->getNumChildren();i<count;++i) {
             SoNode *node = root->getChild(i);
@@ -305,12 +302,13 @@ public:
             pcLinkedSwitch->ref();
 
             pcSnapshot->addChild(pcModeSwitch);
-            if(pcChildGroup) {
-                pcModeSwitch->addChild(pcChildGroup);
-                continue;
+            for(int i=0,count=pcLinkedSwitch->getNumChildren();i<count;++i) {
+                auto child = pcLinkedSwitch->getChild(i);
+                if(pcChildGroup && child==childRoot)
+                    pcModeSwitch->addChild(pcChildGroup);
+                else
+                    pcModeSwitch->addChild(child);
             }
-            for(int i=0,count=pcLinkedSwitch->getNumChildren();i<count;++i)
-                pcModeSwitch->addChild(pcLinkedSwitch->getChild(i));
         }
         updateSwitch();
         return pcSnapshot;
@@ -385,7 +383,7 @@ public:
         return 0;
     }
 
-    bool getElementPicked(bool addname, 
+    bool getElementPicked(bool addname, int type, 
             const SoPickedPoint *pp, std::stringstream &str) const 
     {
         if(!pp || !isLinked())
@@ -397,13 +395,16 @@ public:
             str << getLinkedName() <<'.';
         }
         
-        if(pcChildGroup) {
+        auto pcSwitch = pcSwitches[type];
+        if(pcChildGroup && pcSwitch && 
+            pcSwitch->getChild(pcSwitch->whichChild.getValue())==pcChildGroup)
+        {
             SoPath *path = pp->getPath();
             int index = path->findNode(pcChildGroup);
             if(index<=0) return false;
             auto it = nodeMap.find(path->getNode(index+1));
             if(it==nodeMap.end()) return false;
-            return it->second->getElementPicked(true,pp,str);
+            return it->second->getElementPicked(true,SnapshotContainer,pp,str);
         }else
             str<<pcLinked->getElementPicked(pp);
         return true;
@@ -443,7 +444,11 @@ public:
             (*path)->append(pcSwitches[type]);
         }
         if(*subname == 0) return true;
-        if(!pcChildGroup) {
+
+        auto pcSwitch = pcSwitches[type];
+        if(!pcChildGroup || !pcSwitch ||
+            pcSwitch->getChild(pcSwitch->whichChild.getValue())!=pcChildGroup)
+        {
             det = pcLinked->getDetailPath(subname,path);
             return true;
         }
@@ -628,7 +633,9 @@ void ViewProviderLink::getNodeNames(QMap<SoNode*, QString> &nodeNames) const {
 
 std::string ViewProviderLink::getElementPicked(const SoPickedPoint *pp) const {
     std::stringstream str;
-    if(linkInfo && linkInfo->getElementPicked(false,pp,str))
+    if(linkInfo && 
+       linkInfo->getElementPicked(false,
+            linkTransform?LinkInfo::SnapshotVisible:LinkInfo::SnapshotTransform,pp,str))
         return str.str();
     return std::string();
 }
