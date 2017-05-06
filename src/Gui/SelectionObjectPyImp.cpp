@@ -110,7 +110,12 @@ Py::Object SelectionObjectPy::getObject(void) const
 
 Py::Tuple SelectionObjectPy::getSubObjects(void) const
 {
-    std::vector<PyObject *> objs = getSelectionObjectPtr()->getObject()->getPySubObjects(getSelectionObjectPtr()->getSubNames());
+    std::vector<PyObject *> objs;
+
+    for(const auto &subname : getSelectionObjectPtr()->getSubNames()) {
+        auto obj = getSelectionObjectPtr()->getObject()->getPySubObject(subname.c_str());
+        if(obj) objs.push_back(obj);
+    }
 
     Py::Tuple temp(objs.size());
     Py::sequence_index_type index = 0;

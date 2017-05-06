@@ -66,11 +66,12 @@ public:
     /// to the viewprovider object when it is initiated
     virtual const char* getViewProviderExtensionName(void) const {return "";}
 
-    /** Get the python sub objects by name (e.g. by the selection)
-     * @sa DocumentObject::getPySubObjects()
+    /** Get the python sub object by name (e.g. by the selection)
+     * @sa DocumentObject::getPySubObject()
      */
-    virtual std::vector<PyObject *> getExtendedPySubObjects(
-            const std::vector<std::string>&, const Base::Matrix4D &, bool transform) const;
+    virtual PyObject * extensionGetPySubObjects(const char * /*element*/,
+            const Base::Matrix4D & /*mat*/, bool /*transform*/) const
+        {return 0;}
 };
 
 } //App

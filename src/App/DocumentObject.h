@@ -201,9 +201,8 @@ public:
 
     /** Get the python sub objects by name (e.g. by the selection)
      *
-     * @param elements: vector of strings which are dot separated names to
-     * refer to a sub object. An empty string can be used to refer to the
-     * object itself
+     * @param element: a string which is dot separated name to refer to a sub
+     * object. An empty string can be used to refer to the object itself
      *
      * @param mat: the transformation matrix to be applied to the returned
      * returned object
@@ -211,7 +210,7 @@ public:
      * @param transform: if ture, apply object's own placement on to returned
      * shape before appling \c mat.
      */
-    virtual std::vector<PyObject *> getPySubObjects(const std::vector<std::string> &elements,
+    virtual PyObject *getPySubObject(const char *element,
             const Base::Matrix4D &mat = Base::Matrix4D(), bool transform=true) const;
 
     /** Return the linked object with optional transformation

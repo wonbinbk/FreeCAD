@@ -47,7 +47,7 @@ public:
 
     PyObject* getExtensionPyObject(void) override;
 
-    std::vector<PyObject *> getExtendedPySubObjects(const std::vector<std::string>&, 
+    PyObject *extensionGetPySubObjects(const char *element, 
             const Base::Matrix4D &mat, bool transform) const override;
 
 protected:

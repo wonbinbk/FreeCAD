@@ -329,7 +329,12 @@ PyObject*  DocumentObjectPy::getSubObject(PyObject *args)
             subs.push_back(PyString_AsString(item));
         }
     }
-    auto ret = getDocumentObjectPtr()->getPySubObjects(subs);
+
+    std::vector<PyObject *> ret;
+    for(const auto &sub : subs) {
+        auto obj = getDocumentObjectPtr()->getPySubObject(sub.c_str());
+        if(obj) ret.push_back(obj);
+    }
     if(ret.empty())
         Py_Return;
     if(single)

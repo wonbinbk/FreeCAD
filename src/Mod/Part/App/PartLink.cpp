@@ -122,11 +122,10 @@ App::DocumentObjectExecReturn *Link::buildShape(bool silent) {
 #endif
 }
 
-std::vector<PyObject *> Link::getPySubObjects(
-    const std::vector<std::string>& elements, const Base::Matrix4D &mat, bool transform) const 
+PyObject *Link::getPySubObject(const char *element, const Base::Matrix4D &mat, bool transform) const 
 {
     // bypass Part::Feature's handling
-    return DocumentObject::getPySubObjects(elements,mat,transform);
+    return DocumentObject::getPySubObject(element,mat,transform);
 }
 
 void Link::onChanged(const App::Property* prop)

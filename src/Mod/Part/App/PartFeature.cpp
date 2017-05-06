@@ -109,10 +109,11 @@ namespace Part {
 Py::Object shape2pyshape(const TopoDS_Shape &shape);
 }
 
-std::vector<PyObject *> Feature::getPySubObjects(
-    const std::vector<std::string>& elements, const Base::Matrix4D &mat, bool transform) const 
+PyObject * Feature::getPySubObject(
+        const char *element, const Base::Matrix4D &mat, bool transform) const 
 {
-    std::vector<PyObject *> ret;
+    auto ret = App::DocumentObject::getPySubObject(element,mat,transform);
+    if(ret) return ret;
 
     TopoDS_Shape shape = Shape.getValue();
     if(!transform)
@@ -125,17 +126,24 @@ std::vector<PyObject *> Feature::getPySubObjects(
                  fabs(vec.x-vec.z)>Precision::SquareConfusion() ||
                  fabs(vec.z-vec.y)>Precision::SquareConfusion();
 
-    for(const auto &element : elements) {
-        const TopoDS_Shape &sub = element.empty()?shape:s.getSubShape(element.c_str());
-        if(sub.IsNull()) continue;
+    try {
+        const TopoDS_Shape &sub = (element==0||*element==0)?shape:s.getSubShape(element);
+        if(sub.IsNull()) return 0;
         TopoShape ts(sub);
         if(gtrsf) // WARNING: non-uniform scaling is dangerous and slowwww
             ts.transformGeometry(mat);
         else
             ts.transformShape(mat,false);
-        ret.push_back(Py::new_reference_to(shape2pyshape(ts.getShape())));
+        return Py::new_reference_to(shape2pyshape(ts.getShape()));
+    }catch(Standard_Failure &e) {
+        std::string str;
+        Standard_CString msg = e.GetMessageString();
+        str += typeid(e).name();
+        str += " ";
+        if (msg) {str += msg;}
+        else     {str += "No OCCT Exception Message";}
+        throw Base::Exception(str.c_str());
     }
-    return ret;
 }
 
 void Feature::onChanged(const App::Property* prop)

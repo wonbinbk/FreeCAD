@@ -55,12 +55,11 @@ LinkExtension::~LinkExtension(void)
 {
 }
 
-std::vector<PyObject *> LinkExtension::getExtendedPySubObjects(
-    const std::vector<std::string>& elements, const Base::Matrix4D &mat, bool transform) const 
+PyObject *LinkExtension::extensionGetPySubObjects(const char *element,
+                            const Base::Matrix4D &mat, bool transform) const 
 {
-    std::vector<PyObject *> ret;
     auto object = LinkedObject.getValue();
-    if(!object) return ret;
+    if(!object) return 0;
 
     Base::Matrix4D matNext = mat;
     if(transform)
@@ -69,30 +68,7 @@ std::vector<PyObject *> LinkExtension::getExtendedPySubObjects(
     s.scale(LinkScale.getValue());
     matNext *= s;
 
-    auto ext = object->getExtensionByType<GeoFeatureGroupExtension>(true);
-    if(!ext)
-        return object->getPySubObjects(elements,matNext,LinkTransform.getValue());
-
-    if(LinkTransform.getValue()) 
-        matNext *= ext->placement().getValue().toMatrix();
-
-    //TODO: shall we put this into GeoFeatureGroupExtension itself?
-    auto children = ext->getGeoSubObjects();
-    for(const std::string &element : elements) {
-        auto pos = element.find('.');
-        std::string name(pos==std::string::npos?element:element.substr(0,pos));
-        for(auto child : children) {
-            if(!child || !child->getNameInDocument() || 
-               name!=child->getNameInDocument())
-                continue;
-            std::vector<std::string> sub;
-            sub.emplace_back(pos==std::string::npos?std::string():element.substr(pos+1));
-            auto cret = child->getPySubObjects(sub,matNext,true);
-            ret.insert(ret.end(),cret.begin(),cret.end());
-            break;
-        }
-    }
-    return ret;
+    return object->getPySubObject(element,matNext,LinkTransform.getValue());
 }
 
 DocumentObject *LinkExtension::getLinkedObjectExt(bool recurse, Base::Matrix4D *mat, bool transform)
