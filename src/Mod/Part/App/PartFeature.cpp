@@ -119,11 +119,21 @@ std::vector<PyObject *> Feature::getPySubObjects(
         shape.Location(TopLoc_Location());
     TopoShape s(shape);
 
+    // check for uniform scaling
+    Base::Vector3d vec = mat*Base::Vector3d(1.0,1.0,1.0) - mat*Base::Vector3d();
+    bool gtrsf = fabs(vec.x-vec.y)>Precision::SquareConfusion() ||
+                 fabs(vec.x-vec.z)>Precision::SquareConfusion() ||
+                 fabs(vec.z-vec.y)>Precision::SquareConfusion();
+
     for(const auto &element : elements) {
         const TopoDS_Shape &sub = element.empty()?shape:s.getSubShape(element.c_str());
         if(sub.IsNull()) continue;
-        ret.push_back(Py::new_reference_to(
-                    shape2pyshape(TopoShape(sub).transformGShape(mat))));
+        TopoShape ts(sub);
+        if(gtrsf) // WARNING: non-uniform scaling is dangerous and slowwww
+            ts.transformGeometry(mat);
+        else
+            ts.transformShape(mat,false);
+        ret.push_back(Py::new_reference_to(shape2pyshape(ts.getShape())));
     }
     return ret;
 }
