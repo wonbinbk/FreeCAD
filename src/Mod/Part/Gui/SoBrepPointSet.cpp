@@ -75,13 +75,14 @@ void checkRenderCaching(SoAction *action, bool enable,
 
     if(enable && 
        (Gui::Selection().hasSelection() ||
-        Gui::Selection().getPreselection().pDocName))
+        Gui::SoFCUnifiedSelection::hasHighlight()))
+    {
         // only turn caching back on when there is no selection nor preselection
         enable = false;
+    }
 
     if(canSetRenderCaching==1 && enable==renderCaching)
         return;
-    renderCaching = enable;
 
     for(int i=0,c=path->getLength();i<c;++i) {
         SoNode *node = path->getNodeFromTail(i);
@@ -96,6 +97,7 @@ void checkRenderCaching(SoAction *action, bool enable,
             canSetRenderCaching = 1;
         }
         sep->renderCaching = enable?SoSeparator::AUTO:SoSeparator::OFF;
+        renderCaching = enable;
         return;
     }
 }
@@ -154,7 +156,7 @@ void SoBrepPointSet::GLRender(SoGLRenderAction *action)
             return;
     }
 
-    if(checkCaching) 
+    if(checkCaching)
         PartGui::checkRenderCaching(action,true,canSetRenderCaching,renderCaching);
 
     inherited::GLRender(action);

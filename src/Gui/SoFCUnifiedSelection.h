@@ -83,6 +83,8 @@ public:
 
     bool checkSelectionStyle(int type, ViewProvider *vp);
 
+    static bool hasHighlight();
+
     friend class View3DInventorViewer;
 protected:
     virtual ~SoFCUnifiedSelection();

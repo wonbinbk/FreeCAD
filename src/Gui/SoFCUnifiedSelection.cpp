@@ -149,6 +149,10 @@ void SoFCUnifiedSelection::finish()
     atexit_cleanup();
 }
 
+bool SoFCUnifiedSelection::hasHighlight() {
+    return currenthighlight != NULL;
+}
+
 void SoFCUnifiedSelection::applySettings()
 {
     float transparency;

@@ -459,7 +459,7 @@ void ViewProviderPartExt::attach(App::DocumentObject *pcFeat)
     // Workaround for #0000433, i.e. use SoSeparator instead of SoGroup
     SoGroup* pcNormalRoot = new SoSeparator();
     SoGroup* pcFlatRoot = new SoSeparator();
-    SoGroup* pcWireframeRoot = new SoSeparator();
+    SoSeparator* pcWireframeRoot = new SoSeparator();
     SoGroup* pcPointsRoot = new SoSeparator();
 
     // enable two-side rendering
@@ -497,6 +497,13 @@ void ViewProviderPartExt::attach(App::DocumentObject *pcFeat)
     // edges and points
     pcWireframeRoot->addChild(wireframe);
     pcWireframeRoot->addChild(pcPointsRoot);
+
+    // This pcWireframeRoot somehow can cache its two child SoSeparator. Which
+    // cause problem when shared nodes is in wire frame display mode. Why other
+    // separators don't do this.  Maybe one of the rules for separator auto
+    // cache is to turn on caching if all its children are separators?
+    pcWireframeRoot->renderCaching = SoSeparator::OFF;
+
 
     // normal viewing with edges and points
     pcPointsRoot->addChild(pcPointBind);
