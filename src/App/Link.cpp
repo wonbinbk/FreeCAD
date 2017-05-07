@@ -61,13 +61,14 @@ PyObject *LinkExtension::extensionGetPySubObjects(const char *element,
     auto object = LinkedObject.getValue();
     if(!object) return 0;
 
-    Base::Matrix4D matNext = mat;
-    if(transform)
-        matNext *= LinkPlacement.getValue().toMatrix();
-    Base::Matrix4D s;
-    s.scale(LinkScale.getValue());
-    matNext *= s;
-
+    Base::Matrix4D _mat;
+    if(transform) {
+        _mat = mat * LinkPlacement.getValue().toMatrix();
+        Base::Matrix4D s;
+        s.scale(LinkScale.getValue());
+        _mat *= s;
+    }
+    const Base::Matrix4D &matNext = transform?_mat:mat;
     return object->getPySubObject(element,matNext,LinkTransform.getValue());
 }
 

@@ -57,6 +57,8 @@
 #include "PartFeature.h"
 #include "PartFeaturePy.h"
 
+FC_LOG_LEVEL_INIT("PartFeature", true,true);
+
 using namespace Part;
 
 
@@ -121,10 +123,23 @@ PyObject * Feature::getPySubObject(
     TopoShape s(shape);
 
     // check for uniform scaling
-    Base::Vector3d vec = mat*Base::Vector3d(1.0,1.0,1.0) - mat*Base::Vector3d();
-    bool gtrsf = fabs(vec.x-vec.y)>Precision::SquareConfusion() ||
-                 fabs(vec.x-vec.z)>Precision::SquareConfusion() ||
-                 fabs(vec.z-vec.y)>Precision::SquareConfusion();
+    //
+    // scaling factors are the colum vector length. We use square distance and
+    // ignore the actual scaling signess
+    //
+    bool gtrsf = false;
+    double dx = Base::Vector3d(mat[0][0],mat[1][0],mat[2][0]).Sqr();
+    double dy = Base::Vector3d(mat[0][1],mat[1][1],mat[2][1]).Sqr();
+    if(fabs(dx-dy)>Precision::SquareConfusion()) {
+        FC_TRACE("non-uniform scaling " << dx << ", " << dy);
+        gtrsf = true;
+    } else {
+        double dz = Base::Vector3d(mat[0][2],mat[1][2],mat[2][2]).Sqr();
+        if(fabs(dy-dz)>Precision::SquareConfusion()) {
+            gtrsf = true;
+            FC_TRACE("non-uniform scaling " << dx << ", " << dy << ", " << dz);
+        }
+    }
 
     try {
         const TopoDS_Shape &sub = (element==0||*element==0)?shape:s.getSubShape(element);
