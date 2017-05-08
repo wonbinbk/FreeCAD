@@ -80,9 +80,6 @@ public:
     static BodyBase* findBodyOf(const App::DocumentObject* f);
     virtual PyObject* getPyObject();
 
-    App::DocumentObject *getLinkedObject(bool recurse, 
-            Base::Matrix4D *mat, bool transform) override;
-
 protected:
     /// If BaseFeature is getting changed and Tip points to it reset the Tip
     virtual void onBeforeChange (const App::Property* prop);

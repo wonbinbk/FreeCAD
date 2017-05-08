@@ -108,14 +108,4 @@ PyObject* BodyBase::getPyObject()
     return Py::new_reference_to(PythonObject);
 }
 
-App::DocumentObject *BodyBase::getLinkedObject(bool recurse, Base::Matrix4D *mat, bool transform)
-{
-    auto object = Tip.getValue();
-    if(!object) return 0;
-    if(transform && mat)
-        *mat *= Placement.getValue().toMatrix();
-    if(!recurse) return object;
-    return object->getLinkedObject(true,mat,transform);
-}
-
 } /* Part */
