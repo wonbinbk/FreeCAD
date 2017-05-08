@@ -805,40 +805,42 @@ void SelectionSingleton::rmvSelection(const char* pDocName, const char* pObjectN
 {
     std::vector<SelectionChanges> rmvList;
 
-    for (std::list<_SelObj>::iterator It = _SelList.begin();It != _SelList.end();) {
-        if ((It->DocName == pDocName && !pObjectName) ||
-            (It->DocName == pDocName && pObjectName && It->FeatName == pObjectName && !pSubName) ||
-            (It->DocName == pDocName && pObjectName && It->FeatName == pObjectName && pSubName && It->SubName == pSubName))
-        {
-            // save in tmp. string vars
-            std::string tmpDocName = It->DocName;
-            std::string tmpFeaName = It->FeatName;
-            std::string tmpSubName = It->SubName;
-            std::string tmpTypName = It->TypeName;
+    if(!pDocName) return;
 
-            // destroy the _SelObj item
-            It = _SelList.erase(It);
+    size_t len = pSubName?std::strlen(pSubName):0;
 
-            SelectionChanges Chng;
-            Chng.pDocName  = tmpDocName.c_str();
-            Chng.pObjectName = tmpFeaName.c_str();
-            Chng.pSubName  = tmpSubName.c_str();
-            Chng.pTypeName = tmpTypName.c_str();
-            Chng.Type      = SelectionChanges::RmvSelection;
+    for(auto It=_SelList.begin(),ItNext=It;It!=_SelList.end();It=ItNext) {
+        ++ItNext;
+        if(It->DocName != pDocName) continue;
+        if(pObjectName && *pObjectName && It->FeatName!=pObjectName) continue;
+        if(pSubName && *pSubName && std::strncmp(It->SubName.c_str(),pSubName,len)!=0) continue;
+        if(It->SubName.length()!=len && It->SubName[len]!='.') continue;
 
-            FC_LOG("Rmv Selection "<<
-                (pDocName?pDocName:"(null)")<<'.'<<
-                (pObjectName?pObjectName:"(null)")<<'.' <<
-                (pSubName?pSubName:"(null)"));
+        // save in tmp. string vars
+        std::string tmpDocName = It->DocName;
+        std::string tmpFeaName = It->FeatName;
+        std::string tmpSubName = It->SubName;
+        std::string tmpTypName = It->TypeName;
 
-            Notify(Chng);
-            signalSelectionChanged(Chng);
-      
-            rmvList.push_back(Chng);
-        }
-        else {
-            ++It;
-        }
+        // destroy the _SelObj item
+        It = _SelList.erase(It);
+
+        SelectionChanges Chng;
+        Chng.pDocName  = tmpDocName.c_str();
+        Chng.pObjectName = tmpFeaName.c_str();
+        Chng.pSubName  = tmpSubName.c_str();
+        Chng.pTypeName = tmpTypName.c_str();
+        Chng.Type      = SelectionChanges::RmvSelection;
+
+        FC_LOG("Rmv Selection "<<
+            (pDocName?pDocName:"(null)")<<'.'<<
+            (pObjectName?pObjectName:"(null)")<<'.' <<
+            (pSubName?pSubName:"(null)"));
+
+        Notify(Chng);
+        signalSelectionChanged(Chng);
+    
+        rmvList.push_back(Chng);
     }
 }
 
