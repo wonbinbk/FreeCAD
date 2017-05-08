@@ -469,115 +469,112 @@ SoFCUnifiedSelection::handleEvent(SoHandleEventAction * action)
             SoDetail *detNext = 0;
             SoFullPath *pPath = (pp != NULL) ? (SoFullPath *) pp->getPath() : NULL;
             if(pPath) pPath->ref();
-            ViewProvider *vp = 0;
-            ViewProviderDocumentObject* vpd = 0;
+
+            std::vector<std::pair<ViewProviderDocumentObject*,int> > vps;
             if (this->pcDocument && pPath && pPath->containsPath(action->getCurPath()))
-                vp = this->pcDocument->getViewProviderByPathFromTail(pPath);
-            if (vp && vp->isDerivedFrom(ViewProviderDocumentObject::getClassTypeId()))
-                vpd = static_cast<ViewProviderDocumentObject*>(vp);
-            if (vpd && vpd->useNewSelectionModel() && vpd->isSelectable()) {
+                vps = this->pcDocument->getViewProvidersByPath(pPath);
+            
+            ViewProviderDocumentObject *vpd = vps.empty()?nullptr:vps.begin()->first;
+            if(vpd && vpd->useNewSelectionModel() && vpd->isSelectable()) {
+
+                const auto &pt = pp->getPoint();
                 SoSelectionElementAction::Type type = SoSelectionElementAction::None;
                 std::string documentName = vpd->getObject()->getDocument()->getName();
                 std::string objectName = vpd->getObject()->getNameInDocument();
                 std::string subElementName = vpd->getElementPicked(pp);
-
-                // Hierarchy acending
-                //
-                // If the clicked subelement is already selected, check if there
-                // is an upper hierarchy, and select that hierarchy instead. 
-                //
-                // For example, let's suppose getElementPicked above reports 
-                // 'link.link2.box.Face1', and below Selection().getSelectedElement
-                // returns 'link.link2.box', meaning that 'box' is the current
-                // selected hierarchy, and the user is clicking the box again.
-                // So we shall go up one level, and select 'link.link2'
-                //
-                const char *subSelected = Gui::Selection().getSelectedElement(
-                                            vpd->getObject(),subElementName.c_str());
-
-                FC_TRACE("select " << (subSelected?subSelected:"'null'") << ", " << 
-                        objectName << ", " << subElementName);
                 bool hasNext = false;
-                std::string nextsub;
-                if(subSelected) {
-                    subElementName = subSelected;
-                    const char *next = strrchr(subSelected,'.');
-                    if(next) 
-                        nextsub = std::string(subSelected,next-subSelected);
-                    if(nextsub.length() || *subSelected!=0) {
-                        SoFullPath *pNextPath = 0;
-                        detNext = vpd->getDetailPath(nextsub.c_str(),&pNextPath);
-                        if(pNextPath) {
-                            hasNext = true;
-                            pPath = pNextPath;
-                            det = detNext;
-                            subElementName = subSelected;
-                            FC_TRACE("select next " << objectName << ", " << nextsub);
-                        }
-                    }
-                }
 
-                const auto &pt = pp->getPoint();
                 if (event->wasCtrlDown()) {
-                    if (subSelected) {
-                        Gui::Selection().rmvSelection(documentName.c_str()
-                                          ,objectName.c_str()
-                                          ,subElementName.c_str());
-                        if(hasNext) {
-                            Gui::Selection().addSelection(documentName.c_str()
-                                            ,objectName.c_str()
-                                            ,nextsub.c_str(), pt[0] ,pt[1] ,pt[2]);
-                            type = SoSelectionElementAction::Append;
-                        }else
-                            type = SoSelectionElementAction::Remove;
-                    }
-                    else {
-                        bool ok = Gui::Selection().addSelection(documentName.c_str()
-                                          ,objectName.c_str()
-                                          ,subElementName.c_str()
-                                          ,pt[0] ,pt[1] ,pt[2]);
-                        if (ok)
-                            type = SoSelectionElementAction::Append;
-                        if (mymode == OFF) {
-                            snprintf(buf,512,"Selected: %s.%s.%s (%g, %g, %g)",documentName.c_str()
-                                                       ,objectName.c_str()
-                                                       ,subElementName.c_str()
-                                                       ,fabs(pt[0])>1e-7?pt[0]:0.0
-                                                       ,fabs(pt[1])>1e-7?pt[1]:0.0
-                                                       ,fabs(pt[2])>1e-7?pt[2]:0.0);
+                    bool ok = Gui::Selection().addSelection(documentName.c_str()
+                                        ,objectName.c_str()
+                                        ,subElementName.c_str()
+                                        ,pt[0] ,pt[1] ,pt[2]);
+                    if (ok)
+                        type = SoSelectionElementAction::Append;
+                    if (mymode == OFF) {
+                        snprintf(buf,512,"Selected: %s.%s.%s (%g, %g, %g)",documentName.c_str()
+                                                    ,objectName.c_str()
+                                                    ,subElementName.c_str()
+                                                    ,fabs(pt[0])>1e-7?pt[0]:0.0
+                                                    ,fabs(pt[1])>1e-7?pt[1]:0.0
+                                                    ,fabs(pt[2])>1e-7?pt[2]:0.0);
 
-                            getMainWindow()->showMessage(QString::fromLatin1(buf));
+                        getMainWindow()->showMessage(QString::fromLatin1(buf));
+                    }
+                }else{
+                    // Hierarchy acending
+                    //
+                    // If the clicked subelement is already selected, check if there
+                    // is an upper hierarchy, and select that hierarchy instead. 
+                    //
+                    // For example, let's suppose getElementPicked above reports 
+                    // 'link.link2.box.Face1', and below Selection().getSelectedElement
+                    // returns 'link.link2.box', meaning that 'box' is the current
+                    // selected hierarchy, and the user is clicking the box again.
+                    // So we shall go up one level, and select 'link.link2'
+                    //
+                    const char *subSelected = Gui::Selection().getSelectedElement(
+                                                vpd->getObject(),subElementName.c_str());
+
+                    FC_TRACE("select " << (subSelected?subSelected:"'null'") << ", " << 
+                            objectName << ", " << subElementName);
+                    if(subSelected) {
+                        const char *next = strrchr(subSelected,'.');
+                        std::string nextsub;
+                        if(next) 
+                            nextsub = std::string(subSelected,next-subSelected);
+                        if(nextsub.length() || *subSelected!=0) {
+                            hasNext = true;
+                            subElementName = nextsub;
+                            SoFullPath *pNextPath = 0;
+                            detNext = vpd->getDetailPath(subElementName.c_str(),&pNextPath);
+                            if(pNextPath) {
+                                pPath = pNextPath;
+                                det = detNext;
+                                FC_TRACE("select next " << objectName << ", " << subElementName);
+                            }
                         }
                     }
-                }
-                else { // Ctrl
-                    if (!subSelected) {
-                        FC_TRACE("claring selection");
-                        Gui::Selection().clearSelection(documentName.c_str());
-                        FC_TRACE("adding selection");
-                        bool ok = Gui::Selection().addSelection(documentName.c_str()
-                                              ,objectName.c_str()
-                                              ,subElementName.c_str()
-                                              ,pt[0] ,pt[1] ,pt[2]);
-                        if (ok)
-                            type = SoSelectionElementAction::Append;
+
+                    // If no next hierarchy is found, do another try on view provider hierarchies, 
+                    // which is used by geo feature group.
+                    if(!hasNext) {
+                        bool found = false;
+                        for(auto it=vps.begin();it!=vps.end();++it) {
+                            auto vpdNext = it->first;
+                            if(Gui::Selection().isSelected(vpdNext->getObject(),"")) {
+                                found = true;
+                                continue;
+                            }
+                            if(!found || !vpdNext->useNewSelectionModel() || !vpdNext->isSelectable())
+                                continue;
+                            hasNext = true;
+                            vpd = vpdNext;
+                            det = 0;
+                            pPath->truncate(it->second+1);
+                            objectName = vpd->getObject()->getNameInDocument();
+                            subElementName = "";
+                            break;
+                        }
                     }
-                    else {
-                        Gui::Selection().clearSelection(documentName.c_str());
-                        bool ok = Gui::Selection().addSelection(documentName.c_str()
-                                              ,objectName.c_str()
-                                              ,hasNext?nextsub.c_str():0 ,pt[0] ,pt[1] ,pt[2]);
-                        if (ok)
-                            type = SoSelectionElementAction::All;
-                    }
+
+                    FC_TRACE("clearing selection");
+                    Gui::Selection().clearSelection(documentName.c_str());
+                    FC_TRACE("add selection");
+                    bool ok = Gui::Selection().addSelection(documentName.c_str()
+                                            ,objectName.c_str()
+                                            ,subElementName.c_str()
+                                            ,pt[0] ,pt[1] ,pt[2]);
+                    if (ok)
+                        type = hasNext?SoSelectionElementAction::All:SoSelectionElementAction::Append;
 
                     if (mymode == OFF) {
                         snprintf(buf,512,"Selected: %s.%s.%s (%g, %g, %g)",documentName.c_str()
-                                                   ,objectName.c_str()
-                                                   ,subElementName.c_str()
-                                                   ,fabs(pt[0])>1e-7?pt[0]:0.0
-                                                   ,fabs(pt[1])>1e-7?pt[1]:0.0
-                                                   ,fabs(pt[2])>1e-7?pt[2]:0.0);
+                                                    ,objectName.c_str()
+                                                    ,subElementName.c_str()
+                                                    ,fabs(pt[0])>1e-7?pt[0]:0.0
+                                                    ,fabs(pt[1])>1e-7?pt[1]:0.0
+                                                    ,fabs(pt[2])>1e-7?pt[2]:0.0);
 
                         getMainWindow()->showMessage(QString::fromLatin1(buf));
                     }

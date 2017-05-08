@@ -1010,7 +1010,7 @@ const char *SelectionSingleton::getSelectedElement(App::DocumentObject *obj, con
 
     for(list<_SelObj>::const_iterator It = _SelList.begin();It != _SelList.end();++It) {
         if (It->pObject == obj) {
-            if (!pSubName) {
+            if (!pSubName || *pSubName==0 || It->SubName.empty()) {
                 if(It->SubName.empty())
                     return It->SubName.c_str();
             }else if(strncmp(pSubName,It->SubName.c_str(),It->SubName.length())==0){
