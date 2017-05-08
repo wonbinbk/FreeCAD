@@ -1132,7 +1132,7 @@ public:
 
     void remove(PropertyXLink *l) {
         auto owner = static_cast<DocumentObject*>(l->getContainer());
-        FC_LOG("removing " << (owner->getNameInDocument()?owner->getNameInDocument():""));
+        FC_LOG("removing " << (owner?owner->getNameInDocument():""));
         auto it = links.find(l);
         if(it != links.end()) {
             links.erase(it);
