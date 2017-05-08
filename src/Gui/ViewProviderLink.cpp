@@ -370,7 +370,7 @@ public:
         }else
             subname = element;
 
-        if(!pcChildGroup) {
+        if(!pcChildGroup || !subname || *subname==0) {
             if(pcLinked->isDerivedFrom(ViewProviderLink::getClassTypeId()))
                 return pcLinked->getElementView(subname,psubname);
             if(psubname) *psubname = subname;
