@@ -119,6 +119,50 @@ bool CmdPartDesignPart::isActive(void)
 }
 
 //===========================================================================
+// PartDesign_Link
+//===========================================================================
+
+DEF_STD_CMD_A(CmdPartDesignLink);
+
+CmdPartDesignLink::CmdPartDesignLink()
+  : Command("PartDesign_Link")
+{
+    sAppModule    = "PartDesign";
+    sGroup        = QT_TR_NOOP("PartDesign");
+    sMenuText     = QT_TR_NOOP("Create a link");
+    sToolTipText  = QT_TR_NOOP("Create a link to an object");
+    sWhatsThis    = sToolTipText;
+    sStatusTip    = sToolTipText;
+    sPixmap       = "link";
+}
+
+void CmdPartDesignLink::activated(int iMsg)
+{
+    Q_UNUSED(iMsg);
+    // get the selected object
+    const auto &result = getSelection().getSelection();
+    const char *type = "App::Link";
+    if(result.size() && result.front().pObject && 
+        result.front().pObject->isDerivedFrom(Part::Feature::getClassTypeId()))
+        type = "Part::Link";
+
+    std::string link = getUniqueObjectName("PartDesignLink");
+
+    openCommand("Make Link");
+    doCommand(Doc,"App.ActiveDocument.addObject(\"%s\",\"%s\")",type,link.c_str());
+    if(result.size() && result.front().FeatName && result.front().DocName)
+        doCommand(Doc,"App.ActiveDocument.%s.LinkedObject = App.getDocument('%s').getObject('%s')" ,link.c_str(), 
+                result.front().DocName, result.front().FeatName);
+    commitCommand();
+    updateActive();
+}
+
+bool CmdPartDesignLink::isActive(void)
+{
+    return hasActiveDocument();
+}
+
+//===========================================================================
 // PartDesign_Body
 //===========================================================================
 DEF_STD_CMD_A(CmdPartDesignBody);
@@ -847,6 +891,7 @@ void CreatePartDesignBodyCommands(void)
     Gui::CommandManager &rcCmdMgr = Gui::Application::Instance->commandManager();
 
     rcCmdMgr.addCommand(new CmdPartDesignPart());
+    rcCmdMgr.addCommand(new CmdPartDesignLink());
     rcCmdMgr.addCommand(new CmdPartDesignBody());
     rcCmdMgr.addCommand(new CmdPartDesignMigrate());
     rcCmdMgr.addCommand(new CmdPartDesignMoveTip());
