@@ -1314,15 +1314,11 @@ void DocumentItem::populateItem(DocumentObjectItem *item, bool refresh) {
                 doPopulate = true;
                 break;
             }
-            auto childItem = *it->second->items.begin();
             if(item->object()->canRemoveChildrenFromRoot()) {
                 if(it->second->rootItem) {
                     doPopulate = true;
                     break;
                 }
-            }else if(childItem->requiredAtRoot()){
-                doPopulate = true;
-                break;
             }
         }
         if(!doPopulate) return;
@@ -2163,6 +2159,7 @@ bool DocumentObjectItem::isChildOfItem(DocumentObjectItem* item)
 bool DocumentObjectItem::requiredAtRoot() const{
     if(myData->rootItem) return false;
     for(auto item : myData->items) {
+        if(item == this) continue;
         auto pi = item->getParentItem();
         if(!pi || pi->object()->canRemoveChildrenFromRoot())
             return false;

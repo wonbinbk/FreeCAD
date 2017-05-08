@@ -49,6 +49,7 @@
 #include <App/DocumentObject.h>
 #include <App/DocumentObjectGroup.h>
 #include <App/Transactions.h>
+#include <App/GeoFeatureGroupExtension.h>
 
 #include "Application.h"
 #include "MainWindow.h"
@@ -1484,11 +1485,21 @@ void Document::handleChildren3D(ViewProvider* viewProvider)
         // size not the same -> build up the list new
         if (childGroup->getNumChildren() != static_cast<int>(children.size())) {
 
+            std::set<ViewProviderDocumentObject*> oldChildren;
+            for(int i=0,count=childGroup->getNumChildren();i<count;++i) {
+                auto it = d->_CoinMap.find(static_cast<SoSeparator*>(childGroup->getChild(i)));
+                if(it == d->_CoinMap.end()) continue;
+                oldChildren.insert(it->second);
+            }
+
             childGroup->removeAllChildren();
 
             for (std::vector<App::DocumentObject*>::iterator it=children.begin();it!=children.end();++it) {
                 ViewProvider* ChildViewProvider = getViewProvider(*it);
                 if (ChildViewProvider) {
+                    auto itOld = oldChildren.find(static_cast<ViewProviderDocumentObject*>(ChildViewProvider));
+                    if(itOld!=oldChildren.end()) oldChildren.erase(itOld);
+
                     SoSeparator* childRootNode =  ChildViewProvider->getRoot();
                     childGroup->addChild(childRootNode);
 
@@ -1505,6 +1516,18 @@ void Document::handleChildren3D(ViewProvider* viewProvider)
                             activeView->getViewer()->removeViewProvider(ChildViewProvider);
                         }
                     }
+                }
+            }
+
+            // add the remaining old children back to toplevel invertor node
+            for(auto vpd : oldChildren) {
+                auto obj = vpd->getObject();
+                if(!obj || !obj->getNameInDocument() || App::GeoFeatureGroupExtension::getGroupOfObject(obj,false))
+                    continue;
+                for (BaseView* view : d->baseViews) {
+                    View3DInventor *activeView = dynamic_cast<View3DInventor *>(view);
+                    if (activeView && !activeView->getViewer()->hasViewProvider(vpd))
+                        activeView->getViewer()->addViewProvider(vpd);
                 }
             }
         }
