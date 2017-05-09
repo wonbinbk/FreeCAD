@@ -24,18 +24,16 @@
                 </UserDocu>
             </Documentation>
         </Methode>
-        <Attribute Name="LinkedDocumentPath" ReadOnly="true">
+        <Methode Name="getLinkedDocumentPath">
             <Documentation>
                 <UserDocu>Returned the linked document file path</UserDocu>
             </Documentation>
-            <Parameter Name="LinkedDocumentPath" Type="String"/>
-        </Attribute>
-        <Attribute Name="LinkedObjectName" ReadOnly="true">
+        </Methode>
+        <Methode Name="getLinkedObjectName">
             <Documentation>
                 <UserDocu>Returned the linked object name</UserDocu>
             </Documentation>
-            <Parameter Name="LinkedObjectName" Type="String"/>
-        </Attribute>
+        </Methode>
         <CustomAttributes />
     </PythonExport>
 </GenerateModel>

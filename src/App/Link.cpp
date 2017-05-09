@@ -28,6 +28,7 @@
 #include "GeoFeatureGroupExtension.h"
 #include "Link.h"
 #include "LinkExtensionPy.h"
+#include "LinkPy.h"
 
 using namespace App;
 
@@ -111,6 +112,14 @@ Link::Link() {
 DocumentObject *Link::getLinkedObject(bool recurse, Base::Matrix4D *mat, bool transform)
 {
     return getLinkedObjectExt(recurse,mat,transform);
+}
+
+PyObject *Link::getPyObject(void) {
+    if (PythonObject.is(Py::_None())){
+        auto obj = new LinkPy(this);
+        PythonObject = Py::Object(obj,true);
+    }
+    return Py::new_reference_to(PythonObject);
 }
 
 //--------------------------------------------------------------------------------

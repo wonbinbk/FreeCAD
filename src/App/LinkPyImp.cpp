@@ -22,69 +22,44 @@
 
 #include "PreCompiled.h"
 
+#include <Base/GeometryPyCXX.h>
+#include <Base/PlacementPy.h>
 #include "Link.h"
-
+#include "LinkPy.h"
 #include "LinkExtensionPy.h"
-#include "LinkExtensionPy.cpp"
+#include "LinkPy.cpp"
 
 using namespace App;
 
 // returns a string which represent the object e.g. when printed in python
-std::string LinkExtensionPy::representation(void) const
+std::string LinkPy::representation(void) const
 {
-    auto object = getLinkExtensionPtr();
-    const char *path = object->LinkedObject.getDocumentPath();
-    const char *name = object->LinkedObject.getObjectName();
-    std::stringstream str;
-    str << "<Link";
-    if(path) 
-        str << ' ' << path <<'.';
-    else
-        str << ' ';
-    if(name) str << name;
-    str << '>';
-    return str.str();
+    return static_cast<LinkExtensionPy*>(getLinkPtr()->getExtensionPyObject())->representation();
 }
 
-PyObject *LinkExtensionPy::getLinkedObjectName(PyObject *arg)
-{
-    if (!PyArg_ParseTuple(arg, ""))
-        return 0;
-    auto object = this->getLinkExtensionPtr();
-    const char *name = object->LinkedObject.getObjectName();
-    return Py_BuildValue("s", name?name:"");
+void LinkPy::setPlacement(Py::Object arg) {
+    PyObject* p = arg.ptr();
+    if (PyObject_TypeCheck(p, &(Base::PlacementPy::Type))) {
+        Base::Placement* trf = static_cast<Base::PlacementPy*>(p)->getPlacementPtr();
+        getLinkPtr()->LinkPlacement.setValue(*trf);
+    }
+    else {
+        std::string error = std::string("type must be 'Placement', not ");
+        error += p->ob_type->tp_name;
+        throw Py::TypeError(error);
+    }
 }
 
-PyObject* LinkExtensionPy::getLinkedDocumentPath(PyObject *arg)
-{
-    if (!PyArg_ParseTuple(arg, ""))
-        return 0;
-    auto object = this->getLinkExtensionPtr();
-    const char *name = object->LinkedObject.getDocumentPath();
-    return Py_BuildValue("s", name?name:"");
+Py::Object LinkPy::getPlacement() const{
+    return Py::Placement(getLinkPtr()->LinkPlacement.getValue());
 }
 
-PyObject*  LinkExtensionPy::setLink(PyObject *args)
-{
-    char *sName,*sPath=0;
-    PyObject *relative=Py_True;
-    std::string name, path;
-    if (!PyArg_ParseTuple(args, "s|sO", &sName,&sPath,&relative))
-        return 0;
-
-    auto object = this->getLinkExtensionPtr();
-    object->LinkedObject.setValue(sName,sPath,PyObject_IsTrue(relative)?1:0);
-    auto linked = object->LinkedObject.getValue();
-    if(!linked) Py_Return;
-    return linked->getPyObject();
-}
-
-PyObject *LinkExtensionPy::getCustomAttributes(const char* /*attr*/) const
+PyObject *LinkPy::getCustomAttributes(const char* /*attr*/) const
 {
     return 0;
 }
 
-int LinkExtensionPy::setCustomAttributes(const char* /*attr*/, PyObject* /*obj*/)
+int LinkPy::setCustomAttributes(const char* /*attr*/, PyObject* /*obj*/)
 {
     return 0; 
 }

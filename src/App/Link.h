@@ -65,6 +65,8 @@ public:
     }
 
     DocumentObject *getLinkedObject(bool recurse, Base::Matrix4D *mat, bool transform) override;
+
+    PyObject* getPyObject(void) override;
 };
 
 // typedef FeaturePythonT<Link> LinkPython;
