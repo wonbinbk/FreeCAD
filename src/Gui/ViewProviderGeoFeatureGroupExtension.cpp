@@ -97,14 +97,10 @@ void ViewProviderGeoFeatureGroupExtension::extensionUpdateData(const App::Proper
 std::vector< App::DocumentObject* > ViewProviderGeoFeatureGroupExtension::getLinkedObjects(App::DocumentObject* obj) {
     std::vector< App::DocumentObject* > result;
 
-    if(!obj || !obj->getNameInDocument())
-        return result;
-
-    auto vp = Application::Instance->getViewProvider(obj);
     // do not check objects under a linking view provider or another geo group
-    if(!vp || !vp->isDerivedFrom(ViewProviderDocumentObject::getClassTypeId()) ||
-       static_cast<ViewProviderDocumentObject*>(vp)->getLinkedView()!=vp ||
-       vp->hasExtension(ViewProviderGeoFeatureGroupExtension::getExtensionClassTypeId()))
+    if(!obj || !obj->getNameInDocument() || 
+       obj->getLinkedObject(false)!=obj || 
+       obj->hasExtension(App::GeoFeatureGroupExtension::getExtensionClassTypeId()))
         return result;
 
     //we get all linked objects, and that recursively
