@@ -812,9 +812,15 @@ void SelectionSingleton::rmvSelection(const char* pDocName, const char* pObjectN
     for(auto It=_SelList.begin(),ItNext=It;It!=_SelList.end();It=ItNext) {
         ++ItNext;
         if(It->DocName != pDocName) continue;
+        // if no object name is specified, remove all objects
         if(pObjectName && *pObjectName && It->FeatName!=pObjectName) continue;
-        if(pSubName && *pSubName && std::strncmp(It->SubName.c_str(),pSubName,len)!=0) continue;
-        if(It->SubName.length()!=len && It->SubName[len]!='.') continue;
+        // if no subname is specified, remove all subobjects of the matching object
+        if(pSubName && *pSubName) {
+            // otherwise, match subojects with common prefix, separated by '.'
+            if(std::strncmp(It->SubName.c_str(),pSubName,len)!=0 ||
+               (It->SubName.length()!=len && It->SubName[len]!='.'))
+                continue;
+        }
 
         // save in tmp. string vars
         std::string tmpDocName = It->DocName;
