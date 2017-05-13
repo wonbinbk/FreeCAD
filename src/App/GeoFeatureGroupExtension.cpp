@@ -164,6 +164,8 @@ DocumentObject* GeoFeatureGroupExtension::getGroupOfObject(const DocumentObject*
 PyObject *GeoFeatureGroupExtension::extensionGetPySubObjects(
     const char *element, const Base::Matrix4D &mat, bool transform) const 
 {
+    if(!element || *element==0) return 0;
+
     std::vector<PyObject *> ret;
     Base::Matrix4D _mat;
     if(transform) 
@@ -174,13 +176,11 @@ PyObject *GeoFeatureGroupExtension::extensionGetPySubObjects(
     std::string _name;
     const char *name = element;
     const char *next = 0;
-    if(element) {
-        next = strchr(element,'.');
-        if(next) {
-            _name = std::string(element,next-element);
-            name = _name.c_str();
-            ++next;
-        }
+    next = strchr(element,'.');
+    if(next) {
+        _name = std::string(element,next-element);
+        name = _name.c_str();
+        ++next;
     }
     for(auto child : children) {
         if(!child || !child->getNameInDocument() || 
