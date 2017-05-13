@@ -439,7 +439,7 @@ PyObject *DocumentObject::getPySubObject(
 {
     auto exts = getExtensionsDerivedFromType<App::DocumentObjectExtension>();
     for(auto ext : exts) {
-        auto obj = ext->extensionGetPySubObjects(element,mat,transform);
+        auto obj = ext->extensionGetPySubObject(element,mat,transform);
         if(obj) return obj;
     }
     return 0;

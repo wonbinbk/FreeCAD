@@ -56,7 +56,7 @@ LinkExtension::~LinkExtension(void)
 {
 }
 
-PyObject *LinkExtension::extensionGetPySubObjects(const char *element,
+PyObject *LinkExtension::extensionGetPySubObject(const char *element,
                             const Base::Matrix4D &mat, bool transform) const 
 {
     auto object = LinkedObject.getValue();

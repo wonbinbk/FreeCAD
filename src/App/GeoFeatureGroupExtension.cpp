@@ -161,7 +161,7 @@ DocumentObject* GeoFeatureGroupExtension::getGroupOfObject(const DocumentObject*
 }
 
 
-PyObject *GeoFeatureGroupExtension::extensionGetPySubObjects(
+PyObject *GeoFeatureGroupExtension::extensionGetPySubObject(
     const char *element, const Base::Matrix4D &mat, bool transform) const 
 {
     if(!element || *element==0) return 0;

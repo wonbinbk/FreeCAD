@@ -69,7 +69,7 @@ public:
     /** Get the python sub object by name (e.g. by the selection)
      * @sa DocumentObject::getPySubObject()
      */
-    virtual PyObject * extensionGetPySubObjects(const char * /*element*/,
+    virtual PyObject * extensionGetPySubObject(const char * /*element*/,
             const Base::Matrix4D & /*mat*/, bool /*transform*/) const
         {return 0;}
 };

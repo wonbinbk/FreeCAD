@@ -77,7 +77,7 @@ public:
                !obj->hasExtension(GeoFeatureGroupExtension::getExtensionClassTypeId());
     }
 
-    PyObject *extensionGetPySubObjects(const char *element, 
+    PyObject *extensionGetPySubObject(const char *element, 
             const Base::Matrix4D &mat, bool transform) const override;
 };
 
