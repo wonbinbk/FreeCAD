@@ -97,7 +97,6 @@ using namespace Gui;
 
 SoFullPath * Gui::SoFCUnifiedSelection::currenthighlight = NULL;
 
-
 // *************************************************************************
 
 SO_NODE_SOURCE(SoFCUnifiedSelection);
@@ -120,6 +119,9 @@ SoFCUnifiedSelection::SoFCUnifiedSelection() : pcDocument(0)
     SO_NODE_DEFINE_ENUM_VALUE(HighlightModes, OFF);
     SO_NODE_SET_SF_ENUM_TYPE (highlightMode, HighlightModes);
 
+    detailPath = static_cast<SoFullPath*>(new SoPath(20));
+    detailPath->ref();
+
     highlighted = false;
     preSelection = -1;
 }
@@ -134,6 +136,10 @@ SoFCUnifiedSelection::~SoFCUnifiedSelection()
     if (currenthighlight != NULL) {
         currenthighlight->unref();
         currenthighlight = NULL;
+    }
+    if (detailPath) {
+        detailPath->unref();
+        detailPath = NULL;
     }
 }
 
@@ -283,8 +289,8 @@ void SoFCUnifiedSelection::doAction(SoAction *action)
             App::DocumentObject* obj = doc->getObject(selaction->SelChange.pObjectName);
             ViewProvider*vp = Application::Instance->getViewProvider(obj);
             if (vp && vp->useNewSelectionModel() && vp->isSelectable()) {
-                SoFullPath *path = 0;
-                SoDetail* detail = vp->getDetailPath(selaction->SelChange.pSubName,&path);
+                detailPath->truncate(0);
+                SoDetail* detail = vp->getDetailPath(selaction->SelChange.pSubName,detailPath,true);
                 SoSelectionElementAction::Type type = SoSelectionElementAction::None;
                 if (selaction->SelChange.Type == SelectionChanges::AddSelection) {
                     if (detail)
@@ -303,12 +309,12 @@ void SoFCUnifiedSelection::doAction(SoAction *action)
                     SoSelectionElementAction action(type);
                     action.setColor(this->colorSelection.getValue());
                     action.setElement(detail);
-                    if(path)
-                        action.apply(path);
+                    if(detailPath->getLength())
+                        action.apply(detailPath);
                     else
                         action.apply(vp->getRoot());
                 }
-                if(path) path->unref();
+                detailPath->truncate(0);
                 delete detail;
             }
         }
@@ -468,7 +474,6 @@ SoFCUnifiedSelection::handleEvent(SoHandleEventAction * action)
             const SoDetail *det = pp?pp->getDetail():0;
             SoDetail *detNext = 0;
             SoFullPath *pPath = (pp != NULL) ? (SoFullPath *) pp->getPath() : NULL;
-            if(pPath) pPath->ref();
 
             std::vector<std::pair<ViewProviderDocumentObject*,int> > vps;
             if (this->pcDocument && pPath && pPath->containsPath(action->getCurPath()))
@@ -526,10 +531,10 @@ SoFCUnifiedSelection::handleEvent(SoHandleEventAction * action)
                         if(nextsub.length() || *subSelected!=0) {
                             hasNext = true;
                             subElementName = nextsub;
-                            SoFullPath *pNextPath = 0;
-                            detNext = vpd->getDetailPath(subElementName.c_str(),&pNextPath);
-                            if(pNextPath) {
-                                pPath = pNextPath;
+                            detailPath->truncate(0);
+                            detNext = vpd->getDetailPath(subElementName.c_str(),detailPath,true);
+                            if(detailPath->getLength()) {
+                                pPath = detailPath;
                                 det = detNext;
                                 FC_TRACE("select next " << objectName << ", " << subElementName);
                             }
@@ -592,7 +597,6 @@ SoFCUnifiedSelection::handleEvent(SoHandleEventAction * action)
                 }
             } // picked point
             if(detNext) delete detNext;
-            if(pPath) pPath->unref();
         } // mouse release
     }
 

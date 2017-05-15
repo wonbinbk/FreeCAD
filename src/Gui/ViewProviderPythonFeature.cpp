@@ -436,10 +436,8 @@ SoDetail* ViewProviderPythonFeatureImp::getDetail(const char* name) const
 }
 
 ViewProviderPythonFeatureImp::ValueT ViewProviderPythonFeatureImp::getDetailPath(
-        const char* name, SoFullPath **ppath, SoDetail **pdet) const
+        const char* name, SoFullPath *path, bool append, SoDetail *&det) const
 {
-    bool freepath = false;
-    // Run the onChanged method of the proxy object.
     Base::PyGILStateLocker lock;
     try {
         App::Property* proxy = object->getPropertyByName("Proxy");
@@ -448,20 +446,16 @@ ViewProviderPythonFeatureImp::ValueT ViewProviderPythonFeatureImp::getDetailPath
             if (vp.hasAttr(std::string("getDetailPath"))) {
                 Py::Callable method(vp.getAttr(std::string("getDetailPath")));
                 PyObject* pivy = 0;
-                if(*ppath == 0) {
-                    freepath = true;
-                    *ppath = (SoFullPath*)(new SoPath);
-                    (*ppath)->ref();
-                }
-                pivy = Base::Interpreter().createSWIGPointerObj("pivy.coin", "SoFullPath *", (void*)*ppath, 0);
-                Py::Tuple args(2);
+                pivy = Base::Interpreter().createSWIGPointerObj("pivy.coin", "SoFullPath *", (void*)path, 0);
+                Py::Tuple args(3);
                 args.setItem(0, Py::String(name));
                 args.setItem(1, Py::Object(pivy, true));
-                Py::Object det(method.apply(args));
+                args.setItem(2, Py::Boolean(append));
+                Py::Object pyDet(method.apply(args));
                 void* ptr = 0;
-                Base::Interpreter().convertSWIGPointerObj("pivy.coin", "SoDetail *", det.ptr(), &ptr, 0);
+                Base::Interpreter().convertSWIGPointerObj("pivy.coin", "SoDetail *", pyDet.ptr(), &ptr, 0);
                 SoDetail* detail = reinterpret_cast<SoDetail*>(ptr);
-                *pdet = detail ? detail->copy() : 0;
+                det = detail ? detail->copy() : 0;
                 return Accepted;
             }
         }
@@ -474,10 +468,6 @@ ViewProviderPythonFeatureImp::ValueT ViewProviderPythonFeatureImp::getDetailPath
         e.ReportException();
     }
 
-    if(freepath) {
-        (*ppath)->unref();
-        *ppath = 0;
-    }
     return NotImplemented;
 }
 

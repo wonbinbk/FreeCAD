@@ -101,7 +101,7 @@ private:
     Gui::Document       *pcDocument;
 
     static SoFullPath * currenthighlight;
-    static SoNode *currenthighlightRoot;
+    SoFullPath * detailPath;
 
     SbBool highlighted;
     // -1 = not handled, 0 = not selected, 1 = selected

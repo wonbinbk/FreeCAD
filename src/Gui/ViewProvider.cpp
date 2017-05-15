@@ -710,3 +710,19 @@ std::vector< App::DocumentObject* > ViewProvider::claimChildren3D(void) const {
 std::string ViewProvider::getElementPicked(const SoPickedPoint *pp) const {
     return getElement(pp?pp->getDetail():0);
 }
+
+SoDetail *ViewProvider::getDetailPath(const char *subelement, SoFullPath *pPath, bool append) const {
+    auto len = pPath->getLength();
+    if(append) {
+        pPath->append(pcRoot);
+        pPath->append(pcModeSwitch);
+    }
+    SoDetail *det = 0;
+    auto vector = getExtensionsDerivedFromType<Gui::ViewProviderExtension>();
+    for(Gui::ViewProviderExtension* ext : vector)
+        if(ext->extensionGetDetailPath(subelement,pPath,det))
+            return det;
+    pPath->truncate(len);
+    return getDetail(subelement);
+}
+

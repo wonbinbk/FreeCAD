@@ -130,14 +130,14 @@ public:
     /// return the coin node detail of the subelement
     virtual SoDetail* getDetail(const char *) const { return 0; }
 
-    /// return the coin node detail and optionally full path to the node of the subelement
-    //
-    /// Check ppath nullity to see if the caller wants the path. If *ppath==0,
-    /// you can return a new path starting from your root node to your subelement node. 
-    /// If *ppath!=0, you must only append additional path starting from the active child
-    /// node of your mode switch node.
-    virtual SoDetail* getDetailPath(const char *subelement, SoFullPath ** /*ppath*/) const 
-        { return getDetail(subelement); }
+    /// return the coin node detail and path to the node of the subelement
+    ///
+    /// If \c append is true, you shall first append your root node and the
+    /// mode switch node to pPath.  / If you have linked view provider, then
+    /// regardless of \c append, you shall append all intermediate nodes starting
+    /// just after your mode switch node up till the mode switch of your picked
+    /// linked view provider.
+    virtual SoDetail* getDetailPath(const char *subelement, SoFullPath *pPath, bool append) const;
 
     virtual std::vector<Base::Vector3d> getModelPoints(const SoPickedPoint *) const;
 
