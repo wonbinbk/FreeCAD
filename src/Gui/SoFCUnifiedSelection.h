@@ -129,6 +129,8 @@ public:
     virtual void GLRenderInPath(SoGLRenderAction * action);
     virtual void GLRenderOffPath(SoGLRenderAction * action);
 
+    virtual void doAction(SoAction *action);
+
     template<class T>
     static std::shared_ptr<T> getRenderContext(SoNode *node, std::shared_ptr<T> def) {
         return std::static_pointer_cast<T>(getContext(node,def));

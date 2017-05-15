@@ -608,20 +608,6 @@ bool SoFCUnifiedSelection::checkSelectionStyle(int type, ViewProvider *vp) {
         bool selected = type==SoSelectionElementAction::All;
         static_cast<ViewProviderGeometryObject*>(vp)->showBoundingBox(selected);
         if(selected) return false;
-    }else if(type == SoSelectionElementAction::None &&
-             vp->getRoot()->getTypeId().isDerivedFrom(SoFCSelectionRoot::getClassTypeId()))
-    {
-        //NOTE: this is a critical performance improvement. The original way of
-        //clearing selection is to apply the action to the entire scene graph.
-        //It gets noticablely slow when the scene graph gets larger. We can take
-        //advantage of the fact that viewprovider with root node of type
-        //SoFCSelectionRoot stores the selection context inside the root node
-        //itself. Clearing selection/highlight can be done by simply clearing
-        //the root node's context.
-        auto node = static_cast<SoFCSelectionRoot*>(vp->getRoot());
-        node->resetContext();
-        node->touch();
-        return false;
     }
     return true;
 }
@@ -936,3 +922,19 @@ void SoFCSelectionRoot::resetContext() {
     contextMap.clear();
 }
 
+void SoFCSelectionRoot::doAction(SoAction *action) {
+    // The idea here is that if the 'select none' action is applied to a node,
+    // and we are the first SoFCSelectionRoot encounted (which means all
+    // children stores selection context here), then we can simply perform the
+    // action by clearing the selection context here, and save the time for
+    // traversing a potentially large amount of children nodes. The time saving
+    // is very noticable for large groups.
+    if(action->getWhatAppliedTo() == SoAction::NODE && 
+       action->isOfType(SoSelectionElementAction::getClassTypeId()) &&
+       static_cast<SoSelectionElementAction*>(action)->getType() == SoSelectionElementAction::None)
+    {
+        resetContext();
+        touch();
+    }else
+        inherited::doAction(action);
+}
