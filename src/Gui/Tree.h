@@ -183,9 +183,8 @@ public:
     void setData(int column, int role, const QVariant & value);
     void populateItem(DocumentObjectItem *item, bool refresh = false);
     void selectLinkedItem(DocumentObjectItem *item, bool recurse);
-    void selectAllInstances(DocumentObjectItem *item);
-    void selectAllLinks(DocumentObjectItem *item);
-    void showItem(DocumentObjectItem *item, bool select);
+    void selectAllInstances(const ViewProviderDocumentObject &vpd);
+    bool showItem(DocumentObjectItem *item, bool select);
     void updateItemsVisibility(QTreeWidgetItem *item, bool show);
     void setItemVisibility(const Gui::ViewProviderDocumentObject&);
     void updateLinks(const ViewProviderDocumentObject &view);
@@ -218,8 +217,8 @@ protected:
 
     void findSelection(bool sync, DocumentObjectItem *item, const char *subname);
 
-    typedef std::map<ViewProvider *, std::vector<ViewProviderDocumentObject*> > ParentMap;
-    void populateParents(ViewProvider *vp, ParentMap &);
+    typedef std::map<const ViewProvider *, std::vector<ViewProviderDocumentObject*> > ParentMap;
+    void populateParents(const ViewProvider *vp, ParentMap &);
 
 private:
     const Gui::Document* pDocument;

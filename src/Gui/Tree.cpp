@@ -243,7 +243,8 @@ void TreeWidget::contextMenuEvent (QContextMenuEvent * e)
         // if only one item is selected setup the edit menu
         if (this->selectedItems().size() == 1) {
             contextMenu.addAction(this->selectAllInstances);
-            contextMenu.addAction(this->selectAllLinks);
+            if(objitem->object()->getLinks().size())
+                contextMenu.addAction(this->selectAllLinks);
             if(objitem->isLink()) {
                 contextMenu.addAction(this->selectLinked);
                 if(!objitem->isLinkFinal())
@@ -454,9 +455,16 @@ void TreeWidget::onSelectAllLinks()
 {
     if (!this->contextItem || this->contextItem->type() != ObjectType) return;
     auto item = static_cast<DocumentObjectItem*>(this->contextItem);
-
-    for(auto &v : DocumentMap)
-        v.second->selectAllLinks(item);
+    auto docItem = getDocumentItem(item->object()->getDocument());
+    if(docItem) {
+        item->setSelected(false);
+        docItem->updateSelection();
+    }
+    for(auto link : item->object()->getLinks()) {
+        if(!link) continue;
+        for(auto &v : DocumentMap)
+            v.second->selectAllInstances(*link);
+    }
 }
 
 
@@ -466,7 +474,7 @@ void TreeWidget::onSelectAllInstances()
     auto item = static_cast<DocumentObjectItem*>(this->contextItem);
     auto it = DocumentMap.find(item->object()->getDocument());
     if(it == DocumentMap.end()) return;
-    it->second->selectAllInstances(item);
+    it->second->selectAllInstances(*item->object());
 }
 
 
@@ -1255,7 +1263,8 @@ static inline bool canCreateItem(const App::DocumentObject *obj, const Document 
     // First the new feature is deleted, then the Tip property is
     // reset, but claimChildren() accesses the Model property which
     // still contains the pointer to the deleted feature
-    return obj && obj->getNameInDocument() && doc->getDocument()->isIn(obj);
+    //
+    return obj && obj->getNameInDocument() && pDocument->isIn(obj);
 }
 
 void DocumentItem::slotDeleteObject(const Gui::ViewProviderDocumentObject& view)
@@ -1284,7 +1293,8 @@ void DocumentItem::slotDeleteObject(const Gui::ViewProviderDocumentObject& view)
             createNewItem(static_cast<ViewProviderDocumentObject&>(*vp));
         }else {
             auto childItem = *it->second->items.begin();
-            if(childItem->requiredAtRoot())
+            if(childItem->object()->getDocument()==pDocument && 
+               childItem->requiredAtRoot())
                 createNewItem(*childItem->object(),this,-1,childItem->myData);
         }
 
@@ -1352,7 +1362,8 @@ void DocumentItem::populateItem(DocumentObjectItem *item, bool refresh) {
                     assert(childItem != childItem->myData->rootItem);
                     delete childItem->myData->rootItem;
                 }
-            }else if(childItem->requiredAtRoot())
+            }else if(childItem->object()->getDocument()==pDocument && 
+                     childItem->requiredAtRoot())
                 createNewItem(*childItem->object(),this,-1,childItem->myData);
             break;
         }
@@ -1769,30 +1780,30 @@ void DocumentItem::selectLinkedItem(DocumentObjectItem *item, bool recurse) {
     ViewProviderDocumentObject *linked = item->object()->getLinkedView(recurse);
     if(!linked || linked == item->object()) return;
 
-    auto it = ObjectMap.find(linked->getObject());
-    if(it == ObjectMap.end()) return;
+    DocumentItem *linkedDoc = this;
+    if(linked->getDocument()!=pDocument) {
+        linkedDoc = getTree()->getDocumentItem(linked->getDocument());
+        if(!linkedDoc) return;
+    }
+
+    auto it = linkedDoc->ObjectMap.find(linked->getObject());
+    if(it == linkedDoc->ObjectMap.end()) return;
     auto linkedItem = it->second->rootItem;
     if(!linkedItem) 
         linkedItem = *it->second->items.begin();
 
-    item->setSelected(false);
-    linkedItem->setSelected(true);
+    if(showItem(linkedItem,true)) {
+        item->setSelected(false);
+        treeWidget()->scrollToItem(linkedItem);
+    }
 
-    treeWidget()->scrollToItem(linkedItem);
-
-    updateSelection();
-
-    if(linked->getDocument()!=pDocument) {
-        auto docItem = getTree()->getDocumentItem(linked->getDocument());
-        if(docItem) {
-            docItem->updateSelection();
-            MDIView *view = docItem->pDocument->getActiveView();
-            if (view) getMainWindow()->setActiveWindow(view);
-        }
+    if(linkedDoc != this) {
+        MDIView *view = linkedDoc->pDocument->getActiveView();
+        if (view) getMainWindow()->setActiveWindow(view);
     }
 }
 
-void DocumentItem::populateParents(ViewProvider *vp, ParentMap &parentMap) {
+void DocumentItem::populateParents(const ViewProvider *vp, ParentMap &parentMap) {
     auto it = parentMap.find(vp);
     if(it == parentMap.end()) return;
     for(auto parent : it->second) {
@@ -1810,23 +1821,20 @@ void DocumentItem::populateParents(ViewProvider *vp, ParentMap &parentMap) {
     }
 }
 
-void DocumentItem::selectAllLinks(DocumentObjectItem *item) {
+void DocumentItem::selectAllInstances(const ViewProviderDocumentObject &vpd) {
     ParentMap parentMap;
-    std::set<ViewProviderDocumentObject *> links;
-    auto pObject = item->object()->getObject();
+    auto pObject = vpd.getObject();
+    if(ObjectMap.find(pObject) == ObjectMap.end())
+        return;
 
-    // We are trying to select all link objects to a given item, not only the
-    // link object, but all apperance of those link objects inside their
-    // repective parent group objects
+    bool lock = getTree()->blockConnection(true);
+
+    // We are trying to select all items corresponding to a given view
+    // provider, i.e. all apperance of the object inside all its parent items
     //
-    // Build a map of object to all its parent, and find all links object at
-    // the same time
+    // Build a map of object to all its parent    
     for(auto &v : ObjectMap) {
-        if(v.second->viewObject == item->object()) continue;
-        if(v.second->viewObject->getLinkedView(false) == item->object()) {
-            links.insert(v.second->viewObject);
-            continue;
-        }
+        if(v.second->viewObject == &vpd) continue;
         for(auto child : v.second->viewObject->claimChildren()) {
             if(!child || child==pObject || !child->getNameInDocument()) continue;
             ViewProvider* vp = pDocument->getViewProvider(child);
@@ -1836,22 +1844,19 @@ void DocumentItem::selectAllLinks(DocumentObjectItem *item) {
         }
     }
 
-    // now make sure all found links' parent items are populated. In order to
-    // do that, we need to populate the oldest parent first
-    for(auto link : links)
-        populateParents(link,parentMap);
+    // now make sure all parent items are populated. In order to do that, we
+    // need to populate the oldest parent first
+    populateParents(&vpd,parentMap);
 
-    bool found;
-    FOREACH_ITEM_ALL(itemCheck);
-        if(!itemCheck->isHidden() &&
-           itemCheck->object() != item->object() &&
-           itemCheck->object()->getLinkedView(false) == item->object()) {
-            found =true;
-            showItem(itemCheck,true);
-        }
+    DocumentObjectItem *first = 0;
+    FOREACH_ITEM(item,vpd);
+        if(showItem(item,true) && !first)
+            first = item;
     END_FOREACH_ITEM;
-    if(found) {
-        item->setSelected(false);
+
+    getTree()->blockConnection(lock);
+    if(first) {
+        treeWidget()->scrollToItem(first);
         updateSelection();
     }
 }
@@ -1864,14 +1869,16 @@ void DocumentItem::setShowHidden(bool show) {
     pDocument->getDocument()->ShowHidden.setValue(show);
 }
 
-void DocumentItem::showItem(DocumentObjectItem *item, bool select) {
+bool DocumentItem::showItem(DocumentObjectItem *item, bool select) {
+    auto parent = item->parent();
+    if(item->isHidden() ||
+       (parent->type()==TreeWidget::ObjectType && 
+        !showItem(static_cast<DocumentObjectItem*>(parent),false)))
+        return false;
+
+    parent->setExpanded(true);
     if(select) item->setSelected(true);
-    for(auto parent=item->parent();
-        parent->type()==TreeWidget::ObjectType;
-        parent=parent->parent())
-    {
-        parent->setExpanded(true);
-    }
+    return true;
 }
 
 void DocumentItem::setItemVisibility(const ViewProviderDocumentObject &vpd) {
@@ -1893,51 +1900,6 @@ void DocumentItem::updateItemsVisibility(QTreeWidgetItem *item, bool show) {
 }
 
 void DocumentItem::updateSelection() {
-    bool lock = getTree()->blockConnection(true);
-    updateSelection(this,false);
-    getTree()->blockConnection(lock);
-}
-
-void DocumentItem::selectAllInstances(DocumentObjectItem *item) {
-    std::set<ViewProvider *> checkedItems;
-    std::map<ViewProvider *, DocumentObjectItem *> itemsToCheck;
-    FOREACH_ITEM_ALL(itemCheck);
-        if(itemCheck->object() == item->object()) 
-            continue;
-
-        if(itemCheck->populated) {
-            checkedItems.insert(itemCheck->object());
-            auto it = itemsToCheck.find(itemCheck->object());
-            if(it!=itemsToCheck.end())
-                itemsToCheck.erase(it);
-            continue;
-        }
-        auto it = checkedItems.find(itemCheck->object());
-        if(it != checkedItems.end()) continue;
-        itemsToCheck.insert(std::make_pair(itemCheck->object(),itemCheck));
-    END_FOREACH_ITEM;
-
-    for(auto v : itemsToCheck) {
-        auto obj = item->object()->getObject();
-        for(auto o : v.first->claimChildren()) {
-            if(o == obj) {
-                // force populate the item
-                v.second->populated = true;
-                populateItem(v.second,true);
-                break;
-            }
-        }
-    }
-
-    for(auto instance : item->myData->items) {
-        instance->setSelected(true);
-        for(auto parent=instance->parent();
-            parent->type()==TreeWidget::ObjectType;
-            parent=parent->parent())
-        {
-            parent->setExpanded(true);
-        }
-    }
     bool lock = getTree()->blockConnection(true);
     updateSelection(this,false);
     getTree()->blockConnection(lock);
