@@ -33,7 +33,6 @@
 #include "View3DInventor.h"
 #include "View3DInventorViewer.h"
 #include "ViewProviderDocumentObject.h"
-#include "ViewProviderLink.h"
 #include "Document.h"
 #include "Application.h"
 #include <App/Document.h>
@@ -182,22 +181,7 @@ void DlgInspector::setNodeNames(Gui::Document* doc)
     QMap<SoNode*, QString> nodeNames;
     for (std::vector<Gui::ViewProvider*>::iterator it = vps.begin(); it != vps.end(); ++it) {
         Gui::ViewProviderDocumentObject* vp = static_cast<Gui::ViewProviderDocumentObject*>(*it);
-        App::DocumentObject* obj = vp->getObject();
-        if (obj) {
-            QString label = QString::fromUtf8(obj->Label.getValue());
-            nodeNames[vp->getRoot()] = label;
-
-            if(vp->isDerivedFrom(Gui::ViewProviderLink::getClassTypeId()))
-                static_cast<Gui::ViewProviderLink*>(vp)->getNodeNames(nodeNames);
-        }
-
-        std::vector<std::string> modes = vp->getDisplayMaskModes();
-        for (std::vector<std::string>::iterator jt = modes.begin(); jt != modes.end(); ++jt) {
-            SoNode* node = vp->getDisplayMaskMode(jt->c_str());
-            if (node) {
-                nodeNames[node] = QString::fromStdString(*jt);
-            }
-        }
+        vp->getNodeNames(doc,nodeNames);
     }
 
     SceneModel* model = static_cast<SceneModel*>(ui->treeView->model());

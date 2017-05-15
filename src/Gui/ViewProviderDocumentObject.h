@@ -25,7 +25,7 @@
 #define GUI_VIEWPROVIDER_DOCUMENTOBJECT_H
 
 #include <Inventor/SoType.h>
-
+#include <QMap>
 #include "ViewProvider.h"
 #include <App/DocumentObject.h>
 
@@ -105,17 +105,16 @@ public:
     ///
     /// return the found view provider of the deepest element, or NULL
     virtual ViewProviderDocumentObject *getElementView(
-            const char *element, const char **subelement=0) 
-    {
-        if(subelement) *subelement = element;
-        return this;
-    }
+            const char *element, const char **subelement=0) const;
+
+    // return a map from coin node to name
+    virtual void getNodeNames(Gui::Document *, QMap<SoNode*, QString> &) const;
 
     /// Return the linked view provider
     ///
     /// Set 'recursive' to true to return the final linked view provider. 
     /// Otherwise only the immediate view provider is returned.
-    virtual ViewProviderDocumentObject *getLinkedView(bool recursive=true); 
+    virtual ViewProviderDocumentObject *getLinkedView(bool recursive, int depth=0) const;
 
     /// Return all links that directly links to this view provider.
     virtual std::vector<ViewProviderDocumentObject *> getLinks() const;

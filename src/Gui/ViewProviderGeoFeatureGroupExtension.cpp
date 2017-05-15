@@ -187,7 +187,6 @@ void ViewProviderGeoFeatureGroupExtension::extensionDragObject(App::DocumentObje
 }
 
 
-
 namespace Gui {
 EXTENSION_PROPERTY_SOURCE_TEMPLATE(Gui::ViewProviderGeoFeatureGroupExtensionPython, Gui::ViewProviderGeoFeatureGroupExtension)
 

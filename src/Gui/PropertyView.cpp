@@ -234,7 +234,7 @@ void PropertyView::onSelectionChanged(const SelectionChanges& msg)
                     checkLink = false;
                 vpLast = cvp;
                 // try to resolve the linked object
-                cvp = vpLast->getLinkedView();
+                cvp = vpLast->getLinkedView(true);
                 if(cvp!=vpLast) {
                     ob = cvp->getObject();
                     if(!ob) continue;
@@ -304,7 +304,7 @@ void PropertyView::onSelectionChanged(const SelectionChanges& msg)
         // In case the only selected object is a link, insert the link's own
         // property before the linked object
         App::DocumentObject *obj = vpLast->getObject();
-        if(obj && vpLast->getLinkedView()!=vpLast) {
+        if(obj && vpLast->getLinkedView(true)!=vpLast) {
             std::vector<App::Property*> dataList;
             obj->getPropertyList(dataList);
             for(auto prop : dataList) {

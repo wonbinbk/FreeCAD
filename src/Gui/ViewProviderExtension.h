@@ -90,6 +90,13 @@ public:
     virtual void extensionFinishRestoring() {}
 
     virtual void extensionGetLinks(std::vector<ViewProviderDocumentObject*> &) const {}
+
+    virtual ViewProviderDocumentObject *extensionGetLinkedView(bool, int) const {return nullptr;}
+
+    virtual bool extensionGetElementPicked(const SoPickedPoint *, std::string &) const {return false;}
+    virtual bool extensionGetDetailPath(const char *, SoFullPath *, SoDetail *&) const {return false;}
+
+    virtual void extensionGetNodeNames(Gui::Document *, QMap<SoNode*, QString> &) const {}
     
 private:
   //Gui::ViewProviderDocumentObject* m_viewBase = nullptr;

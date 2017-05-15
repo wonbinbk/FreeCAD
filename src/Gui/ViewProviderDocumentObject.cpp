@@ -292,8 +292,13 @@ PyObject* ViewProviderDocumentObject::getPyObject()
     return pyViewObject;
 }
 
-ViewProviderDocumentObject *ViewProviderDocumentObject::getLinkedView(bool) {
-    return this;
+ViewProviderDocumentObject *ViewProviderDocumentObject::getLinkedView(bool recursive, int depth) const{
+    auto exts = getExtensionsDerivedFromType<Gui::ViewProviderExtension>();
+    for(auto ext : exts) {
+        auto ret = ext->extensionGetLinkedView(recursive,depth);
+        if(ret) return ret;
+    }
+    return const_cast<ViewProviderDocumentObject*>(this);
 }
 
 std::vector<ViewProviderDocumentObject *> ViewProviderDocumentObject::getLinks() const {
@@ -304,7 +309,28 @@ std::vector<ViewProviderDocumentObject *> ViewProviderDocumentObject::getLinks()
     return ret;
 }
 
-
 bool ViewProviderDocumentObject::showInTree() const {
     return ShowInTree.getValue();
+}
+
+void ViewProviderDocumentObject::getNodeNames(Gui::Document *doc, QMap<SoNode*, QString> &names) const {
+    auto vector = getExtensionsDerivedFromType<Gui::ViewProviderExtension>();
+    for(Gui::ViewProviderExtension* ext : vector)
+        ext->extensionGetNodeNames(doc,names);
+
+    if(pcObject) {
+        QString label = QString::fromUtf8(pcObject->Label.getValue());
+        names[pcRoot] = label;
+    }
+    for(const auto &mode : getDisplayMaskModes()) {
+        SoNode* node = getDisplayMaskMode(mode.c_str());
+        if (node) names[node] = QString::fromStdString(mode);
+    }
+}
+
+
+ViewProviderDocumentObject *ViewProviderDocumentObject::getElementView(
+                                const char *, const char **) const
+{
+    return nullptr;
 }
