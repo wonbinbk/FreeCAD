@@ -66,11 +66,12 @@ public:
     /// to the viewprovider object when it is initiated
     virtual const char* getViewProviderExtensionName(void) const {return "";}
 
-    /** Get the python sub object by name (e.g. by the selection)
-     * @sa DocumentObject::getPySubObject()
+    /** Get the sub object by name
+     * @sa DocumentObject::getSubObject()
      */
-    virtual PyObject * extensionGetPySubObject(const char * /*element*/,
-            const Base::Matrix4D & /*mat*/, bool /*transform*/) const
+    virtual DocumentObject * extensionGetSubObject(const char * /*element*/,
+            const char ** /*subname*/, PyObject ** /*pyObj*/,
+            Base::Matrix4D * /*mat*/, bool /*transform*/) const
         {return 0;}
 };
 

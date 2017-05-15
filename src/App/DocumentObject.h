@@ -199,19 +199,30 @@ public:
     virtual void onLostLinkToObject(DocumentObject*);
     virtual PyObject *getPyObject(void);
 
-    /** Get the python sub objects by name (e.g. by the selection)
+    /** Get the sub element/object by name
      *
      * @param element: a string which is dot separated name to refer to a sub
-     * object. An empty string can be used to refer to the object itself
+     * element or object. An empty string can be used to refer to the object
+     * itself
      *
-     * @param mat: the transformation matrix to be applied to the returned
-     * returned object
+     * @param subname: if non zero, returns the non document object subelement
+     * name
+     *
+     * @param pyObj: if non zero, returns the python object corresponding to this
+     * sub object.
+     *
+     * @param mat: If non zero, it is current transformation matrix on input.
+     * The object shall multiple the \c mat with its own transformation matrix
+     * if \c transform is \c true
      *
      * @param transform: if ture, apply object's own placement on to returned
      * shape before appling \c mat.
+     *
+     * @return The document object corresponding to or owning the sub element.
      */
-    virtual PyObject *getPySubObject(const char *element,
-            const Base::Matrix4D &mat = Base::Matrix4D(), bool transform=true) const;
+    virtual DocumentObject *getSubObject(const char *element, 
+            const char **subname=0, PyObject **pyObj=0, 
+            Base::Matrix4D *mat=0, bool transform=true) const;
 
     /** Return the linked object with optional transformation
      * 

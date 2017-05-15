@@ -56,21 +56,38 @@ LinkExtension::~LinkExtension(void)
 {
 }
 
-PyObject *LinkExtension::extensionGetPySubObject(const char *element,
-                            const Base::Matrix4D &mat, bool transform) const 
+DocumentObject *LinkExtension::extensionGetSubObject(const char *element,
+        const char **subname, PyObject **pyObj, Base::Matrix4D *mat, bool transform) const 
 {
     auto object = LinkedObject.getValue();
-    if(!object) return 0;
+    if(!object) return nullptr;
 
-    Base::Matrix4D _mat;
-    if(transform) {
-        _mat = mat * LinkPlacement.getValue().toMatrix();
+    if(mat) {
+        if(transform)
+            *mat *= LinkPlacement.getValue().toMatrix();
         Base::Matrix4D s;
         s.scale(LinkScale.getValue());
-        _mat *= s;
+        *mat *= s;
     }
-    const Base::Matrix4D &matNext = transform?_mat:mat;
-    return object->getPySubObject(element,matNext,LinkTransform.getValue());
+    if(pyObj || (element && strchr(element,'.')))
+        return object->getSubObject(element,subname,pyObj,mat,LinkTransform.getValue());
+
+    Base::Matrix4D matNext;
+    const char *nextsub = 0;
+    auto ret = object->getSubObject(element,&nextsub,0, &matNext, LinkTransform.getValue());
+    if(ret) {
+        if(subname) *subname = nextsub;
+        // do not resolve the last link object
+        if(nextsub == element) {
+            auto ext = getExtendedContainer();
+            if(!ext || !ext->isDerivedFrom(DocumentObject::getClassTypeId()))
+                throw Base::RuntimeError("Link: container not derived from document object");
+            auto obj = static_cast<const DocumentObject *>(ext);
+            return const_cast<DocumentObject*>(obj);
+        }else if(mat)
+            *mat *= matNext;
+    }
+    return ret;
 }
 
 DocumentObject *LinkExtension::getLinkedObjectExt(bool recurse, Base::Matrix4D *mat, bool transform)

@@ -77,8 +77,9 @@ public:
                !obj->hasExtension(GeoFeatureGroupExtension::getExtensionClassTypeId());
     }
 
-    PyObject *extensionGetPySubObject(const char *element, 
-            const Base::Matrix4D &mat, bool transform) const override;
+    DocumentObject * extensionGetSubObject(const char * /*element*/,
+            const char ** /*subname*/, PyObject ** /*pyObj*/,
+            Base::Matrix4D * /*mat*/, bool /*transform*/) const override;
 };
 
 typedef ExtensionPythonT<GroupExtensionPythonT<GeoFeatureGroupExtension>> GeoFeatureGroupExtensionPython;

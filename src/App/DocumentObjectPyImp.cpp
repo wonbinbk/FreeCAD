@@ -25,6 +25,7 @@
 #include "DocumentObject.h"
 #include "Document.h"
 #include "Expression.h"
+#include <Base/MatrixPy.h>
 
 // inclusion of the generated files (generated out of DocumentObjectPy.xml)
 #include <App/DocumentObjectPy.h>
@@ -309,7 +310,8 @@ PyObject*  DocumentObjectPy::recompute(PyObject *args)
 PyObject*  DocumentObjectPy::getSubObject(PyObject *args)
 {
     PyObject *obj;
-    if (!PyArg_ParseTuple(args, "O", &obj))
+    PyObject *getFeature = Py_False;
+    if (!PyArg_ParseTuple(args, "O|O", &obj,&getFeature))
         return NULL;
 
     std::vector<std::string> subs;
@@ -330,21 +332,49 @@ PyObject*  DocumentObjectPy::getSubObject(PyObject *args)
         }
     }
 
-    std::vector<PyObject *> ret;
+    bool feature = PyObject_IsTrue(getFeature);
+
+    struct SubInfo {
+        PyObject *pyObj;
+        std::string subname;
+        Base::Matrix4D mat;
+        SubInfo():pyObj(0){}
+    };
+    std::vector<SubInfo> ret;
     for(const auto &sub : subs) {
-        auto obj = getDocumentObjectPtr()->getPySubObject(sub.c_str());
-        if(obj) ret.push_back(obj);
+        const char *subname = 0;
+        SubInfo info;
+        auto obj = getDocumentObjectPtr()->getSubObject(sub.c_str(),&subname,feature?0:&info.pyObj,&info.mat);
+        if(obj) {
+            if(subname) info.subname = subname;
+            if(feature)
+                info.pyObj = obj->getPyObject();
+        }
+        ret.push_back(info);
     }
     if(ret.empty())
         Py_Return;
-    if(single)
-        return ret[0];
+
+    if(single) {
+        if(!feature)
+            return Py::new_reference_to(ret[0].pyObj);
+        Py::Tuple rret(3);
+        rret.setItem(0,Py::Object(ret[0].pyObj));
+        rret.setItem(1,Py::Object(new Base::MatrixPy(ret[0].mat)));
+        rret.setItem(2,Py::String(ret[0].subname));
+        return Py::new_reference_to(rret);
+    }
     Py::Tuple tuple(ret.size());
     for(size_t i=0;i<ret.size();++i) {
-        if(ret[i])
-            tuple.setItem(i, Py::Object(ret[i]));
-        else
-            tuple.setItem(i, Py::Object());
+        if(!feature)
+            tuple.setItem(i,Py::Object(ret[i].pyObj));
+        else {
+            Py::Tuple rret(3);
+            rret.setItem(0,Py::Object(ret[i].pyObj));
+            rret.setItem(1,Py::Object(new Base::MatrixPy(ret[i].mat)));
+            rret.setItem(2,Py::String(ret[i].subname));
+            tuple.setItem(i,rret);
+        }
     }
     return Py::new_reference_to(tuple);
 }

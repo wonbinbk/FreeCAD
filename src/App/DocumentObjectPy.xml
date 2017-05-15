@@ -57,11 +57,11 @@
         </Methode>
         <Methode Name="getSubObject">
             <Documentation>
-                <UserDocu>
-                    getSubObject(element): return subobject(s).\n
-                    \nelement(string|list|tuple): dot separated string or sequence of strings referencing subobject.\n
-                    \nReturns the found subobject or tuple of subobjects
-                </UserDocu>
+                <UserDocu>getSubObject(element, feature=False): return subobject(s).
+
+element(string|list|tuple): dot separated string or sequence of strings referencing subobject.
+feature: if False, return a python object for the (sub)shape of the object. If True, return a tuple
+(feature, matrix, subelement) for each element. </UserDocu>
             </Documentation>
         </Methode>
     <Attribute Name="OutList" ReadOnly="true">

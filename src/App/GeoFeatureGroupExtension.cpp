@@ -161,18 +161,12 @@ DocumentObject* GeoFeatureGroupExtension::getGroupOfObject(const DocumentObject*
 }
 
 
-PyObject *GeoFeatureGroupExtension::extensionGetPySubObject(
-    const char *element, const Base::Matrix4D &mat, bool transform) const 
+DocumentObject *GeoFeatureGroupExtension::extensionGetSubObject(const char *element,
+        const char **subname, PyObject **pyObj, Base::Matrix4D *mat, bool transform) const 
 {
     if(!element || *element==0) return 0;
 
     std::vector<PyObject *> ret;
-    Base::Matrix4D _mat;
-    if(transform) 
-        _mat = mat*const_cast<GeoFeatureGroupExtension*>(this)->placement().getValue().toMatrix();
-    const Base::Matrix4D &matNext = transform?_mat:mat;
-
-    auto children = getGeoSubObjects();
     std::string _name;
     const char *name = element;
     const char *next = 0;
@@ -182,11 +176,21 @@ PyObject *GeoFeatureGroupExtension::extensionGetPySubObject(
         name = _name.c_str();
         ++next;
     }
-    for(auto child : children) {
+    for(auto child : getGeoSubObjects()) {
         if(!child || !child->getNameInDocument() || 
             strcmp(name,child->getNameInDocument())!=0)
             continue;
-        return child->getPySubObject(next,matNext,true);
+
+        if(!mat || !transform)
+            return child->getSubObject(next,subname,pyObj,mat,true);
+        Base::Matrix4D _mat;
+        _mat = (*mat)*const_cast<GeoFeatureGroupExtension*>(this)->placement().getValue().toMatrix();
+        auto ret = child->getSubObject(next,subname,pyObj,&_mat,true);
+        if(ret) {
+            *mat = _mat;
+            return ret;
+        }
+        break;
     }
     return 0;
 }

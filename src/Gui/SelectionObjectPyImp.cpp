@@ -113,8 +113,10 @@ Py::Tuple SelectionObjectPy::getSubObjects(void) const
     std::vector<PyObject *> objs;
 
     for(const auto &subname : getSelectionObjectPtr()->getSubNames()) {
-        auto obj = getSelectionObjectPtr()->getObject()->getPySubObject(subname.c_str());
-        if(obj) objs.push_back(obj);
+        PyObject *pyObj=0;
+        Base::Matrix4D mat;
+        getSelectionObjectPtr()->getObject()->getSubObject(subname.c_str(),0,&pyObj,&mat);
+        if(pyObj) objs.push_back(pyObj);
     }
 
     Py::Tuple temp(objs.size());

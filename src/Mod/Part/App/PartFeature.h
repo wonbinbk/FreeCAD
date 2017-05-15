@@ -63,7 +63,10 @@ public:
     virtual const App::PropertyComplexGeoData* getPropertyOfGeometry() const;
 
     virtual PyObject* getPyObject(void);
-    virtual PyObject *getPySubObject(const char *element, const Base::Matrix4D &mat, bool transform) const;
+
+    virtual DocumentObject *getSubObject(const char *element, 
+            const char **subname, PyObject **pyObj, 
+            Base::Matrix4D *mat, bool transform) const override;
 
     TopLoc_Location getLocation() const;
     

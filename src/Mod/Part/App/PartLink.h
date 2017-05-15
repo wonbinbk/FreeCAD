@@ -48,7 +48,8 @@ public:
 
     void onDocumentRestored() override;
 
-    PyObject *getPySubObject(const char *element, const Base::Matrix4D &mat, bool transform) const override;
+    DocumentObject *getSubObject(const char *element, const char **subname, 
+            PyObject **pyObj, Base::Matrix4D *mat, bool transform) const override;
 
     App::DocumentObject *getLinkedObject(bool recurse, Base::Matrix4D *mat, bool transform) override;
 

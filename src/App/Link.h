@@ -42,13 +42,13 @@ public:
     PropertyXLink LinkedObject;
     PropertyPlacement LinkPlacement;
     PropertyVector LinkScale;
-    // PropertyBool LinkMoveChild;
     PropertyBool LinkTransform;
 
     PyObject* getExtensionPyObject(void) override;
 
-    PyObject *extensionGetPySubObject(const char *element, 
-            const Base::Matrix4D &mat, bool transform) const override;
+    DocumentObject *extensionGetSubObject(const char *element, 
+            const char **subname, PyObject **pyObj, 
+            Base::Matrix4D *mat, bool transform) const override;
 
 protected:
     DocumentObject *getLinkedObjectExt(bool recurse, Base::Matrix4D *mat, bool transform);

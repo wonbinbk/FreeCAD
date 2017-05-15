@@ -434,13 +434,18 @@ PyObject *DocumentObject::getPyObject(void)
     return Py::new_reference_to(PythonObject);
 }
 
-PyObject *DocumentObject::getPySubObject(
-        const char *element, const Base::Matrix4D &mat, bool transform) const
+DocumentObject *DocumentObject::getSubObject(const char *element, 
+            const char **subname, PyObject **pyObj, 
+            Base::Matrix4D *mat, bool transform) const
 {
     auto exts = getExtensionsDerivedFromType<App::DocumentObjectExtension>();
     for(auto ext : exts) {
-        auto obj = ext->extensionGetPySubObject(element,mat,transform);
+        auto obj = ext->extensionGetSubObject(element,subname,pyObj,mat,transform);
         if(obj) return obj;
+    }
+    if(!element || *element==0) {
+        if(subname) *subname = element;
+        return const_cast<DocumentObject*>(this);
     }
     return 0;
 }
