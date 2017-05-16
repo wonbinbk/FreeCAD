@@ -188,6 +188,8 @@ public:
     void updateItemsVisibility(QTreeWidgetItem *item, bool show);
     void setItemVisibility(const Gui::ViewProviderDocumentObject&);
     void updateLinks(const ViewProviderDocumentObject &view);
+    ViewProviderDocumentObject *getViewProvider(App::DocumentObject *);
+    void onDeleteDocument(DocumentItem *docItem);
 
     bool showHidden() const;
     void setShowHidden(bool show);
@@ -202,8 +204,8 @@ protected:
     /** Removes a view provider from the document item.
      * If this view provider is not added nothing happens.
      */
-    void slotDeleteObject    (const Gui::ViewProviderDocumentObject&);
-    void slotChangeObject    (const Gui::ViewProviderDocumentObject&);
+    void slotDeleteObject    (const Gui::ViewProviderDocumentObject&, bool boradcast);
+    void slotChangeObject    (const Gui::ViewProviderDocumentObject&, bool boradcast);
     void slotRenameObject    (const Gui::ViewProviderDocumentObject&);
     void slotActiveObject    (const Gui::ViewProviderDocumentObject&);
     void slotInEdit          (const Gui::ViewProviderDocumentObject&);

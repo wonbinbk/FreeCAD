@@ -811,6 +811,8 @@ void TreeWidget::slotDeleteDocument(const Gui::Document& Doc)
 {
     std::map<const Gui::Document*, DocumentItem*>::iterator it = DocumentMap.find(&Doc);
     if (it != DocumentMap.end()) {
+        for(auto &v : DocumentMap)
+            v.second->onDeleteDocument(it->second);
         this->rootItem->takeChild(this->rootItem->indexOfChild(it->second));
         delete it->second;
         DocumentMap.erase(it);
@@ -829,9 +831,8 @@ void TreeWidget::slotChangedViewObject(const Gui::ViewProvider& vp, const App::P
         return;
     const auto &vpd = static_cast<const ViewProviderDocumentObject&>(vp);
     if(&prop == &vpd.ShowInTree) {
-        auto it = DocumentMap.find(vpd.getDocument());
-        if (it != DocumentMap.end()) 
-            it->second->setItemVisibility(vpd);
+        for(auto &v : DocumentMap) 
+            v.second->setItemVisibility(vpd);
     }
 }
 
@@ -1103,6 +1104,7 @@ typedef std::set<DocumentObjectItem*> DocumentObjectItems;
 
 class Gui::DocumentObjectData {
 public:
+    DocumentItem &docItem;
     DocumentObjectItems items;
     ViewProviderDocumentObject *viewObject;
     DocumentObjectItem *rootItem;
@@ -1115,8 +1117,8 @@ public:
     Connection connectTool;
     Connection connectStat;
 
-    DocumentObjectData(ViewProviderDocumentObject* vpd)
-        : viewObject(vpd),rootItem(0)
+    DocumentObjectData(DocumentItem &docItem, ViewProviderDocumentObject* vpd)
+        : docItem(docItem),viewObject(vpd),rootItem(0)
     {
         // Setup connections
         connectIcon = viewObject->signalChangeIcon.connect(
@@ -1155,8 +1157,8 @@ DocumentItem::DocumentItem(const Gui::Document* doc, QTreeWidgetItem * parent)
 {
     // Setup connections
     connectNewObject = doc->signalNewObject.connect(boost::bind(&DocumentItem::slotNewObject, this, _1));
-    connectDelObject = doc->signalDeletedObject.connect(boost::bind(&DocumentItem::slotDeleteObject, this, _1));
-    connectChgObject = doc->signalChangedObject.connect(boost::bind(&DocumentItem::slotChangeObject, this, _1));
+    connectDelObject = doc->signalDeletedObject.connect(boost::bind(&DocumentItem::slotDeleteObject, this, _1, true));
+    connectChgObject = doc->signalChangedObject.connect(boost::bind(&DocumentItem::slotChangeObject, this, _1, true));
     connectRenObject = doc->signalRelabelObject.connect(boost::bind(&DocumentItem::slotRenameObject, this, _1));
     connectActObject = doc->signalActivatedObject.connect(boost::bind(&DocumentItem::slotActiveObject, this, _1));
     connectEdtObject = doc->signalInEdit.connect(boost::bind(&DocumentItem::slotInEdit, this, _1));
@@ -1226,7 +1228,8 @@ bool DocumentItem::createNewItem(const Gui::ViewProviderDocumentObject& obj,
     if(!data) {
         auto &pdata = ObjectMap[obj.getObject()];
         if(!pdata) {
-            pdata = std::make_shared<DocumentObjectData>(const_cast<ViewProviderDocumentObject*>(&obj));
+            pdata = std::make_shared<DocumentObjectData>(*this,
+                    const_cast<ViewProviderDocumentObject*>(&obj));
             pdata->children = obj.claimChildren();
             pdata->label = obj.getObject()->Label.getValue();
         }else if(pdata->rootItem && parent==NULL) {
@@ -1253,7 +1256,17 @@ bool DocumentItem::createNewItem(const Gui::ViewProviderDocumentObject& obj,
     return true;
 }
 
-static inline bool canCreateItem(const App::DocumentObject *obj, const Document *doc) {
+void DocumentItem::onDeleteDocument(DocumentItem *docItem) {
+    if(docItem == this) return;
+    for(auto it=ObjectMap.begin(),itNext=it;it!=ObjectMap.end();it=itNext) {
+        ++itNext;
+        auto data = it->second;
+        if(&data->docItem != docItem) continue;
+        slotDeleteObject(*data->viewObject,false);
+    }
+}
+
+ViewProviderDocumentObject *DocumentItem::getViewProvider(App::DocumentObject *obj) {
     // Note: It is possible that we receive an invalid pointer from
     // claimChildren(), e.g. if multiple properties were changed in
     // a transaction and slotChangedObject() is triggered by one
@@ -1264,11 +1277,33 @@ static inline bool canCreateItem(const App::DocumentObject *obj, const Document 
     // reset, but claimChildren() accesses the Model property which
     // still contains the pointer to the deleted feature
     //
-    return obj && obj->getNameInDocument() && pDocument->isIn(obj);
+    // return obj && obj->getNameInDocument() && pDocument->isIn(obj);
+    //
+    // TODO: is the above isIn() check still necessary? Will
+    // getNameInDocument() check be sufficient?
+
+
+    if(!obj || !obj->getNameInDocument()) return 0;
+    ViewProvider *vp;
+    if(obj->getDocument() == pDocument->getDocument()) 
+        vp = pDocument->getViewProvider(obj);
+    else {
+        auto doc = Application::Instance->getDocument(obj->getDocument());
+        if(!doc) return 0;
+        vp = doc->getViewProvider(obj);
+    }
+    if(!vp || !vp->isDerivedFrom(ViewProviderDocumentObject::getClassTypeId()))
+        return 0;
+    return static_cast<ViewProviderDocumentObject*>(vp);
 }
 
-void DocumentItem::slotDeleteObject(const Gui::ViewProviderDocumentObject& view)
+void DocumentItem::slotDeleteObject(const Gui::ViewProviderDocumentObject& view, bool broadcast)
 {
+    if(broadcast) {
+        for(auto &v : getTree()->DocumentMap)
+            v.second->slotDeleteObject(view,false);
+    }
+
     auto it = ObjectMap.find(view.getObject());
     if(it == ObjectMap.end() || it->second->items.empty()) return;
     auto &items = it->second->items;
@@ -1283,18 +1318,14 @@ void DocumentItem::slotDeleteObject(const Gui::ViewProviderDocumentObject& view)
     // under document item.
     const auto &children = view.claimChildren();
     for(auto child : children) {
-        if(!canCreateItem(child,pDocument)) 
-            continue;
         auto it = ObjectMap.find(child);
         if(it==ObjectMap.end() || it->second->items.empty()) {
-            ViewProvider* vp = pDocument->getViewProvider(child);
-            if(!vp || !vp->isDerivedFrom(ViewProviderDocumentObject::getClassTypeId()))
-                continue;
-            createNewItem(static_cast<ViewProviderDocumentObject&>(*vp));
+            auto vpd = getViewProvider(child);
+            if(!vpd) continue;
+            createNewItem(*vpd);
         }else {
             auto childItem = *it->second->items.begin();
-            if(childItem->object()->getDocument()==pDocument && 
-               childItem->requiredAtRoot())
+            if(childItem->requiredAtRoot())
                 createNewItem(*childItem->object(),this,-1,childItem->myData);
         }
 
@@ -1314,13 +1345,10 @@ void DocumentItem::populateItem(DocumentObjectItem *item, bool refresh) {
     if(!item->populated && !item->isExpanded()) {
         bool doPopulate = false;
         for(auto child : item->myData->children) {
-            if(!canCreateItem(child,pDocument)) 
-                continue;
             auto it = ObjectMap.find(child);
             if(it == ObjectMap.end() || it->second->items.empty()) {
-                ViewProvider* vp = pDocument->getViewProvider(child);
-                if(!vp || !vp->isDerivedFrom(ViewProviderDocumentObject::getClassTypeId()))
-                    continue;
+                auto vp = getViewProvider(child);
+                if(!vp) continue;
                 doPopulate = true;
                 break;
             }
@@ -1339,7 +1367,6 @@ void DocumentItem::populateItem(DocumentObjectItem *item, bool refresh) {
     // iterate through the claimed children, and try to synchronize them with the 
     // children tree item with the same order of apperance. 
     for(auto child : item->myData->children) {
-        if(!canCreateItem(child,pDocument)) continue;
 
         ++i; // the current index of the claimed child
 
@@ -1362,8 +1389,7 @@ void DocumentItem::populateItem(DocumentObjectItem *item, bool refresh) {
                     assert(childItem != childItem->myData->rootItem);
                     delete childItem->myData->rootItem;
                 }
-            }else if(childItem->object()->getDocument()==pDocument && 
-                     childItem->requiredAtRoot())
+            }else if(childItem->requiredAtRoot())
                 createNewItem(*childItem->object(),this,-1,childItem->myData);
             break;
         }
@@ -1374,10 +1400,8 @@ void DocumentItem::populateItem(DocumentObjectItem *item, bool refresh) {
 
         auto it = ObjectMap.find(child);
         if(it==ObjectMap.end() || it->second->items.empty()) {
-            ViewProvider* vp = pDocument->getViewProvider(child);
-            if(!vp || !vp->isDerivedFrom(ViewProviderDocumentObject::getClassTypeId()) ||
-               !createNewItem(static_cast<ViewProviderDocumentObject&>(*vp),item,i,
-                        it==ObjectMap.end()?DocumentObjectDataPtr():it->second))
+            auto vp = getViewProvider(child);
+            if(!vp || !createNewItem(*vp,item,i,it==ObjectMap.end()?DocumentObjectDataPtr():it->second))
                 --i;
             continue;
         }
@@ -1423,8 +1447,13 @@ void DocumentItem::populateItem(DocumentObjectItem *item, bool refresh) {
     getTree()->updateGeometries();
 }
 
-void DocumentItem::slotChangeObject(const Gui::ViewProviderDocumentObject& view)
+void DocumentItem::slotChangeObject(const Gui::ViewProviderDocumentObject& view, bool broadcast)
 {
+    if(broadcast) {
+        for(auto &v : getTree()->DocumentMap)
+            v.second->slotChangeObject(view,false);
+    }
+
     auto it = ObjectMap.find(view.getObject());
     if(it == ObjectMap.end())
         return;
@@ -1836,10 +1865,8 @@ void DocumentItem::selectAllInstances(const ViewProviderDocumentObject &vpd) {
     for(auto &v : ObjectMap) {
         if(v.second->viewObject == &vpd) continue;
         for(auto child : v.second->viewObject->claimChildren()) {
-            if(!child || child==pObject || !child->getNameInDocument()) continue;
-            ViewProvider* vp = pDocument->getViewProvider(child);
-            if(!vp || !vp->isDerivedFrom(ViewProviderDocumentObject::getClassTypeId()))
-                continue;
+            auto vp = getViewProvider(child);
+            if(!vp) continue;
             parentMap[vp].push_back(v.second->viewObject);
         }
     }
@@ -1941,6 +1968,7 @@ void DocumentObjectItem::testStatus(bool resetStatus,QIcon &icon)
 {
     App::DocumentObject* pObject = object()->getObject();
     int currentStatus =
+        ((object()->getDocument()==myData->docItem.document()?0:1)<<4) |
         ((object()->showInTree() ? 0 : 1) << 3) |
         ((pObject->isError()          ? 1 : 0) << 2) |
         ((pObject->mustExecute() == 1 ? 1 : 0) << 1) |
@@ -1981,40 +2009,48 @@ void DocumentObjectItem::testStatus(bool resetStatus,QIcon &icon)
     if(icon.isNull()) {
         QPixmap px;
         if (currentStatus & 4) {
+            static QPixmap pxError;
+            if(pxError.isNull()) {
             // object is in error state
-            static const char * const feature_error_xpm[]={
-                "9 9 3 1",
-                ". c None",
-                "# c #ff0000",
-                "a c #ffffff",
-                "...###...",
-                ".##aaa##.",
-                ".##aaa##.",
-                "###aaa###",
-                "###aaa###",
-                "#########",
-                ".##aaa##.",
-                ".##aaa##.",
-                "...###..."};
-            px = QPixmap(feature_error_xpm);
+                const char * const feature_error_xpm[]={
+                    "9 9 3 1",
+                    ". c None",
+                    "# c #ff0000",
+                    "a c #ffffff",
+                    "...###...",
+                    ".##aaa##.",
+                    ".##aaa##.",
+                    "###aaa###",
+                    "###aaa###",
+                    "#########",
+                    ".##aaa##.",
+                    ".##aaa##.",
+                    "...###..."};
+                pxError = QPixmap(feature_error_xpm);
+            }
+            px = pxError;
         }
         else if (currentStatus & 2) {
-            // object must be recomputed
-            static const char * const feature_recompute_xpm[]={
-                "9 9 3 1",
-                ". c None",
-                "# c #0000ff",
-                "a c #ffffff",
-                "...###...",
-                ".######aa",
-                ".#####aa.",
-                "#####aa##",
-                "#aa#aa###",
-                "#aaaa####",
-                ".#aa####.",
-                ".#######.",
-                "...###..."};
-            px = QPixmap(feature_recompute_xpm);
+            static QPixmap pxRecompute;
+            if(pxRecompute.isNull()) {
+                // object must be recomputed
+                const char * const feature_recompute_xpm[]={
+                    "9 9 3 1",
+                    ". c None",
+                    "# c #0000ff",
+                    "a c #ffffff",
+                    "...###...",
+                    ".######aa",
+                    ".#####aa.",
+                    "#####aa##",
+                    "#aa#aa###",
+                    "#aaaa####",
+                    ".#aa####.",
+                    ".#######.",
+                    "...###..."};
+                pxRecompute = QPixmap(feature_recompute_xpm);
+            }
+            px = pxRecompute;
         }
 
         // get the original icon set
@@ -2043,21 +2079,45 @@ void DocumentObjectItem::testStatus(bool resetStatus,QIcon &icon)
         }
 
         if(currentStatus & 8)  {// hidden item
-            static const char * const feature_hidden_xpm[]={
-                "9 7 3 1",
-                ". c None",
-                "# c #000000",
-                "a c #ffffff",
-                "...###...",
-                "..#aaa#..",
-                ".#a###a#.",
-                "#aa###aa#",
-                ".#a###a#.",
-                "..#aaa#..",
-                "...###..."};
-            px = QPixmap(feature_hidden_xpm);
-            pxOff = BitmapFactory().merge(pxOff, px, BitmapFactoryInst::TopLeft);
-            pxOn = BitmapFactory().merge(pxOn, px, BitmapFactoryInst::TopLeft);
+            static QPixmap pxHidden;
+            if(pxHidden.isNull()) {
+                const char * const feature_hidden_xpm[]={
+                    "9 7 3 1",
+                    ". c None",
+                    "# c #000000",
+                    "a c #ffffff",
+                    "...###...",
+                    "..#aaa#..",
+                    ".#a###a#.",
+                    "#aa###aa#",
+                    ".#a###a#.",
+                    "..#aaa#..",
+                    "...###..."};
+                pxHidden = QPixmap(feature_hidden_xpm);
+            }
+            pxOff = BitmapFactory().merge(pxOff, pxHidden, BitmapFactoryInst::TopLeft);
+            pxOn = BitmapFactory().merge(pxOn, pxHidden, BitmapFactoryInst::TopLeft);
+        }
+
+        if(currentStatus & 16) {// external item
+            static QPixmap pxExternal;
+            if(pxExternal.isNull()) {
+                const char * const feature_external_xpm[]={
+                    "7 7 3 1",
+                    ". c None",
+                    "# c #000000",
+                    "a c #ffffff",
+                    "..###..",
+                    ".#aa##.",
+                    "###aa##",
+                    "####aa#",
+                    "###aa##",
+                    ".#aa##.",
+                    "..###.."};
+                pxExternal = QPixmap(feature_external_xpm);
+            }
+            pxOff = BitmapFactory().merge(pxOff, pxExternal, BitmapFactoryInst::BottomRight);
+            pxOn = BitmapFactory().merge(pxOn, pxExternal, BitmapFactoryInst::BottomRight);
         }
 
         icon.addPixmap(pxOn, QIcon::Normal, QIcon::On);
@@ -2119,7 +2179,8 @@ bool DocumentObjectItem::isChildOfItem(DocumentObjectItem* item)
 }
 
 bool DocumentObjectItem::requiredAtRoot() const{
-    if(myData->rootItem) return false;
+    if(myData->rootItem || object()->getDocument()!=myData->docItem.document()) 
+        return false;
     for(auto item : myData->items) {
         if(item == this) continue;
         auto pi = item->getParentItem();
