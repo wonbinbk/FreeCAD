@@ -375,7 +375,8 @@ std::string ViewProviderPythonFeatureImp::getElement(const SoDetail *det) const
     return "";
 }
 
-std::string ViewProviderPythonFeatureImp::getElementPicked(const SoPickedPoint *pp) const
+ViewProviderPythonFeatureImp::ValueT
+ViewProviderPythonFeatureImp::getElementPicked(const SoPickedPoint *pp, std::string &subname) const
 {
     Base::PyGILStateLocker lock;
     try {
@@ -388,8 +389,10 @@ std::string ViewProviderPythonFeatureImp::getElementPicked(const SoPickedPoint *
                 Py::Callable method(vp.getAttr(std::string("getElementPicked")));
                 Py::Tuple args(1);
                 args.setItem(0, Py::Object(pivy, true));
-                Py::String name(method.apply(args));
-                return (std::string)name;
+                Py::Object ret(method.apply(args));
+                if(!ret.isString()) return Rejected;
+                subname = ret.as_string();
+                return Accepted;
             }
         }
     }
@@ -401,7 +404,7 @@ std::string ViewProviderPythonFeatureImp::getElementPicked(const SoPickedPoint *
         e.ReportException();
     }
 
-    return "";
+    return NotImplemented;
 }
 
 SoDetail* ViewProviderPythonFeatureImp::getDetail(const char* name) const

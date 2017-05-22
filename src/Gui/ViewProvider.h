@@ -124,7 +124,7 @@ public:
     /// indicates if the ViewProvider can be selected
     virtual bool isSelectable(void) const {return true;}
     /// return a hit element given the picked point which contains the full node path
-    virtual std::string getElementPicked(const SoPickedPoint *) const;
+    virtual bool getElementPicked(const SoPickedPoint *, std::string &subname) const;
     /// return a hit element to the selection path or 0
     virtual std::string getElement(const SoDetail *) const { return std::string(); }
     /// return the coin node detail of the subelement

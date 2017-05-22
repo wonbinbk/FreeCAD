@@ -122,7 +122,6 @@ SoFCUnifiedSelection::SoFCUnifiedSelection() : pcDocument(0)
     detailPath = static_cast<SoFullPath*>(new SoPath(20));
     detailPath->ref();
 
-    highlighted = false;
     preSelection = -1;
 }
 
@@ -218,34 +217,69 @@ int SoFCUnifiedSelection::getPriority(const SoPickedPoint* p)
     return 0;
 }
 
-const SoPickedPoint*
-SoFCUnifiedSelection::getPickedPoint(SoHandleEventAction* action) const
+std::vector<SoFCUnifiedSelection::PickedInfo> 
+SoFCUnifiedSelection::getPickedList(SoHandleEventAction* action, bool singlePick) const
 {
+    ViewProvider *last_vp = 0;
+    std::vector<PickedInfo> ret;
+    const SoPickedPointList & points = action->getPickedPointList();
+    for(int i=0,count=points.getLength();i<count;++i) {
+        PickedInfo info;
+        info.pp = points[i];
+        info.vpd = 0;
+        ViewProvider *vp = 0;
+        SoFullPath *path = static_cast<SoFullPath *>(info.pp->getPath());
+        if (this->pcDocument && path && path->containsPath(action->getCurPath())) {
+            vp = this->pcDocument->getViewProviderByPathFromTail(path);
+            if(singlePick && last_vp && last_vp!=vp)
+                return ret;
+        }
+        if(!vp || !vp->isDerivedFrom(ViewProviderDocumentObject::getClassTypeId())) {
+            if(!singlePick) continue;
+            if(ret.empty())
+                ret.push_back(info);
+            break;
+        }
+        info.vpd = static_cast<ViewProviderDocumentObject*>(vp);
+        if(!info.vpd->useNewSelectionModel() || !info.vpd->isSelectable()) {
+            if(!singlePick) continue;
+            if(ret.empty()) {
+                info.vpd = 0;
+                ret.push_back(info);
+            }
+            break;
+        }
+        if(!info.vpd->getElementPicked(info.pp,info.element))
+            continue;
+
+        if(singlePick) 
+            last_vp = vp;
+        ret.push_back(info);
+    }
+
+    if(!singlePick || ret.size()<=1) return ret;
+
     // To identify the picking of lines in a concave area we have to 
     // get all intersection points. If we have two or more intersection
     // points where the first is of a face and the second of a line with
     // almost similar coordinates we use the second point, instead.
-    const SoPickedPointList & points = action->getPickedPointList();
-    if (points.getLength() == 0)
-        return 0;
-    else if (points.getLength() == 1)
-        return points[0];
-    
-    const SoPickedPoint* picked = points[0];
-    int picked_prio = getPriority(picked);
-    const SbVec3f& picked_pt = picked->getPoint();
 
-    for (int i=1; i<points.getLength();i++) {
-        const SoPickedPoint* cur = points[i];
-        int cur_prio = getPriority(cur);
-        const SbVec3f& cur_pt = cur->getPoint();
+    int picked_prio = getPriority(ret[0].pp);
+    const SbVec3f& picked_pt = ret.front().pp->getPoint();
+
+    auto itPicked = ret.begin();
+    for(auto it=ret.begin()+1;it!=ret.end();++it) {
+        int cur_prio = getPriority(it->pp);
+        const SbVec3f& cur_pt = it->pp->getPoint();
 
         if ((cur_prio > picked_prio) && picked_pt.equals(cur_pt, 0.01f)) {
-            picked = cur;
+            itPicked = it;
             picked_prio = cur_prio;
         }
     }
-    return picked;
+
+    std::vector<PickedInfo> sret(itPicked,itPicked+1);
+    return sret;
 }
 
 void SoFCUnifiedSelection::doAction(SoAction *action)
@@ -344,6 +378,188 @@ void SoFCUnifiedSelection::doAction(SoAction *action)
     inherited::doAction( action );
 }
 
+bool SoFCUnifiedSelection::setHighlight(const PickedInfo &info) {
+    SoFullPath *path;
+    bool highlighted = false;
+    if(info.pp && (path=static_cast<SoFullPath*>(info.pp->getPath())) && 
+       info.vpd && info.vpd->getObject() && info.vpd->getObject()->getNameInDocument()) 
+    {
+        const char *docname = info.vpd->getObject()->getDocument()->getName();
+        const char *objname = info.vpd->getObject()->getNameInDocument();
+        const char *element = info.element.c_str();
+
+        this->preSelection = 1;
+        static char buf[513];
+        const auto &pt = info.pp->getPoint();
+        snprintf(buf,512,"Preselected: %s.%s.%s (%g, %g, %g)"
+                ,docname,objname,element
+                ,fabs(pt[0])>1e-7?pt[0]:0.0
+                ,fabs(pt[1])>1e-7?pt[1]:0.0
+                ,fabs(pt[2])>1e-7?pt[2]:0.0);
+
+        getMainWindow()->showMessage(QString::fromLatin1(buf));
+
+        if (Gui::Selection().setPreselect(
+                    docname,objname,element
+                    ,info.pp->getPoint()[0]
+                    ,info.pp->getPoint()[1]
+                    ,info.pp->getPoint()[2]))
+        {
+            if (currenthighlight && *currenthighlight!=*path) {
+                SoHighlightElementAction action;
+                action.setHighlighted(false);
+                action.apply(currenthighlight);
+                currenthighlight->unref();
+                currenthighlight = 0;
+            }
+            currenthighlight = static_cast<SoFullPath*>(path->copy());
+            currenthighlight->ref();
+            highlighted = true;
+        }
+    }
+
+    if(currenthighlight) {
+        SoHighlightElementAction action;
+        action.setHighlighted(highlighted);
+        action.setColor(this->colorHighlight.getValue());
+        action.setElement(info.pp?info.pp->getDetail():0);
+        action.apply(currenthighlight);
+        if(!highlighted) {
+            currenthighlight->unref();
+            currenthighlight = 0;
+        }
+    }
+    this->touch();
+    return highlighted;
+}
+
+bool SoFCUnifiedSelection::setSelection(const PickedInfo &info, bool ctrlDown) {
+    auto vpd = info.vpd;
+    if(!vpd) return false;
+    const char *objname = vpd->getObject()->getNameInDocument();
+    if(!objname) return false;
+    const char *docname = vpd->getObject()->getDocument()->getName();
+
+    bool hasNext = false;
+    const SoPickedPoint * pp = info.pp;
+    const SoDetail *det = pp->getDetail();
+    SoDetail *detNext = 0;
+    SoFullPath *pPath = static_cast<SoFullPath*>(pp->getPath());
+    const auto &pt = pp->getPoint();
+    SoSelectionElementAction::Type type = SoSelectionElementAction::None;
+    HighlightModes mymode = (HighlightModes) this->highlightMode.getValue();
+    static char buf[513];
+
+    if (ctrlDown) {
+        bool ok = Gui::Selection().addSelection(docname,objname,
+                info.element.c_str(), pt[0] ,pt[1] ,pt[2]);
+        if (ok)
+            type = SoSelectionElementAction::Append;
+        if (mymode == OFF) {
+            snprintf(buf,512,"Selected: %s.%s.%s (%g, %g, %g)",
+                    docname,objname,info.element.c_str()
+                    ,fabs(pt[0])>1e-7?pt[0]:0.0
+                    ,fabs(pt[1])>1e-7?pt[1]:0.0
+                    ,fabs(pt[2])>1e-7?pt[2]:0.0);
+
+            getMainWindow()->showMessage(QString::fromLatin1(buf));
+        }
+        return true;
+    }
+
+    // Hierarchy acending
+    //
+    // If the clicked subelement is already selected, check if there is an
+    // upper hierarchy, and select that hierarchy instead. 
+    //
+    // For example, let's suppose PickedInfo above reports
+    // 'link.link2.box.Face1', and below Selection().getSelectedElement returns
+    // 'link.link2.box', meaning that 'box' is the current selected hierarchy,
+    // and the user is clicking the box again.  So we shall go up one level,
+    // and select 'link.link2'
+    //
+
+    std::string subElementName = info.element;
+    std::string objectName = objname;
+
+    const char *subSelected = Gui::Selection().getSelectedElement(
+                                vpd->getObject(),subElementName.c_str());
+
+    FC_TRACE("select " << (subSelected?subSelected:"'null'") << ", " << 
+            objectName << ", " << subElementName);
+    if(subSelected) {
+        const char *next = strrchr(subSelected,'.');
+        std::string nextsub;
+        if(next) 
+            nextsub = std::string(subSelected,next-subSelected);
+        if(nextsub.length() || *subSelected!=0) {
+            hasNext = true;
+            subElementName = nextsub;
+            detailPath->truncate(0);
+            detNext = vpd->getDetailPath(subElementName.c_str(),detailPath,true);
+            if(detailPath->getLength()) {
+                pPath = detailPath;
+                det = detNext;
+                FC_TRACE("select next " << objectName << ", " << subElementName);
+            }
+        }
+    }
+
+    // If no next hierarchy is found, do another try on view provider hierarchies, 
+    // which is used by geo feature group.
+    if(!hasNext) {
+        bool found = false;
+        auto vps = this->pcDocument->getViewProvidersByPath(pPath);
+        for(auto it=vps.begin();it!=vps.end();++it) {
+            auto vpdNext = it->first;
+            if(Gui::Selection().isSelected(vpdNext->getObject(),"")) {
+                found = true;
+                continue;
+            }
+            if(!found || !vpdNext->useNewSelectionModel() || !vpdNext->isSelectable())
+                continue;
+            hasNext = true;
+            vpd = vpdNext;
+            det = 0;
+            pPath->truncate(it->second+1);
+            objectName = vpd->getObject()->getNameInDocument();
+            subElementName = "";
+            break;
+        }
+    }
+
+    FC_TRACE("clearing selection");
+    Gui::Selection().clearSelection(docname);
+    FC_TRACE("add selection");
+    bool ok = Gui::Selection().addSelection(
+            docname, objectName.c_str() ,subElementName.c_str(), pt[0] ,pt[1] ,pt[2]);
+    if (ok)
+        type = hasNext?SoSelectionElementAction::All:SoSelectionElementAction::Append;
+
+    if (mymode == OFF) {
+        snprintf(buf,512,"Selected: %s.%s.%s (%g, %g, %g)",
+                docname, objectName.c_str() ,subElementName.c_str()
+                ,fabs(pt[0])>1e-7?pt[0]:0.0
+                ,fabs(pt[1])>1e-7?pt[1]:0.0
+                ,fabs(pt[2])>1e-7?pt[2]:0.0);
+
+        getMainWindow()->showMessage(QString::fromLatin1(buf));
+    }
+
+    if (pPath && checkSelectionStyle(type,vpd)) {
+        FC_TRACE("applying action");
+        SoSelectionElementAction action(type);
+        action.setColor(this->colorSelection.getValue());
+        action.setElement(det);
+        action.apply(pPath);
+        FC_TRACE("applied action");
+        this->touch();
+    }
+
+    if(detNext) delete detNext;
+    return true;
+}
+
 // doc from parent
 void
 SoFCUnifiedSelection::handleEvent(SoHandleEventAction * action)
@@ -354,7 +570,6 @@ SoFCUnifiedSelection::handleEvent(SoHandleEventAction * action)
         return;
     }
 
-    static char buf[513];
     HighlightModes mymode = (HighlightModes) this->highlightMode.getValue();
     const SoEvent * event = action->getEvent();
 
@@ -368,7 +583,6 @@ SoFCUnifiedSelection::handleEvent(SoHandleEventAction * action)
     //    return;
     //}
 
-    
     //
     // If this is a mouseMotion event, then check for locate highlighting
     //
@@ -378,89 +592,17 @@ SoFCUnifiedSelection::handleEvent(SoHandleEventAction * action)
         // set has been selected.
         if (mymode == AUTO || mymode == ON) {
             // check to see if the mouse is over our geometry...
-            const SoPickedPoint * pp = this->getPickedPoint(action);
-            SoFullPath *pPath = (pp != NULL) ? (SoFullPath *) pp->getPath() : NULL;
-            ViewProvider *vp = 0;
-            ViewProviderDocumentObject* vpd = 0;
-            if (this->pcDocument && pPath && pPath->containsPath(action->getCurPath()))
-                vp = this->pcDocument->getViewProviderByPathFromTail(pPath);
-            if (vp && vp->isDerivedFrom(ViewProviderDocumentObject::getClassTypeId()))
-                vpd = static_cast<ViewProviderDocumentObject*>(vp);
-
-            //SbBool old_state = highlighted;
-            highlighted = false;
-            if (vpd && vpd->useNewSelectionModel() && vpd->isSelectable()) {
-                std::string documentName = vpd->getObject()->getDocument()->getName();
-                std::string objectName = vpd->getObject()->getNameInDocument();
-                std::string subElementName = vpd->getElementPicked(pp);
-
-                this->preSelection = 1;
-                static char buf[513];
-                const auto &pt = pp->getPoint();
-                snprintf(buf,512,"Preselected: %s.%s.%s (%g, %g, %g)",documentName.c_str()
-                                           ,objectName.c_str()
-                                           ,subElementName.c_str()
-                                           ,fabs(pt[0])>1e-7?pt[0]:0.0
-                                           ,fabs(pt[1])>1e-7?pt[1]:0.0
-                                           ,fabs(pt[2])>1e-7?pt[2]:0.0);
-
-                getMainWindow()->showMessage(QString::fromLatin1(buf));
-
-                if (Gui::Selection().setPreselect(documentName.c_str()
-                                       ,objectName.c_str()
-                                       ,subElementName.c_str()
-                                       ,pp->getPoint()[0]
-                                       ,pp->getPoint()[1]
-                                       ,pp->getPoint()[2])){
-
-                    SoSearchAction sa;
-                    sa.setNode(vp->getRoot());
-                    sa.apply(vp->getRoot());
-                    if (sa.getPath()) {
-                        highlighted = true;
-                        if (currenthighlight && currenthighlight->getTail() != sa.getPath()->getTail()) {
-                            SoHighlightElementAction action;
-                            action.setHighlighted(false);
-                            action.apply(currenthighlight);
-                            currenthighlight->unref();
-                            currenthighlight = 0;
-                            //old_state = !highlighted;
-                        }
-                        else if (currenthighlight) {
-                            // clean-up the highlight path before assigning a new path
-                            currenthighlight->unref();
-                            currenthighlight = 0;
-                        }
-
-                        if(pp && pp->getDetail()) 
-                            currenthighlight = static_cast<SoFullPath*>(pp->getPath()->copy());
-                        else
-                            currenthighlight = static_cast<SoFullPath*>(sa.getPath()->copy());
-                        currenthighlight->ref();
-                    }
-                }
-            }
-            // nothing picked
-            else if (!pp) {
+            auto infos = this->getPickedList(action,true);
+            if(infos.size()) 
+                setHighlight(infos[0]);
+            else {
+                setHighlight(PickedInfo());
                 if (this->preSelection > 0) {
                     this->preSelection = 0;
                     // touch() makes sure to call GLRenderBelowPath so that the cursor can be updated
                     // because only from there the SoGLWidgetElement delivers the OpenGL window
                     this->touch();
                 }
-            }
-
-            if (currenthighlight/* && old_state != highlighted*/) {
-                SoHighlightElementAction action;
-                action.setHighlighted(highlighted);
-                action.setColor(this->colorHighlight.getValue());
-                action.setElement(pp ? pp->getDetail() : 0);
-                action.apply(currenthighlight);
-                if (!highlighted) {
-                    currenthighlight->unref();
-                    currenthighlight = 0;
-                }
-                this->touch();
             }
         }
     }
@@ -470,133 +612,9 @@ SoFCUnifiedSelection::handleEvent(SoHandleEventAction * action)
         const SoMouseButtonEvent* e = static_cast<const SoMouseButtonEvent *>(event);
         if (SoMouseButtonEvent::isButtonReleaseEvent(e,SoMouseButtonEvent::BUTTON1)) {
             // check to see if the mouse is over a geometry...
-            const SoPickedPoint * pp = this->getPickedPoint(action);
-            const SoDetail *det = pp?pp->getDetail():0;
-            SoDetail *detNext = 0;
-            SoFullPath *pPath = (pp != NULL) ? (SoFullPath *) pp->getPath() : NULL;
-
-            std::vector<std::pair<ViewProviderDocumentObject*,int> > vps;
-            if (this->pcDocument && pPath && pPath->containsPath(action->getCurPath()))
-                vps = this->pcDocument->getViewProvidersByPath(pPath);
-            
-            ViewProviderDocumentObject *vpd = vps.empty()?nullptr:vps.begin()->first;
-            if(vpd && vpd->useNewSelectionModel() && vpd->isSelectable()) {
-
-                const auto &pt = pp->getPoint();
-                SoSelectionElementAction::Type type = SoSelectionElementAction::None;
-                std::string documentName = vpd->getObject()->getDocument()->getName();
-                std::string objectName = vpd->getObject()->getNameInDocument();
-                std::string subElementName = vpd->getElementPicked(pp);
-                bool hasNext = false;
-
-                if (event->wasCtrlDown()) {
-                    bool ok = Gui::Selection().addSelection(documentName.c_str()
-                                        ,objectName.c_str()
-                                        ,subElementName.c_str()
-                                        ,pt[0] ,pt[1] ,pt[2]);
-                    if (ok)
-                        type = SoSelectionElementAction::Append;
-                    if (mymode == OFF) {
-                        snprintf(buf,512,"Selected: %s.%s.%s (%g, %g, %g)",documentName.c_str()
-                                                    ,objectName.c_str()
-                                                    ,subElementName.c_str()
-                                                    ,fabs(pt[0])>1e-7?pt[0]:0.0
-                                                    ,fabs(pt[1])>1e-7?pt[1]:0.0
-                                                    ,fabs(pt[2])>1e-7?pt[2]:0.0);
-
-                        getMainWindow()->showMessage(QString::fromLatin1(buf));
-                    }
-                }else{
-                    // Hierarchy acending
-                    //
-                    // If the clicked subelement is already selected, check if there
-                    // is an upper hierarchy, and select that hierarchy instead. 
-                    //
-                    // For example, let's suppose getElementPicked above reports 
-                    // 'link.link2.box.Face1', and below Selection().getSelectedElement
-                    // returns 'link.link2.box', meaning that 'box' is the current
-                    // selected hierarchy, and the user is clicking the box again.
-                    // So we shall go up one level, and select 'link.link2'
-                    //
-                    const char *subSelected = Gui::Selection().getSelectedElement(
-                                                vpd->getObject(),subElementName.c_str());
-
-                    FC_TRACE("select " << (subSelected?subSelected:"'null'") << ", " << 
-                            objectName << ", " << subElementName);
-                    if(subSelected) {
-                        const char *next = strrchr(subSelected,'.');
-                        std::string nextsub;
-                        if(next) 
-                            nextsub = std::string(subSelected,next-subSelected);
-                        if(nextsub.length() || *subSelected!=0) {
-                            hasNext = true;
-                            subElementName = nextsub;
-                            detailPath->truncate(0);
-                            detNext = vpd->getDetailPath(subElementName.c_str(),detailPath,true);
-                            if(detailPath->getLength()) {
-                                pPath = detailPath;
-                                det = detNext;
-                                FC_TRACE("select next " << objectName << ", " << subElementName);
-                            }
-                        }
-                    }
-
-                    // If no next hierarchy is found, do another try on view provider hierarchies, 
-                    // which is used by geo feature group.
-                    if(!hasNext) {
-                        bool found = false;
-                        for(auto it=vps.begin();it!=vps.end();++it) {
-                            auto vpdNext = it->first;
-                            if(Gui::Selection().isSelected(vpdNext->getObject(),"")) {
-                                found = true;
-                                continue;
-                            }
-                            if(!found || !vpdNext->useNewSelectionModel() || !vpdNext->isSelectable())
-                                continue;
-                            hasNext = true;
-                            vpd = vpdNext;
-                            det = 0;
-                            pPath->truncate(it->second+1);
-                            objectName = vpd->getObject()->getNameInDocument();
-                            subElementName = "";
-                            break;
-                        }
-                    }
-
-                    FC_TRACE("clearing selection");
-                    Gui::Selection().clearSelection(documentName.c_str());
-                    FC_TRACE("add selection");
-                    bool ok = Gui::Selection().addSelection(documentName.c_str()
-                                            ,objectName.c_str()
-                                            ,subElementName.c_str()
-                                            ,pt[0] ,pt[1] ,pt[2]);
-                    if (ok)
-                        type = hasNext?SoSelectionElementAction::All:SoSelectionElementAction::Append;
-
-                    if (mymode == OFF) {
-                        snprintf(buf,512,"Selected: %s.%s.%s (%g, %g, %g)",documentName.c_str()
-                                                    ,objectName.c_str()
-                                                    ,subElementName.c_str()
-                                                    ,fabs(pt[0])>1e-7?pt[0]:0.0
-                                                    ,fabs(pt[1])>1e-7?pt[1]:0.0
-                                                    ,fabs(pt[2])>1e-7?pt[2]:0.0);
-
-                        getMainWindow()->showMessage(QString::fromLatin1(buf));
-                    }
-                }
-
-                action->setHandled(); 
-                if (pPath && checkSelectionStyle(type,vpd)) {
-                    FC_TRACE("applying action");
-                    SoSelectionElementAction action(type);
-                    action.setColor(this->colorSelection.getValue());
-                    action.setElement(det);
-                    action.apply(pPath);
-                    FC_TRACE("applied action");
-                    this->touch();
-                }
-            } // picked point
-            if(detNext) delete detNext;
+            auto info = this->getPickedList(action,true);
+            if(info.size() && setSelection(info[0],event->wasCtrlDown()))
+                action->setHandled();
         } // mouse release
     }
 
@@ -729,7 +747,8 @@ void SoSelectionElementAction::initClass()
     SO_ACTION_ADD_METHOD(SoPointSet,callDoAction);
 }
 
-SoSelectionElementAction::SoSelectionElementAction (Type t) : _type(t), _det(0)
+SoSelectionElementAction::SoSelectionElementAction (Type t, bool secondary)
+    : _type(t), _det(0), _secondary(secondary)
 {
     SO_ACTION_CONSTRUCTOR(SoSelectionElementAction);
 }
@@ -851,8 +870,6 @@ SoFCSelectionRoot::SoFCSelectionRoot()
     :pushed(false)
 {
     SO_NODE_CONSTRUCTOR(SoFCSelectionRoot);
-
-    SO_NODE_ADD_FIELD(selectionSync, (false));
 }
 
 SoFCSelectionRoot::~SoFCSelectionRoot()
@@ -869,10 +886,28 @@ void SoFCSelectionRoot::finish()
     atexit_cleanup();
 }
 
-SoFCSelectionRoot::ContextPtr SoFCSelectionRoot::getContext(SoNode *node, ContextPtr def) {
-    if(SelStack.empty() ||
-       static_cast<SoFCSelectionRoot*>(SelStack.back())->selectionSync.getValue())
+SoFCSelectionRoot::ContextPtr SoFCSelectionRoot::getContext(SoNode *node, ContextPtr def, ContextPtr *ctx2)
+{
+    if(SelStack.empty())
         return def;
+
+    SoFCSelectionRoot *back = static_cast<SoFCSelectionRoot*>(SelStack.back());
+    if(ctx2 && back->contextMap2.size()) {
+        auto &map = back->contextMap2;
+        Stack key;
+        key.resize(2);
+        key[0] = node;
+        for(size_t i=0;i<SelStack.size();++i) {
+            if(i+1<SelStack.size())
+                key[1] = SelStack[i];
+            else 
+                key.resize(1);
+            auto it = map.find(key);
+            if(it == map.end()) continue;
+            *ctx2 = it->second;
+            break;
+        }
+    }
 
     SoFCSelectionRoot *front = static_cast<SoFCSelectionRoot*>(SelStack.front());
     SelStack.front() = node;
@@ -887,6 +922,9 @@ SoFCSelectionRoot::ContextPtr *SoFCSelectionRoot::getContext(
         SoAction *action, SoNode *node, ContextPtr *pdef) 
 {
     const SoFullPath *path = (const SoFullPath*)action->getCurPath();
+    bool secondary = false;
+    if(action->isOfType(SoSelectionElementAction::getClassTypeId()))
+        secondary = static_cast<SoSelectionElementAction*>(action)->isSecondary();
     Stack stack;
     for(int i=0,count=path->getLength();i<count;++i) {
         SoNode *n = path->getNode(i);
@@ -895,9 +933,18 @@ SoFCSelectionRoot::ContextPtr *SoFCSelectionRoot::getContext(
             stack.push_back(sel);
         }
     }
-    if(stack.empty() ||
-       static_cast<SoFCSelectionRoot*>(stack.back())->selectionSync.getValue())
+    if(stack.empty())
         return pdef;
+
+    if(secondary) {
+        Stack key;
+        key.reserve(2);
+        key.push_back(node);
+        if(stack.size()>1)
+            key.push_back(stack.front());
+        SoFCSelectionRoot *back = static_cast<SoFCSelectionRoot*>(stack.back());
+        return &back->contextMap2[key];
+    }
 
     SoFCSelectionRoot *front = static_cast<SoFCSelectionRoot*>(stack.front());
     stack.front() = node;
@@ -934,11 +981,15 @@ void SoFCSelectionRoot::doAction(SoAction *action) {
     // traversing a potentially large amount of children nodes. The time saving
     // is very noticable for large groups.
     if(action->getWhatAppliedTo() == SoAction::NODE && 
-       action->isOfType(SoSelectionElementAction::getClassTypeId()) &&
-       static_cast<SoSelectionElementAction*>(action)->getType() == SoSelectionElementAction::None)
-    {
-        resetContext();
-        touch();
-    }else
-        inherited::doAction(action);
+       action->isOfType(SoSelectionElementAction::getClassTypeId())) {
+        auto selAction = static_cast<SoSelectionElementAction*>(action);
+        if(selAction->getType() == SoSelectionElementAction::None &&
+           !selAction->isSecondary())
+        {
+            resetContext();
+            touch();
+            return;
+        }
+    }
+    inherited::doAction(action);
 }

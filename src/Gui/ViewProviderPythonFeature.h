@@ -52,7 +52,7 @@ public:
     QIcon getIcon() const;
     std::vector<App::DocumentObject*> claimChildren(const std::vector<App::DocumentObject*>&) const;
     bool useNewSelectionModel() const;
-    std::string getElementPicked(const SoPickedPoint *pp) const;
+    ValueT getElementPicked(const SoPickedPoint *pp, std::string &subname) const;
     std::string getElement(const SoDetail *det) const;
     SoDetail* getDetail(const char*) const;
     ValueT getDetailPath(const char *name, SoFullPath *path, bool append, SoDetail *&det) const;
@@ -153,10 +153,13 @@ public:
     virtual bool useNewSelectionModel() const {
         return imp->useNewSelectionModel();
     }
-    virtual std::string getElementPicked(const SoPickedPoint *pp) const {
-        std::string name = imp->getElementPicked(pp);
-        if (!name.empty()) return name;
-        return ViewProviderT::getElementPicked(pp);
+    virtual bool getElementPicked(const SoPickedPoint *pp, std::string &subname) const {
+        auto ret = imp->getElementPicked(pp,subname);
+        if(ret == ViewProviderPythonFeatureImp::NotImplemented)
+            return ViewProviderT::getElementPicked(pp,subname);
+        else if(ret == ViewProviderPythonFeatureImp::Accepted)
+            return true;
+        return false;
     }
     virtual std::string getElement(const SoDetail *det) const {
         std::string name = imp->getElement(det);

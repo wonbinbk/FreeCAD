@@ -64,17 +64,13 @@ private:
     typedef std::shared_ptr<SelContext> SelContextPtr;
 
     void renderShape(const SoGLCoordinateElement * const vertexlist,
-                     const int32_t *vertexindices,
-                     int num_vertexindices);
-    void renderHighlight(SoGLRenderAction *action, SelContextPtr ctx);
-    void renderSelection(SoGLRenderAction *action, SelContextPtr ctx);
+                     const int32_t *vertexindices, int num_vertexindices);
+    void renderHighlight(SoGLRenderAction *action, SelContextPtr);
+    void renderSelection(SoGLRenderAction *action, SelContextPtr, bool push=true);
     bool validIndexes(const SoCoordinateElement*, const std::vector<int32_t>&) const;
-    void checkRenderCaching(SoAction *action, SelContextPtr ctx);
 
 private:
     SelContextPtr selContext;
-    int canSetRenderCaching;
-    bool renderCaching;
 };
 
 } // namespace PartGui

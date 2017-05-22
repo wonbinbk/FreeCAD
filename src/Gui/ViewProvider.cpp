@@ -707,13 +707,13 @@ std::vector< App::DocumentObject* > ViewProvider::claimChildren3D(void) const {
     return vec;
 }
 
-std::string ViewProvider::getElementPicked(const SoPickedPoint *pp) const {
-    std::string subname;
+bool ViewProvider::getElementPicked(const SoPickedPoint *pp, std::string &subname) const {
     auto vector = getExtensionsDerivedFromType<Gui::ViewProviderExtension>();
     for(Gui::ViewProviderExtension* ext : vector)
         if(ext->extensionGetElementPicked(pp,subname))
-            return subname;
-    return getElement(pp?pp->getDetail():0);
+            return true;
+    subname = getElement(pp?pp->getDetail():0);
+    return true;
 }
 
 SoDetail *ViewProvider::getDetailPath(const char *subelement, SoFullPath *pPath, bool append) const {

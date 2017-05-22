@@ -88,8 +88,9 @@ SO_NODE_SOURCE(SoBrepFaceSet);
 
 class SoBrepFaceSet::SelContext {
 public:
-    SoSFInt32 highlightIndex;
-    SoMFInt32 selectionIndex;
+    int highlightIndex;
+    std::set<int> selectionIndex;
+    bool hasSecondary;
 
 #ifdef RENDER_GLARRAYS
     std::vector<int32_t> index_array;
@@ -99,10 +100,17 @@ public:
     SbColor highlightColor;
     SoColorPacker colorpacker;
 
-    SelContext() {
-        highlightIndex = -1;
-        selectionIndex = -1;
-        selectionIndex.setNum(0);
+    SelContext():highlightIndex(-1),hasSecondary(false)
+    {}
+
+    void removeIndex(int index) {
+        auto it = selectionIndex.find(index);
+        if(it != selectionIndex.end())
+            selectionIndex.erase(it);
+    }
+
+    bool isSelectAll() const {
+        return selectionIndex.size() && *selectionIndex.begin()<0;
     }
 };
 
@@ -219,7 +227,7 @@ void SoBrepFaceSet::doAction(SoAction* action)
         if (detail) {
             if (detail->isOfType(SoFaceDetail::getClassTypeId())) {
                 int index = static_cast<const SoFaceDetail*>(detail)->getPartIndex();
-                ctx->highlightIndex.setValue(index);
+                ctx->highlightIndex = index;
                 ctx->highlightColor = hlaction->getColor();
             }
             else {
@@ -233,23 +241,20 @@ void SoBrepFaceSet::doAction(SoAction* action)
         SelContextPtr ctx = Gui::SoFCSelectionRoot::getActionContext<SelContext>(action,this,selContext);
         ctx->selectionColor = selaction->getColor();
         if (selaction->getType() == Gui::SoSelectionElementAction::All) {
-            //int num = this->partIndex.getNum();
-            //this->selectionIndex.setNum(num);
-            //int32_t* v = this->selectionIndex.startEditing();
-            //for (int i=0; i<num;i++)
-            //    v[i] = i;
-            //this->selectionIndex.finishEditing();
-            ctx->selectionIndex.setValue(-1); // all
+            ctx->selectionIndex.clear();
+            ctx->selectionIndex.insert(-1);
 
             //TODO: check if this need to be context aware
             PRIVATE(this)->updateVbo = true;
             return;
         }
         else if (selaction->getType() == Gui::SoSelectionElementAction::None) {
-            ctx->selectionIndex.setNum(0);
+            ctx->hasSecondary = false;
+            ctx->selectionIndex.clear();
             PRIVATE(this)->updateVbo = true;
             return;
         }
+        ctx->hasSecondary = selaction->isSecondary();
 
         const SoDetail* detail = selaction->getElement();
         if (detail) {
@@ -260,20 +265,12 @@ void SoBrepFaceSet::doAction(SoAction* action)
             int index = static_cast<const SoFaceDetail*>(detail)->getPartIndex();
             switch (selaction->getType()) {
             case Gui::SoSelectionElementAction::Append:
-                {
-                    if (ctx->selectionIndex.find(index) < 0) {
-                        int start = ctx->selectionIndex.getNum();
-                        ctx->selectionIndex.set1Value(start, index);
-                    }
-                }
+                if(ctx->isSelectAll()) 
+                    ctx->selectionIndex.clear();
+                ctx->selectionIndex.insert(index);
                 break;
             case Gui::SoSelectionElementAction::Remove:
-                {
-                    int start = ctx->selectionIndex.find(index);
-                    if (start >= 0) {
-                        ctx->selectionIndex.deleteValues(start,1);
-                    }
-                }
+                ctx->removeIndex(index);
                 break;
             default:
                 break;
@@ -323,6 +320,8 @@ void SoBrepFaceSet::doAction(SoAction* action)
 void SoBrepFaceSet::GLRender(SoGLRenderAction *action)
 {
     SoState * state = action->getState();
+    // Disable caching for this node
+    SoGLCacheContextElement::shouldAutoCache(state, SoGLCacheContextElement::DONT_AUTO_CACHE);
 
     SoMaterialBundle mb(action);
     Binding mbind = this->findMaterialBinding(state);
@@ -333,77 +332,86 @@ void SoBrepFaceSet::GLRender(SoGLRenderAction *action)
     if (ctx->coordIndex.getNum() < 3)
         return;
 
-    SelContextPtr ctx = Gui::SoFCSelectionRoot::getRenderContext<SelContext>(this,selContext);
-
-    int32_t hl_idx = ctx?ctx->highlightIndex.getValue():-1;
-    int32_t num_selected = ctx?ctx->selectionIndex.getNum():0;
-
-    if (hl_idx >= 0)
-        renderHighlight(action,ctx);
-    if (num_selected > 0) {
-        renderSelection(action,ctx);
-        if(ctx->selectionIndex[0]<0) //full selection
-            return;
-    }
-
-    // When setting transparency shouldGLRender() handles the rendering and returns false.
-    // Therefore generatePrimitives() needs to be re-implemented to handle the materials
-    // correctly.
-    if (!this->shouldGLRender(action))
+    SelContextPtr ctx2;
+    SelContextPtr ctx = Gui::SoFCSelectionRoot::getRenderContext<SelContext>(this,selContext,&ctx2);
+    if(ctx2 && ctx2->hasSecondary && ctx2->selectionIndex.empty())
         return;
 
-#ifdef RENDER_GLARRAYS
-    if (!doTextures && index_array.size() && hl_idx < 0 && num_selected <= 0) {
-        if (mbind == 0) {
-            mb.sendFirst(); // only one material -> apply it!
-            renderSimpleArray();
+    int32_t hl_idx = ctx?ctx->highlightIndex:-1;
+    int32_t num_selected = ctx?ctx->selectionIndex.size():0;
+
+    renderHighlight(action,ctx);
+    if(ctx && ctx->selectionIndex.size()) {
+        if(ctx->isSelectAll()) {
+            if(ctx2 && ctx2->selectionIndex.size()) {
+                ctx2->selectionColor = ctx->selectionColor;
+                renderSelection(action,ctx2); 
+            } else
+                renderSelection(action,ctx); 
             return;
         }
-        else if (mbind == 1) {
-            renderColoredArray(&mb);
-            return;
-        }
+        renderSelection(action,ctx); 
     }
+    if(ctx2 && ctx2->selectionIndex.size()) {
+        renderSelection(action,ctx2,false);
+    }else{
+
+        // When setting transparency shouldGLRender() handles the rendering and returns false.
+        // Therefore generatePrimitives() needs to be re-implemented to handle the materials
+        // correctly.
+        if (!this->shouldGLRender(action))
+            return;
+
+#ifdef RENDER_GLARRAYS
+        if (!doTextures && index_array.size() && hl_idx < 0 && num_selected <= 0) {
+            if (mbind == 0) {
+                mb.sendFirst(); // only one material -> apply it!
+                renderSimpleArray();
+                return;
+            }
+            else if (mbind == 1) {
+                renderColoredArray(&mb);
+                return;
+            }
+        }
 #endif
 
-    Binding nbind = this->findNormalBinding(state);
+        Binding nbind = this->findNormalBinding(state);
 
-    const SoCoordinateElement * coords;
-    const SbVec3f * normals;
-    const int32_t * cindices;
-    int numindices;
-    const int32_t * nindices;
-    const int32_t * tindices;
-    const int32_t * mindices;
-    const int32_t * pindices;
-    int numparts;
-    SbBool normalCacheUsed;
+        const SoCoordinateElement * coords;
+        const SbVec3f * normals;
+        const int32_t * cindices;
+        int numindices;
+        const int32_t * nindices;
+        const int32_t * tindices;
+        const int32_t * mindices;
+        const int32_t * pindices;
+        int numparts;
+        SbBool normalCacheUsed;
 
-    SbBool sendNormals = !mb.isColorOnly() || tb.isFunction();
+        SbBool sendNormals = !mb.isColorOnly() || tb.isFunction();
 
-    this->getVertexData(state, coords, normals, cindices,
-                        nindices, tindices, mindices, numindices,
-                        sendNormals, normalCacheUsed);
+        this->getVertexData(state, coords, normals, cindices,
+                            nindices, tindices, mindices, numindices,
+                            sendNormals, normalCacheUsed);
 
-    mb.sendFirst(); // make sure we have the correct material
+        mb.sendFirst(); // make sure we have the correct material
 
-    // just in case someone forgot
-    if (!mindices) mindices = cindices;
-    if (!nindices) nindices = cindices;
-    pindices = this->partIndex.getValues(0);
-    numparts = this->partIndex.getNum();
+        // just in case someone forgot
+        if (!mindices) mindices = cindices;
+        if (!nindices) nindices = cindices;
+        pindices = this->partIndex.getValues(0);
+        numparts = this->partIndex.getNum();
 
-    renderShape(state, vboAvailable, static_cast<const SoGLCoordinateElement*>(coords), cindices, numindices,
-        pindices, numparts, normals, nindices, &mb, mindices, &tb, tindices, nbind, mbind, doTextures?1:0);
+        renderShape(state, vboAvailable, static_cast<const SoGLCoordinateElement*>(coords), cindices, numindices,
+            pindices, numparts, normals, nindices, &mb, mindices, &tb, tindices, nbind, mbind, doTextures?1:0);
 
-    // Disable caching for this node
-    SoGLCacheContextElement::shouldAutoCache(state, SoGLCacheContextElement::DONT_AUTO_CACHE);
+    }
 
     // Workaround for #0000433
 //#if !defined(FC_OS_WIN32)
-    if (hl_idx >= 0)
-        renderHighlight(action,ctx);
-    if (num_selected > 0)
+    renderHighlight(action,ctx);
+    if(ctx && ctx->selectionIndex.size())
         renderSelection(action,ctx);
 //#endif
     
@@ -485,77 +493,91 @@ void SoBrepFaceSet::GLRender(SoGLRenderAction *action)
 
     if (this->coordIndex.getNum() < 3)
         return;
-    SelContextPtr ctx = Gui::SoFCSelectionRoot::getRenderContext<SelContext>(this,selContext);
-    if (ctx && ctx->highlightIndex.getValue() >= 0)
-        renderHighlight(action,ctx);
-    if (ctx && ctx->selectionIndex.getNum() > 0) {
-        renderSelection(action,ctx);
-        if(ctx->selectionIndex[0]<0) //full selection
-            return;
-    }
-    // When setting transparency shouldGLRender() handles the rendering and returns false.
-    // Therefore generatePrimitives() needs to be re-implemented to handle the materials
-    // correctly.
-    if (!this->shouldGLRender(action))
+
+    SelContextPtr ctx2;
+    SelContextPtr ctx = Gui::SoFCSelectionRoot::getRenderContext<SelContext>(this,selContext,&ctx2);
+    if(ctx2 && ctx2->hasSecondary && ctx2->selectionIndex.empty())
         return;
 
-    SoState * state = action->getState();
-
-    Binding mbind = this->findMaterialBinding(state);
-    Binding nbind = this->findNormalBinding(state);
-
-    const SoCoordinateElement * coords;
-    const SbVec3f * normals;
-    const int32_t * cindices;
-    int numindices;
-    const int32_t * nindices;
-    const int32_t * tindices;
-    const int32_t * mindices;
-    const int32_t * pindices;
-    int numparts;
-    SbBool doTextures;
-    SbBool normalCacheUsed;
-
-    SoMaterialBundle mb(action);
-
-    SoTextureCoordinateBundle tb(action, true, false);
-    doTextures = tb.needCoordinates();
-    SbBool sendNormals = !mb.isColorOnly() || tb.isFunction();
-
-    this->getVertexData(state, coords, normals, cindices,
-                        nindices, tindices, mindices, numindices,
-                        sendNormals, normalCacheUsed);
-
-    mb.sendFirst(); // make sure we have the correct material
-
-    // just in case someone forgot
-    if (!mindices) mindices = cindices;
-    if (!nindices) nindices = cindices;
-    pindices = this->partIndex.getValues(0);
-    numparts = this->partIndex.getNum();
-    SbBool hasVBO = PRIVATE(this)->vboAvailable;
-    if (hasVBO) {
-        // get the VBO status of the viewer
-        Gui::SoGLVBOActivatedElement::get(state, hasVBO);
-        //
-        //if (SoGLVBOElement::shouldCreateVBO(state, numindices)) {
-        //    this->startVertexArray(action, coords, normals, false, false);
-        //}
+    renderHighlight(action,ctx);
+    if(ctx && ctx->selectionIndex.size()) {
+        if(ctx->isSelectAll()) {
+            if(ctx2 && ctx2->selectionIndex.size()) {
+                ctx2->selectionColor = ctx->selectionColor;
+                renderSelection(action,ctx2);
+            } else
+                renderSelection(action,ctx);
+            return;
+        }
+        renderSelection(action,ctx);
     }
-    renderShape(action, hasVBO, static_cast<const SoGLCoordinateElement*>(coords), cindices, numindices,
-        pindices, numparts, normals, nindices, &mb, mindices, &tb, tindices, nbind, mbind, doTextures?1:0);
+    if(ctx2 && ctx2->selectionIndex.size()) {
+        renderSelection(action,ctx2,false); 
+    } else {
 
-    // Disable caching for this node
-    SoGLCacheContextElement::shouldAutoCache(state, SoGLCacheContextElement::DONT_AUTO_CACHE);
+        // When setting transparency shouldGLRender() handles the rendering and returns false.
+        // Therefore generatePrimitives() needs to be re-implemented to handle the materials
+        // correctly.
+        if (!this->shouldGLRender(action))
+            return;
 
-    if (normalCacheUsed)
-        this->readUnlockNormalCache();
+        SoState * state = action->getState();
+
+        Binding mbind = this->findMaterialBinding(state);
+        Binding nbind = this->findNormalBinding(state);
+
+        const SoCoordinateElement * coords;
+        const SbVec3f * normals;
+        const int32_t * cindices;
+        int numindices;
+        const int32_t * nindices;
+        const int32_t * tindices;
+        const int32_t * mindices;
+        const int32_t * pindices;
+        int numparts;
+        SbBool doTextures;
+        SbBool normalCacheUsed;
+
+        SoMaterialBundle mb(action);
+
+        SoTextureCoordinateBundle tb(action, true, false);
+        doTextures = tb.needCoordinates();
+        SbBool sendNormals = !mb.isColorOnly() || tb.isFunction();
+
+        this->getVertexData(state, coords, normals, cindices,
+                            nindices, tindices, mindices, numindices,
+                            sendNormals, normalCacheUsed);
+
+        mb.sendFirst(); // make sure we have the correct material
+
+        // just in case someone forgot
+        if (!mindices) mindices = cindices;
+        if (!nindices) nindices = cindices;
+        pindices = this->partIndex.getValues(0);
+        numparts = this->partIndex.getNum();
+        SbBool hasVBO = PRIVATE(this)->vboAvailable;
+        if (hasVBO) {
+            // get the VBO status of the viewer
+            Gui::SoGLVBOActivatedElement::get(state, hasVBO);
+            //
+            //if (SoGLVBOElement::shouldCreateVBO(state, numindices)) {
+            //    this->startVertexArray(action, coords, normals, false, false);
+            //}
+        }
+        renderShape(action, hasVBO, static_cast<const SoGLCoordinateElement*>(coords), cindices, numindices,
+            pindices, numparts, normals, nindices, &mb, mindices, &tb, tindices, nbind, mbind, doTextures?1:0);
+
+        // Disable caching for this node
+        SoGLCacheContextElement::shouldAutoCache(state, SoGLCacheContextElement::DONT_AUTO_CACHE);
+
+        if (normalCacheUsed)
+            this->readUnlockNormalCache();
+    }
         
     // Workaround for #0000433
 //#if !defined(FC_OS_WIN32)
-    if (ctx && ctx->highlightIndex.getValue() >= 0)
-        renderHighlight(action,ctx);
-    if (ctx && ctx->selectionIndex.getNum() > 0)
+    renderHighlight(action,ctx);
+    if(ctx && ctx->selectionIndex.size())
         renderSelection(action,ctx);
 //#endif
 }
@@ -837,6 +859,9 @@ void SoBrepFaceSet::generatePrimitives(SoAction * action)
 
 void SoBrepFaceSet::renderHighlight(SoGLRenderAction *action, SelContextPtr ctx)
 {
+    if(!ctx || ctx->highlightIndex < 0)
+        return;
+
     SoState * state = action->getState();
     state->push();
 
@@ -873,7 +898,7 @@ void SoBrepFaceSet::renderHighlight(SoGLRenderAction *action, SelContextPtr ctx)
 
     mb.sendFirst(); // make sure we have the correct material
 
-    int32_t id = ctx->highlightIndex.getValue();
+    int32_t id = ctx->highlightIndex;
     if (id >= this->partIndex.getNum()) {
         SoDebugError::postWarning("SoBrepFaceSet::renderHighlight", "highlightIndex out of range");
     }
@@ -911,21 +936,20 @@ void SoBrepFaceSet::renderHighlight(SoGLRenderAction *action, SelContextPtr ctx)
         this->readUnlockNormalCache();
 }
 
-void SoBrepFaceSet::renderSelection(SoGLRenderAction *action, SelContextPtr ctx)
+void SoBrepFaceSet::renderSelection(SoGLRenderAction *action, SelContextPtr ctx, bool push)
 {
-    int numSelected =  ctx->selectionIndex.getNum();
-    const int32_t* selected = ctx->selectionIndex.getValues(0);
-    if (numSelected == 0) return;
-
     SoState * state = action->getState();
-    state->push();
 
-    SoLazyElement::setEmissive(state, &ctx->selectionColor);
-    SoOverrideElement::setEmissiveColorOverride(state, this, true);
-    // if shading is disabled then set also the diffuse color
-    if (SoLazyElement::getLightModel(state) == SoLazyElement::BASE_COLOR) {
-        SoLazyElement::setDiffuse(state, this,1, &ctx->selectionColor,&ctx->colorpacker);
-        SoOverrideElement::setDiffuseColorOverride(state, this, true);
+    if(push) {
+        state->push();
+
+        SoLazyElement::setEmissive(state, &ctx->selectionColor);
+        SoOverrideElement::setEmissiveColorOverride(state, this, true);
+        // if shading is disabled then set also the diffuse color
+        if (SoLazyElement::getLightModel(state) == SoLazyElement::BASE_COLOR) {
+            SoLazyElement::setDiffuse(state, this,1, &ctx->selectionColor,&ctx->colorpacker);
+            SoOverrideElement::setDiffuseColorOverride(state, this, true);
+        }
     }
 
     Binding mbind = this->findMaterialBinding(state);
@@ -958,16 +982,19 @@ void SoBrepFaceSet::renderSelection(SoGLRenderAction *action, SelContextPtr ctx)
     if (!nindices) nindices = cindices;
     pindices = this->partIndex.getValues(0);
 
-    // materials
-    mbind = OVERALL;
-    doTextures = false;
+    if(push) {
+        // materials
+        mbind = OVERALL;
+        doTextures = false;
+    }
 
-    for (int i=0; i<numSelected; i++) {
-        int id = selected[i];
+    for(auto id : ctx->selectionIndex) {
         if (id >= this->partIndex.getNum()) {
             SoDebugError::postWarning("SoBrepFaceSet::renderSelection", "selectionIndex out of range");
             break;
         }
+        if (id>=0 && id==ctx->highlightIndex)
+            continue;
 
         // coords
         int length=0;
@@ -997,7 +1024,7 @@ void SoBrepFaceSet::renderSelection(SoGLRenderAction *action, SelContextPtr ctx)
         renderShape(action, false, static_cast<const SoGLCoordinateElement*>(coords), &(cindices[start]), length,
             &(pindices[id]), numparts, normals_s, nindices_s, &mb, mindices, &tb, tindices, nbind, mbind, doTextures?1:0);
     }
-    state->pop();
+    if(push) state->pop();
     
     if (normalCacheUsed)
         this->readUnlockNormalCache();

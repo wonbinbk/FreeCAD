@@ -132,7 +132,7 @@ private:
     typedef std::shared_ptr<SelContext> SelContextPtr;
 
     void renderHighlight(SoGLRenderAction *action, SelContextPtr);
-    void renderSelection(SoGLRenderAction *action, SelContextPtr);
+    void renderSelection(SoGLRenderAction *action, SelContextPtr, bool push=true);
 
 #ifdef RENDER_GLARRAYS
     void renderSimpleArray();

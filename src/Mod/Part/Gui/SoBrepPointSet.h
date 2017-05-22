@@ -56,23 +56,13 @@ protected:
     virtual void doAction(SoAction* action); 
 
 private:
-    void renderShape(const SoGLCoordinateElement * const vertexlist,
-                     const int32_t *vertexindices,
-                     int num_vertexindices);
-
     class SelContext;
     typedef std::shared_ptr<SelContext> SelContextPtr;
-    void renderHighlight(SoGLRenderAction *action, SelContextPtr ctx);
-    void renderSelection(SoGLRenderAction *action, SelContextPtr ctx);
-
-    bool validIndexes(const SoCoordinateElement*, int32_t, const int32_t *, int) const;
-
-    void checkRenderCaching(SoAction *action, SelContextPtr ctx);
+    void renderHighlight(SoGLRenderAction *action, SelContextPtr);
+    void renderSelection(SoGLRenderAction *action, SelContextPtr, bool push=true);
 
 private:
     SelContextPtr selContext;
-    int canSetRenderCaching;
-    bool renderCaching;
 };
 
 } // namespace PartGui
