@@ -134,6 +134,8 @@ private:
     void renderHighlight(SoGLRenderAction *action, SelContextPtr);
     void renderSelection(SoGLRenderAction *action, SelContextPtr, bool push=true);
 
+    bool overrideMaterialBinding(SoState *state, SelContextPtr ctx, SelContextPtr ctx2);
+
 #ifdef RENDER_GLARRAYS
     void renderSimpleArray();
     void renderColoredArray(SoMaterialBundle *const materials);
@@ -141,6 +143,9 @@ private:
 
 private:
     SelContextPtr selContext;
+    std::vector<int32_t> matIndex;
+    std::vector<uint32_t> packedColors;
+    uint32_t packedColor;
 
     // Define some VBO pointer for the current mesh
     class VBO;

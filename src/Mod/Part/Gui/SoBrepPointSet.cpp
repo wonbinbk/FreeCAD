@@ -71,7 +71,6 @@ public:
     std::set<int> selectionIndex;
     SbColor selectionColor;
     SbColor highlightColor;
-    SoColorPacker colorpacker;
     bool hasSecondary;
 
     SelContext():highlightIndex(-1),hasSecondary(false)
@@ -156,9 +155,8 @@ void SoBrepPointSet::renderHighlight(SoGLRenderAction *action, SelContextPtr ctx
     if (ps < 4.0f) SoPointSizeElement::set(state, this, 4.0f);
 
     SoLazyElement::setEmissive(state, &ctx->highlightColor);
-    SoOverrideElement::setEmissiveColorOverride(state, this, true);
-    SoLazyElement::setDiffuse(state, this,1, &ctx->highlightColor,&ctx->colorpacker);
-    SoOverrideElement::setDiffuseColorOverride(state, this, true);
+    packedColor = ctx->highlightColor.getPackedValue(0.0);
+    SoLazyElement::setPacked(state, this,1, &packedColor,false);
 
     const SoCoordinateElement * coords;
     const SbVec3f * normals;
@@ -192,9 +190,8 @@ void SoBrepPointSet::renderSelection(SoGLRenderAction *action, SelContextPtr ctx
         if (ps < 4.0f) SoPointSizeElement::set(state, this, 4.0f);
 
         SoLazyElement::setEmissive(state, &ctx->selectionColor);
-        SoOverrideElement::setEmissiveColorOverride(state, this, true);
-        SoLazyElement::setDiffuse(state, this,1, &ctx->selectionColor,&ctx->colorpacker);
-        SoOverrideElement::setDiffuseColorOverride(state, this, true);
+        packedColor = ctx->selectionColor.getPackedValue(0.0);
+        SoLazyElement::setPacked(state, this,1, &packedColor,false);
     }
 
     const SoCoordinateElement * coords;

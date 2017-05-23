@@ -63,6 +63,7 @@ private:
 
 private:
     SelContextPtr selContext;
+    uint32_t packedColor;
 };
 
 } // namespace PartGui

@@ -54,6 +54,8 @@
 #include <Inventor/details/SoLineDetail.h>
 #include <Inventor/misc/SoState.h>
 #include <Inventor/misc/SoContextHandler.h>
+#include <Inventor/elements/SoShapeStyleElement.h>
+#include <Inventor/elements/SoCacheElement.h>
 #endif
 
 #include "SoBrepFaceSet.h"
@@ -80,7 +82,6 @@
 
 #include <Base/Console.h>
 
-
 using namespace PartGui;
 
 
@@ -98,7 +99,6 @@ public:
 #endif
     SbColor selectionColor;
     SbColor highlightColor;
-    SoColorPacker colorpacker;
 
     SelContext():highlightIndex(-1),hasSecondary(false)
     {}
@@ -220,6 +220,7 @@ void SoBrepFaceSet::doAction(SoAction* action)
         SelContextPtr ctx = Gui::SoFCSelectionRoot::getActionContext<SelContext>(action,this,selContext);
         if (!hlaction->isHighlighted()) {
             ctx->highlightIndex = -1;
+            touch();
             return;
         }
 
@@ -229,11 +230,10 @@ void SoBrepFaceSet::doAction(SoAction* action)
                 int index = static_cast<const SoFaceDetail*>(detail)->getPartIndex();
                 ctx->highlightIndex = index;
                 ctx->highlightColor = hlaction->getColor();
-            }
-            else {
+            } else
                 ctx->highlightIndex = -1;
-                return;
-            }
+            touch();
+            return;
         }
     }
     else if (action->getTypeId() == Gui::SoSelectionElementAction::getClassTypeId()) {
@@ -246,12 +246,14 @@ void SoBrepFaceSet::doAction(SoAction* action)
 
             //TODO: check if this need to be context aware
             PRIVATE(this)->updateVbo = true;
+            touch();
             return;
         }
         else if (selaction->getType() == Gui::SoSelectionElementAction::None) {
             ctx->hasSecondary = false;
             ctx->selectionIndex.clear();
             PRIVATE(this)->updateVbo = true;
+            touch();
             return;
         }
         ctx->hasSecondary = selaction->isSecondary();
@@ -268,9 +270,11 @@ void SoBrepFaceSet::doAction(SoAction* action)
                 if(ctx->isSelectAll()) 
                     ctx->selectionIndex.clear();
                 ctx->selectionIndex.insert(index);
+                touch();
                 break;
             case Gui::SoSelectionElementAction::Remove:
                 ctx->removeIndex(index);
+                touch();
                 break;
             default:
                 break;
@@ -496,32 +500,53 @@ void SoBrepFaceSet::GLRender(SoGLRenderAction *action)
 
     SelContextPtr ctx2;
     SelContextPtr ctx = Gui::SoFCSelectionRoot::getRenderContext<SelContext>(this,selContext,&ctx2);
-    if(ctx2 && ctx2->hasSecondary && ctx2->selectionIndex.empty())
-        return;
+    if(ctx2) {
+        if(ctx2->hasSecondary && ctx2->selectionIndex.empty())
+            return;
+        if(ctx2->selectionIndex.empty())
+            ctx2.reset();
+    }
+    if(ctx && (!ctx->selectionIndex.size() && ctx->highlightIndex<0))
+        ctx.reset();
 
-    renderHighlight(action,ctx);
-    if(ctx && ctx->selectionIndex.size()) {
-        if(ctx->isSelectAll()) {
-            if(ctx2 && ctx2->selectionIndex.size()) {
-                ctx2->selectionColor = ctx->selectionColor;
-                renderSelection(action,ctx2);
-            } else
-                renderSelection(action,ctx);
+    auto state = action->getState();
+
+    // override material binding to PER_PART_INDEX to achieve
+    // preselection/selection with transparency
+    bool pushed = overrideMaterialBinding(state,ctx,ctx2);
+    if(!pushed){
+        // for non transparent cases, we still use the old selection rendering
+        // code, because it can override emission color, which gives a more
+        // distinguishable selection highlight. The above material binding
+        // override method can't, because Coin does not support per part
+        // emission color
+        renderHighlight(action,ctx);
+        if(ctx && ctx->selectionIndex.size()) {
+            if(ctx->isSelectAll()) {
+                if(ctx2) {
+                    ctx2->selectionColor = ctx->selectionColor;
+                    renderSelection(action,ctx2); 
+                } else
+                    renderSelection(action,ctx); 
+                return;
+            }
+            renderSelection(action,ctx); 
+        }
+        if(ctx2) {
+            renderSelection(action,ctx2,false);
             return;
         }
-        renderSelection(action,ctx);
     }
-    if(ctx2 && ctx2->selectionIndex.size()) {
-        renderSelection(action,ctx2,false); 
-    } else {
 
-        // When setting transparency shouldGLRender() handles the rendering and returns false.
-        // Therefore generatePrimitives() needs to be re-implemented to handle the materials
-        // correctly.
-        if (!this->shouldGLRender(action))
-            return;
+    SoMaterialBundle mb(action);
+    // It is important to send material before shouldGLRender(), otherwise
+    // material override with transparncy won't work.
+    mb.sendFirst(); 
 
-        SoState * state = action->getState();
+    // When setting transparency shouldGLRender() handles the rendering and returns false.
+    // Therefore generatePrimitives() needs to be re-implemented to handle the materials
+    // correctly.
+    if(this->shouldGLRender(action)) {
 
         Binding mbind = this->findMaterialBinding(state);
         Binding nbind = this->findNormalBinding(state);
@@ -538,8 +563,6 @@ void SoBrepFaceSet::GLRender(SoGLRenderAction *action)
         SbBool doTextures;
         SbBool normalCacheUsed;
 
-        SoMaterialBundle mb(action);
-
         SoTextureCoordinateBundle tb(action, true, false);
         doTextures = tb.needCoordinates();
         SbBool sendNormals = !mb.isColorOnly() || tb.isFunction();
@@ -547,8 +570,6 @@ void SoBrepFaceSet::GLRender(SoGLRenderAction *action)
         this->getVertexData(state, coords, normals, cindices,
                             nindices, tindices, mindices, numindices,
                             sendNormals, normalCacheUsed);
-
-        mb.sendFirst(); // make sure we have the correct material
 
         // just in case someone forgot
         if (!mindices) mindices = cindices;
@@ -573,15 +594,145 @@ void SoBrepFaceSet::GLRender(SoGLRenderAction *action)
         if (normalCacheUsed)
             this->readUnlockNormalCache();
     }
-        
-    // Workaround for #0000433
-//#if !defined(FC_OS_WIN32)
-    renderHighlight(action,ctx);
-    if(ctx && ctx->selectionIndex.size())
-        renderSelection(action,ctx);
-//#endif
+
+    if(pushed) {
+        SbBool notify = enableNotify(FALSE);
+        materialIndex.setNum(0);
+        if(notify) enableNotify(notify);
+        state->pop();
+    }
 }
 #endif
+
+bool SoBrepFaceSet::overrideMaterialBinding(SoState *state, SelContextPtr ctx, SelContextPtr ctx2) {
+    if(!ctx && !ctx2) return false;
+
+    auto mb = SoMaterialBindingElement::get(state);
+
+    auto element = SoLazyElement::getInstance(state);
+    const SbColor *diffuse = element->getDiffusePointer();
+    if(!diffuse) return false;
+    int diffuse_size = element->getNumDiffuse();
+
+    const float *trans = element->getTransparencyPointer();
+    if(!trans) return false;
+    // int trans_size = element->getNumTransparencies();
+    float trans0 = trans[0];
+
+    // Override material binding to PER_PART_INDEXED so that we can reuse coin
+    // rendering for both selection, preselection and partial rendering. The
+    // main purpose is such that selection and preselection can have correct
+    // transparency, too.
+    //
+    // Criteria of using material binding override:
+    // 1) original material binding is either overall or per_part. We can
+    //    support others, but ommitted here to simplify coding logic, and
+    //    because it seems FC only uses these two.
+    // 2) either of the following :
+    //      a) has highlight or selection and Selection().needPickPoint, so that
+    //         any preselected/selected part automatically become transparent
+    //      b) has transparency
+
+    if((mb==SoMaterialBindingElement::OVERALL || 
+        (mb==SoMaterialBindingElement::PER_PART && diffuse_size>=partIndex.getNum())) 
+        &&
+       ((ctx && Gui::Selection().needPickedList()) || trans0!=0.0))
+    {
+        state->push();
+
+        packedColors.clear();
+
+        if(ctx && Gui::Selection().needPickedList()) {
+            if(trans0 < 0.5) trans0=0.5;
+            // trans_size = 1;
+        }
+
+        if(!ctx2 && ctx && ctx->highlightIndex<0 && ctx->isSelectAll()) {
+            //optimization for full selection without highlight or partial rendering
+            SoMaterialBindingElement::set(state,SoMaterialBindingElement::OVERALL);
+            SoOverrideElement::setMaterialBindingOverride(state, this, true);
+            packedColors.push_back(ctx->selectionColor.getPackedValue(trans0));
+            SoLazyElement::setPacked(state, this,1, &packedColors[0],true);
+            return true;
+        }
+
+        matIndex.clear();
+        matIndex.reserve(partIndex.getNum());
+
+        if(ctx && ctx->isSelectAll()) {
+            matIndex.resize(partIndex.getNum(),0);
+            if(!ctx2)
+                packedColors.push_back(ctx->selectionColor.getPackedValue(trans0));
+            else {
+                // default to full transparent
+                packedColors.push_back(ctx->selectionColor.getPackedValue(1.0));
+                packedColors.push_back(ctx->selectionColor.getPackedValue(trans0));
+                for(auto idx : ctx2->selectionIndex) {
+                    if(idx>=0 && idx<partIndex.getNum())
+                        matIndex[idx] = packedColors.size()-1; // show only the selected
+                }
+            }
+            if(ctx->highlightIndex>=0 && ctx->highlightIndex<partIndex.getNum()) {
+                packedColors.push_back(ctx->highlightColor.getPackedValue(trans0));
+                matIndex[ctx->highlightIndex] = packedColors.size()-1;
+            }
+        }else{
+            if(ctx2) {// for partial rendering
+                packedColors.push_back(diffuse[0].getPackedValue(1.0));
+                matIndex.resize(partIndex.getNum(),0);
+
+                if(mb == SoMaterialBindingElement::OVERALL) {
+                    packedColors.push_back(diffuse[0].getPackedValue(trans0));
+                    for(auto idx : ctx2->selectionIndex) {
+                        if(idx>=0 && idx<partIndex.getNum())
+                            matIndex[idx] = packedColors.size()-1;
+                    }
+                }else{
+                    assert(diffuse_size >= partIndex.getNum());
+                    for(auto idx : ctx2->selectionIndex) {
+                        if(idx>=0 && idx<partIndex.getNum()) {
+                            // Force uniform transparency for simplicity
+                            packedColors.push_back(diffuse[idx].getPackedValue(trans0));
+                            matIndex[idx] = packedColors.size()-1;
+                        }
+                    }
+                }
+            }else if(mb == SoMaterialBindingElement::OVERALL) {
+                packedColors.push_back(diffuse[0].getPackedValue(trans0));
+                matIndex.resize(partIndex.getNum(),0);
+            }else{
+                assert(diffuse_size >= partIndex.getNum());
+                packedColors.reserve(diffuse_size+3);
+                for(int i=0;i<diffuse_size;++i) {
+                    // Force uniform transparency for simplicity
+                    packedColors.push_back(diffuse[i].getPackedValue(trans0));
+                    matIndex.push_back(i);
+                }
+            }
+
+            if(ctx && ctx->selectionIndex.size()) {
+                packedColors.push_back(ctx->selectionColor.getPackedValue(trans0));
+                for(auto idx : ctx->selectionIndex) {
+                    if(idx>=0 && idx<partIndex.getNum())
+                        matIndex[idx] = packedColors.size()-1;
+                }
+            }
+            if(ctx && ctx->highlightIndex>=0 && ctx->highlightIndex<partIndex.getNum()) {
+                packedColors.push_back(ctx->highlightColor.getPackedValue(trans0));
+                matIndex[ctx->highlightIndex] = packedColors.size()-1;
+            }
+        }
+
+        SbBool notify = enableNotify(FALSE);
+        materialIndex.setValuesPointer(matIndex.size(),&matIndex[0]);
+        if(notify) enableNotify(notify);
+
+        SoMaterialBindingElement::set(state, this, SoMaterialBindingElement::PER_PART_INDEXED);
+        SoLazyElement::setPacked(state, this, packedColors.size(), &packedColors[0], true);
+        return true;
+    }
+    return false;
+}
 
 void SoBrepFaceSet::GLRenderBelowPath(SoGLRenderAction * action)
 {
@@ -866,11 +1017,10 @@ void SoBrepFaceSet::renderHighlight(SoGLRenderAction *action, SelContextPtr ctx)
     state->push();
 
     SoLazyElement::setEmissive(state, &ctx->highlightColor);
-    SoOverrideElement::setEmissiveColorOverride(state, this, true);
     // if shading is disabled then set also the diffuse color
     if (SoLazyElement::getLightModel(state) == SoLazyElement::BASE_COLOR) {
-        SoLazyElement::setDiffuse(state, this,1, &ctx->highlightColor,&ctx->colorpacker);
-        SoOverrideElement::setDiffuseColorOverride(state, this, true);
+        packedColor = ctx->highlightColor.getPackedValue(0.0);
+        SoLazyElement::setPacked(state, this,1, &packedColor,false);
     }
 
     Binding mbind = this->findMaterialBinding(state);
@@ -944,11 +1094,10 @@ void SoBrepFaceSet::renderSelection(SoGLRenderAction *action, SelContextPtr ctx,
         state->push();
 
         SoLazyElement::setEmissive(state, &ctx->selectionColor);
-        SoOverrideElement::setEmissiveColorOverride(state, this, true);
         // if shading is disabled then set also the diffuse color
         if (SoLazyElement::getLightModel(state) == SoLazyElement::BASE_COLOR) {
-            SoLazyElement::setDiffuse(state, this,1, &ctx->selectionColor,&ctx->colorpacker);
-            SoOverrideElement::setDiffuseColorOverride(state, this, true);
+            packedColor = ctx->selectionColor.getPackedValue(0.0);
+            SoLazyElement::setPacked(state, this,1, &packedColor,false);
         }
     }
 
@@ -1024,7 +1173,10 @@ void SoBrepFaceSet::renderSelection(SoGLRenderAction *action, SelContextPtr ctx,
         renderShape(action, false, static_cast<const SoGLCoordinateElement*>(coords), &(cindices[start]), length,
             &(pindices[id]), numparts, normals_s, nindices_s, &mb, mindices, &tb, tindices, nbind, mbind, doTextures?1:0);
     }
-    if(push) state->pop();
+    if(push) {
+        state->pop();
+        // SoCacheElement::invalidate(state);
+    }
     
     if (normalCacheUsed)
         this->readUnlockNormalCache();

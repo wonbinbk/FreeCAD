@@ -30,6 +30,8 @@
 #include "Selection.h"
 
 class QListWidget;
+class QListWidgetItem;
+class QCheckBox;
 
 namespace Gui {
 namespace DockWnd {
@@ -68,6 +70,9 @@ public:
 
     QListWidget* selectionView;
 
+    QCheckBox *enablePickList;
+    QListWidget *pickList;
+
 public Q_SLOTS:
     /// get called when text is entered in the search box
     void search(const QString& text);
@@ -80,7 +85,16 @@ public Q_SLOTS:
     void treeSelect(void);
     void toPython(void);
     void touch(void);
+    void onEnablePickList();
+    void toggleSelect(QListWidgetItem* item=0);
+    void preselect(QListWidgetItem* item=0);
 
+protected:
+    void showEvent(QShowEvent *) override;
+    void hideEvent(QHideEvent *) override;
+
+private:
+    float x,y,z;
 };
 
 } // namespace DockWnd

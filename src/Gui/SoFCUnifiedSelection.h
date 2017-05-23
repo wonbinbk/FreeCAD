@@ -108,7 +108,9 @@ private:
     };
 
     bool setHighlight(const PickedInfo &);
-    bool setSelection(const PickedInfo &, bool ctrlDown=false);
+    bool setHighlight(SoFullPath *path, const SoDetail *det, 
+            ViewProviderDocumentObject *vpd, const char *element, float x, float y, float z);
+    bool setSelection(const std::vector<PickedInfo> &, bool ctrlDown=false);
 
     std::vector<PickedInfo> getPickedList(SoHandleEventAction* action, bool singlePick) const;
 
@@ -202,6 +204,8 @@ public:
         return std::static_pointer_cast<T>(ctx);
     }
 
+    static SoNode *getCurrentRoot(bool front, SoNode *def);
+
     void resetContext();
 
 protected:
@@ -212,7 +216,7 @@ protected:
     static ContextPtr getContext(SoNode *node, ContextPtr def, ContextPtr *ctx2);
     static ContextPtr *getContext(SoAction *action, SoNode *node, ContextPtr *pdef);
 
-    typedef std::vector<void*> Stack;
+    typedef std::vector<SoNode*> Stack;
     static Stack SelStack;
     typedef std::map<Stack,ContextPtr> ContextMap;
     ContextMap contextMap;

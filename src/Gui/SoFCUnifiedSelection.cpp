@@ -257,7 +257,7 @@ SoFCUnifiedSelection::getPickedList(SoHandleEventAction* action, bool singlePick
         ret.push_back(info);
     }
 
-    if(!singlePick || ret.size()<=1) return ret;
+    if(ret.size()<=1) return ret;
 
     // To identify the picking of lines in a concave area we have to 
     // get all intersection points. If we have two or more intersection
@@ -265,12 +265,16 @@ SoFCUnifiedSelection::getPickedList(SoHandleEventAction* action, bool singlePick
     // almost similar coordinates we use the second point, instead.
 
     int picked_prio = getPriority(ret[0].pp);
+    auto last_vpd = ret[0].vpd;
     const SbVec3f& picked_pt = ret.front().pp->getPoint();
-
     auto itPicked = ret.begin();
     for(auto it=ret.begin()+1;it!=ret.end();++it) {
-        int cur_prio = getPriority(it->pp);
-        const SbVec3f& cur_pt = it->pp->getPoint();
+        auto &info = *it;
+        if(last_vpd != info.vpd) 
+            break;
+
+        int cur_prio = getPriority(info.pp);
+        const SbVec3f& cur_pt = info.pp->getPoint();
 
         if ((cur_prio > picked_prio) && picked_pt.equals(cur_pt, 0.01f)) {
             itPicked = it;
@@ -278,8 +282,13 @@ SoFCUnifiedSelection::getPickedList(SoHandleEventAction* action, bool singlePick
         }
     }
 
-    std::vector<PickedInfo> sret(itPicked,itPicked+1);
-    return sret;
+    if(singlePick) {
+        std::vector<PickedInfo> sret(itPicked,itPicked+1);
+        return sret;
+    }
+    if(itPicked != ret.begin())
+        std::swap(*itPicked, *ret.begin());
+    return ret;
 }
 
 void SoFCUnifiedSelection::doAction(SoAction *action)
@@ -372,6 +381,23 @@ void SoFCUnifiedSelection::doAction(SoAction *action)
                     }
                 }
             }
+        } else if (selaction->SelChange.Type == SelectionChanges::SetPreselectSignal) {
+            // selection changes inside the 3d view are handled in handleEvent()
+            App::Document* doc = App::GetApplication().getDocument(selaction->SelChange.pDocName);
+            App::DocumentObject* obj = doc->getObject(selaction->SelChange.pObjectName);
+            ViewProvider*vp = Application::Instance->getViewProvider(obj);
+            if (vp && vp->isDerivedFrom(ViewProviderDocumentObject::getClassTypeId()) &&
+                vp->useNewSelectionModel() && vp->isSelectable()) 
+            {
+                detailPath->truncate(0);
+                SoDetail* detail = vp->getDetailPath(selaction->SelChange.pSubName,detailPath,true);
+                setHighlight(detailPath,detail,static_cast<ViewProviderDocumentObject*>(vp),
+                        selaction->SelChange.pSubName, 
+                        selaction->SelChange.x,
+                        selaction->SelChange.y,
+                        selaction->SelChange.z);
+                delete detail;
+            }
         }
     }
 
@@ -379,32 +405,34 @@ void SoFCUnifiedSelection::doAction(SoAction *action)
 }
 
 bool SoFCUnifiedSelection::setHighlight(const PickedInfo &info) {
-    SoFullPath *path;
+    if(!info.pp)
+        return setHighlight(0,0,0,0,0.0,0.0,0.0);
+    const auto &pt = info.pp->getPoint();
+    return setHighlight(static_cast<SoFullPath*>(info.pp->getPath()), 
+            info.pp->getDetail(), info.vpd, info.element.c_str(), pt[0],pt[1],pt[2]);
+}
+
+bool SoFCUnifiedSelection::setHighlight(SoFullPath *path, const SoDetail *det, 
+        ViewProviderDocumentObject *vpd, const char *element, float x, float y, float z) 
+{
     bool highlighted = false;
-    if(info.pp && (path=static_cast<SoFullPath*>(info.pp->getPath())) && 
-       info.vpd && info.vpd->getObject() && info.vpd->getObject()->getNameInDocument()) 
+    if(path && path->getLength() && 
+       vpd && vpd->getObject() && vpd->getObject()->getNameInDocument()) 
     {
-        const char *docname = info.vpd->getObject()->getDocument()->getName();
-        const char *objname = info.vpd->getObject()->getNameInDocument();
-        const char *element = info.element.c_str();
+        const char *docname = vpd->getObject()->getDocument()->getName();
+        const char *objname = vpd->getObject()->getNameInDocument();
 
         this->preSelection = 1;
         static char buf[513];
-        const auto &pt = info.pp->getPoint();
         snprintf(buf,512,"Preselected: %s.%s.%s (%g, %g, %g)"
                 ,docname,objname,element
-                ,fabs(pt[0])>1e-7?pt[0]:0.0
-                ,fabs(pt[1])>1e-7?pt[1]:0.0
-                ,fabs(pt[2])>1e-7?pt[2]:0.0);
+                ,fabs(x)>1e-7?x:0.0
+                ,fabs(y)>1e-7?y:0.0
+                ,fabs(z)>1e-7?z:0.0);
 
         getMainWindow()->showMessage(QString::fromLatin1(buf));
 
-        if (Gui::Selection().setPreselect(
-                    docname,objname,element
-                    ,info.pp->getPoint()[0]
-                    ,info.pp->getPoint()[1]
-                    ,info.pp->getPoint()[2]))
-        {
+        if (Gui::Selection().setPreselect(docname,objname,element,x,y,z)) {
             if (currenthighlight && *currenthighlight!=*path) {
                 SoHighlightElementAction action;
                 action.setHighlighted(false);
@@ -422,18 +450,40 @@ bool SoFCUnifiedSelection::setHighlight(const PickedInfo &info) {
         SoHighlightElementAction action;
         action.setHighlighted(highlighted);
         action.setColor(this->colorHighlight.getValue());
-        action.setElement(info.pp?info.pp->getDetail():0);
+        action.setElement(det);
         action.apply(currenthighlight);
         if(!highlighted) {
             currenthighlight->unref();
             currenthighlight = 0;
         }
+        this->touch();
     }
-    this->touch();
     return highlighted;
 }
 
-bool SoFCUnifiedSelection::setSelection(const PickedInfo &info, bool ctrlDown) {
+bool SoFCUnifiedSelection::setSelection(const std::vector<PickedInfo> &infos, bool ctrlDown) {
+    if(infos.empty() || !infos[0].vpd) return false;
+
+    std::vector<SelectionSingleton::SelObj> sels;
+    if(infos.size()>1) {
+        for(auto &info : infos) {
+            if(!info.vpd) continue;
+            SelectionSingleton::SelObj sel;
+            sel.pObject = info.vpd->getObject();
+            sel.pDoc = sel.pObject->getDocument();
+            sel.DocName = sel.pDoc->getName();
+            sel.FeatName = sel.pObject->getNameInDocument();
+            sel.TypeName = sel.pObject->getTypeId().getName();
+            sel.SubName = info.element.c_str();
+            const auto &pt = info.pp->getPoint();
+            sel.x = pt[0];
+            sel.y = pt[1];
+            sel.z = pt[2];
+            sels.push_back(sel);
+        }
+    }
+
+    const auto &info = infos[0];
     auto vpd = info.vpd;
     if(!vpd) return false;
     const char *objname = vpd->getObject()->getNameInDocument();
@@ -451,18 +501,20 @@ bool SoFCUnifiedSelection::setSelection(const PickedInfo &info, bool ctrlDown) {
     static char buf[513];
 
     if (ctrlDown) {
-        bool ok = Gui::Selection().addSelection(docname,objname,
-                info.element.c_str(), pt[0] ,pt[1] ,pt[2]);
-        if (ok)
-            type = SoSelectionElementAction::Append;
-        if (mymode == OFF) {
-            snprintf(buf,512,"Selected: %s.%s.%s (%g, %g, %g)",
-                    docname,objname,info.element.c_str()
-                    ,fabs(pt[0])>1e-7?pt[0]:0.0
-                    ,fabs(pt[1])>1e-7?pt[1]:0.0
-                    ,fabs(pt[2])>1e-7?pt[2]:0.0);
+        if(Gui::Selection().isSelected(docname,objname,info.element.c_str()))
+            Gui::Selection().rmvSelection(docname,objname,info.element.c_str(),&sels);
+        else {
+            bool ok = Gui::Selection().addSelection(docname,objname,
+                    info.element.c_str(), pt[0] ,pt[1] ,pt[2], &sels);
+            if (ok && mymode == OFF) {
+                snprintf(buf,512,"Selected: %s.%s.%s (%g, %g, %g)",
+                        docname,objname,info.element.c_str()
+                        ,fabs(pt[0])>1e-7?pt[0]:0.0
+                        ,fabs(pt[1])>1e-7?pt[1]:0.0
+                        ,fabs(pt[2])>1e-7?pt[2]:0.0);
 
-            getMainWindow()->showMessage(QString::fromLatin1(buf));
+                getMainWindow()->showMessage(QString::fromLatin1(buf));
+            }
         }
         return true;
     }
@@ -531,8 +583,8 @@ bool SoFCUnifiedSelection::setSelection(const PickedInfo &info, bool ctrlDown) {
     FC_TRACE("clearing selection");
     Gui::Selection().clearSelection(docname);
     FC_TRACE("add selection");
-    bool ok = Gui::Selection().addSelection(
-            docname, objectName.c_str() ,subElementName.c_str(), pt[0] ,pt[1] ,pt[2]);
+    bool ok = Gui::Selection().addSelection(docname, objectName.c_str() ,subElementName.c_str(), 
+            pt[0] ,pt[1] ,pt[2], &sels);
     if (ok)
         type = hasNext?SoSelectionElementAction::All:SoSelectionElementAction::Append;
 
@@ -612,8 +664,8 @@ SoFCUnifiedSelection::handleEvent(SoHandleEventAction * action)
         const SoMouseButtonEvent* e = static_cast<const SoMouseButtonEvent *>(event);
         if (SoMouseButtonEvent::isButtonReleaseEvent(e,SoMouseButtonEvent::BUTTON1)) {
             // check to see if the mouse is over a geometry...
-            auto info = this->getPickedList(action,true);
-            if(info.size() && setSelection(info[0],event->wasCtrlDown()))
+            auto infos = this->getPickedList(action,!Selection().needPickedList());
+            if(setSelection(infos,event->wasCtrlDown()))
                 action->setHandled();
         } // mouse release
     }
@@ -884,6 +936,12 @@ void SoFCSelectionRoot::initClass(void)
 void SoFCSelectionRoot::finish()
 {
     atexit_cleanup();
+}
+
+SoNode *SoFCSelectionRoot::getCurrentRoot(bool front, SoNode *def) {
+    if(SelStack.size()) 
+        return front?SelStack.front():SelStack.back();
+    return def;
 }
 
 SoFCSelectionRoot::ContextPtr SoFCSelectionRoot::getContext(SoNode *node, ContextPtr def, ContextPtr *ctx2)

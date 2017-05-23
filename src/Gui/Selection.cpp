@@ -345,63 +345,6 @@ bool SelectionSingleton::hasSelection(const char* doc) const
     return false;
 }
 
-std::vector<SelectionObject> SelectionSingleton::getSelectionEx(const char* pDocName, Base::Type typeId) const
-{
-    std::vector<SelectionObject> temp;
-    std::map<App::DocumentObject*,SelectionObject> SortMap;
-
-    // check the type
-    if (typeId == Base::Type::badType()) 
-        return temp;
-
-    App::Document *pcDoc;
-    string DocName;
-
-    pcDoc = getDocument(pDocName);
-
-    if (!pcDoc)
-        return temp;
-
-    for (std::list<_SelObj>::const_iterator It = _SelList.begin();It != _SelList.end();++It) {
-        if (It->pDoc == pcDoc) {
-            // right type?
-            if (It->pObject->getTypeId().isDerivedFrom(typeId)){
-                // if the object has already an entry
-                if (SortMap.find(It->pObject) != SortMap.end()){
-                    // only add sub-element
-                    if (!It->SubName.empty()) {
-                        SortMap[It->pObject].SubNames.push_back(It->SubName);
-                        SortMap[It->pObject].SelPoses.push_back(Base::Vector3d(It->x,It->y,It->z));
-                    }
-                }
-                else {
-                    // create a new entry
-                    SelectionObject tempSelObj;
-                    tempSelObj.DocName  = It->DocName;
-                    tempSelObj.FeatName = It->FeatName;
-                    tempSelObj.TypeName = It->TypeName.c_str();
-                    if (!It->SubName.empty()) {
-                        tempSelObj.SubNames.push_back(It->SubName);
-                        tempSelObj.SelPoses.push_back(Base::Vector3d(It->x,It->y,It->z));
-                    }
-                    SortMap.insert(std::pair<App::DocumentObject*,SelectionObject>(It->pObject,tempSelObj));
-                }
-            }
-        }
-    }
-
-    // The map loses the order thus we have to go again through the list and pick up the SelectionObject from the map
-    for (std::list<_SelObj>::const_iterator It = _SelList.begin();It != _SelList.end();++It) {
-        std::map<App::DocumentObject*,SelectionObject>::iterator Jt = SortMap.find(It->pObject);
-        if (Jt != SortMap.end()) {
-            temp.push_back(Jt->second);
-            SortMap.erase(Jt);
-        }
-    }
-
-    return temp;
-}
-
 int SelectionSingleton::getAsPropertyLinkSubList(App::PropertyLinkSubList &prop) const
 {
     std::vector<Gui::SelectionObject> sel = this->getSelectionEx();
@@ -448,6 +391,120 @@ vector<App::DocumentObject*> SelectionSingleton::getObjectsOfType(const Base::Ty
     return temp;
 }
 
+std::vector<SelectionSingleton::SelObj> SelectionSingleton::getPickedList(const char* pDocName) const
+{
+    std::vector<SelObj> temp;
+    SelObj tempSelObj;
+
+    App::Document *pcDoc;
+    pcDoc = getDocument(pDocName);
+
+    if (!pcDoc)
+        return temp;
+
+    for(std::list<_SelObj>::const_iterator It = _PickedList.begin();It != _PickedList.end();++It) {
+        if (It->pDoc == pcDoc) {
+            tempSelObj.DocName  = It->DocName.c_str();
+            tempSelObj.FeatName = It->FeatName.c_str();
+            tempSelObj.SubName  = It->SubName.c_str();
+            tempSelObj.TypeName = It->TypeName.c_str();
+            tempSelObj.pObject  = It->pObject;
+            tempSelObj.pDoc     = It->pDoc;
+            tempSelObj.x        = It->x;
+            tempSelObj.y        = It->y;
+            tempSelObj.z        = It->z;
+            temp.push_back(tempSelObj);
+        }
+    }
+
+    return temp;
+}
+
+std::vector<SelectionObject> SelectionSingleton::getSelectionEx(const char* pDocName, Base::Type typeId) const {
+    return getObjectList(pDocName,typeId,_SelList);
+}
+
+std::vector<SelectionObject> SelectionSingleton::getPickedListEx(const char* pDocName, Base::Type typeId) const {
+    return getObjectList(pDocName,typeId,_PickedList);
+}
+
+std::vector<SelectionObject> SelectionSingleton::getObjectList(const char* pDocName, Base::Type typeId,
+        const std::list<_SelObj> &objList) const
+{
+    std::vector<SelectionObject> temp;
+    std::map<App::DocumentObject*,SelectionObject> SortMap;
+
+    // check the type
+    if (typeId == Base::Type::badType()) 
+        return temp;
+
+    App::Document *pcDoc;
+    string DocName;
+
+    pcDoc = getDocument(pDocName);
+
+    if (!pcDoc)
+        return temp;
+
+    for (std::list<_SelObj>::const_iterator It = objList.begin();It != objList.end();++It) {
+        if (It->pDoc == pcDoc) {
+            // right type?
+            if (It->pObject->getTypeId().isDerivedFrom(typeId)){
+                // if the object has already an entry
+                if (SortMap.find(It->pObject) != SortMap.end()){
+                    // only add sub-element
+                    if (!It->SubName.empty()) {
+                        SortMap[It->pObject].SubNames.push_back(It->SubName);
+                        SortMap[It->pObject].SelPoses.push_back(Base::Vector3d(It->x,It->y,It->z));
+                    }
+                }
+                else {
+                    // create a new entry
+                    SelectionObject tempSelObj;
+                    tempSelObj.DocName  = It->DocName;
+                    tempSelObj.FeatName = It->FeatName;
+                    tempSelObj.TypeName = It->TypeName.c_str();
+                    if (!It->SubName.empty()) {
+                        tempSelObj.SubNames.push_back(It->SubName);
+                        tempSelObj.SelPoses.push_back(Base::Vector3d(It->x,It->y,It->z));
+                    }
+                    SortMap.insert(std::pair<App::DocumentObject*,SelectionObject>(It->pObject,tempSelObj));
+                }
+            }
+        }
+    }
+
+    // The map loses the order thus we have to go again through the list and pick up the SelectionObject from the map
+    for (std::list<_SelObj>::const_iterator It = objList.begin();It != objList.end();++It) {
+        std::map<App::DocumentObject*,SelectionObject>::iterator Jt = SortMap.find(It->pObject);
+        if (Jt != SortMap.end()) {
+            temp.push_back(Jt->second);
+            SortMap.erase(Jt);
+        }
+    }
+
+    return temp;
+}
+
+bool SelectionSingleton::needPickedList() const {
+    return _needPickedList;
+}
+
+void SelectionSingleton::enablePickedList(bool enable) {
+    if(enable != _needPickedList) {
+        _needPickedList = enable;
+        _PickedList.clear();
+        SelectionChanges Chng;
+        Chng.Type      = SelectionChanges::PickedListChanged;
+        Notify(Chng);
+        signalSelectionChanged(Chng);
+    }
+}
+
+bool SelectionSingleton::hasPickedList() const {
+    return _PickedList.size();
+}
+
 std::vector<App::DocumentObject*> SelectionSingleton::getObjectsOfType(const char* typeName, const char* pDocName, bool resolve) const
 {
     Base::Type typeId = Base::Type::fromName(typeName);
@@ -483,10 +540,8 @@ unsigned int SelectionSingleton::countObjectsOfType(const char* typeName, const 
     return countObjectsOfType(typeId, pDocName, resolve);
 }
 
-bool SelectionSingleton::setPreselect(const char* pDocName, const char* pObjectName, const char* pSubName, float x, float y, float z)
+bool SelectionSingleton::setPreselect(const char* pDocName, const char* pObjectName, const char* pSubName, float x, float y, float z, bool signal)
 {
-    static char buf[513];
-
     if (DocName != "")
         rmvPreselect();
 
@@ -542,23 +597,28 @@ bool SelectionSingleton::setPreselect(const char* pDocName, const char* pObjectN
     Chng.x = x;
     Chng.y = y;
     Chng.z = z;
-    Chng.Type = SelectionChanges::SetPreselect;
 
-    // set the current preselection
-    CurrentPreselection = Chng;
+    if(!signal) {
+        Chng.Type = SelectionChanges::SetPreselect;
 
-    snprintf(buf,512,"Preselected: %s.%s.%s (%f,%f,%f)",Chng.pDocName
-                                                       ,Chng.pObjectName
-                                                       ,Chng.pSubName
-                                                       ,x,y,z);
+        // set the current preselection
+        CurrentPreselection = Chng;
 
-    //FIXME: We shouldn't replace the possibly defined edit cursor
-    //with the arrow cursor. But it seems that we don't even have to.
-    //if (getMainWindow()){
-    //    getMainWindow()->showMessage(QString::fromLatin1(buf),3000);
-    //    Gui::MDIView* mdi = Gui::Application::Instance->activeDocument()->getActiveView();
-    //    mdi->restoreOverrideCursor();
-    //}
+        // static char buf[513];
+        // snprintf(buf,512,"Preselected: %s.%s.%s (%f,%f,%f)",Chng.pDocName
+        //                                                 ,Chng.pObjectName
+        //                                                 ,Chng.pSubName
+        //                                                 ,x,y,z);
+
+        //FIXME: We shouldn't replace the possibly defined edit cursor
+        //with the arrow cursor. But it seems that we don't even have to.
+        //if (getMainWindow()){
+        //    getMainWindow()->showMessage(QString::fromLatin1(buf),3000);
+        //    Gui::MDIView* mdi = Gui::Application::Instance->activeDocument()->getActiveView();
+        //    mdi->restoreOverrideCursor();
+        //}
+    }else
+        Chng.Type = SelectionChanges::SetPreselectSignal; // signal 3D view to do the highlight
 
     Notify(Chng);
     signalSelectionChanged(Chng);
@@ -665,8 +725,29 @@ App::Document* SelectionSingleton::getDocument(const char* pDocName) const
         return App::GetApplication().getActiveDocument();
 }
 
-bool SelectionSingleton::addSelection(const char* pDocName, const char* pObjectName, const char* pSubName, float x, float y, float z)
+bool SelectionSingleton::addSelection(const char* pDocName, const char* pObjectName, const char* pSubName, float x, float y, float z, const std::vector<SelObj> *pickedList)
 {
+    if(pickedList) {
+        _PickedList.clear();
+        for(const auto &sel : *pickedList) {
+            _PickedList.push_back(_SelObj());
+            auto &s = _PickedList.back();
+            s.DocName = sel.DocName;
+            s.FeatName = sel.FeatName;
+            s.SubName = sel.SubName;
+            s.TypeName = sel.TypeName;
+            s.pObject = sel.pObject;
+            s.pDoc = sel.pDoc;
+            s.x = sel.x;
+            s.y = sel.y;
+            s.z = sel.z;
+        }
+        SelectionChanges Chng;
+        Chng.Type      = SelectionChanges::PickedListChanged;
+        Notify(Chng);
+        signalSelectionChanged(Chng);
+    }
+
     // already in ?
     if (isSelected(pDocName, pObjectName, pSubName))
         return true;
@@ -749,6 +830,14 @@ bool SelectionSingleton::addSelection(const char* pDocName, const char* pObjectN
 
 bool SelectionSingleton::addSelection(const char* pDocName, const char* pObjectName, const std::vector<std::string>& pSubNames)
 {
+    if(_PickedList.size()) {
+        _PickedList.clear();
+        SelectionChanges Chng;
+        Chng.Type = SelectionChanges::PickedListChanged;
+        Notify(Chng);
+        signalSelectionChanged(Chng);
+    }
+
     _SelObj temp;
 
     temp.pDoc = getDocument(pDocName);
@@ -801,8 +890,30 @@ bool SelectionSingleton::addSelection(const char* pDocName, const char* pObjectN
     }
 }
 
-void SelectionSingleton::rmvSelection(const char* pDocName, const char* pObjectName, const char* pSubName)
+void SelectionSingleton::rmvSelection(const char* pDocName, const char* pObjectName, const char* pSubName, 
+        const std::vector<SelObj> *pickedList)
 {
+    if(pickedList) {
+        _PickedList.clear();
+        for(const auto &sel : *pickedList) {
+            _PickedList.push_back(_SelObj());
+            auto &s = _PickedList.back();
+            s.DocName = sel.DocName;
+            s.FeatName = sel.FeatName;
+            s.SubName = sel.SubName;
+            s.TypeName = sel.TypeName;
+            s.pObject = sel.pObject;
+            s.pDoc = sel.pDoc;
+            s.x = sel.x;
+            s.y = sel.y;
+            s.z = sel.z;
+        }
+        SelectionChanges Chng;
+        Chng.Type      = SelectionChanges::PickedListChanged;
+        Notify(Chng);
+        signalSelectionChanged(Chng);
+    }
+
     std::vector<SelectionChanges> rmvList;
 
     if(!pDocName) return;
@@ -870,6 +981,14 @@ App::DocumentObject *SelectionSingleton::resolveObject(
 
 void SelectionSingleton::setSelection(const char* pDocName, const std::vector<App::DocumentObject*>& sel)
 {
+    if(_PickedList.size()) {
+        _PickedList.clear();
+        SelectionChanges Chng;
+        Chng.Type      = SelectionChanges::PickedListChanged;
+        Notify(Chng);
+        signalSelectionChanged(Chng);
+    }
+
     App::Document *pcDoc;
     pcDoc = getDocument(pDocName);
     if (!pcDoc)
@@ -927,6 +1046,14 @@ void SelectionSingleton::setSelection(const char* pDocName, const std::vector<Ap
 
 void SelectionSingleton::clearSelection(const char* pDocName)
 {
+    if(_PickedList.size()) {
+        _PickedList.clear();
+        SelectionChanges Chng;
+        Chng.Type      = SelectionChanges::PickedListChanged;
+        Notify(Chng);
+        signalSelectionChanged(Chng);
+    }
+
     App::Document* pDoc;
     pDoc = getDocument(pDocName);
 
@@ -1031,8 +1158,30 @@ const char *SelectionSingleton::getSelectedElement(App::DocumentObject *obj, con
 
 void SelectionSingleton::slotDeletedObject(const App::DocumentObject& Obj)
 {
+    if(!Obj.getNameInDocument()) return;
+
     // remove also from the selection, if selected
     Selection().rmvSelection( Obj.getDocument()->getName(), Obj.getNameInDocument() );
+
+    if(_PickedList.size()) {
+        bool changed = false;
+        for(auto it=_PickedList.begin(),itNext=it;it!=_PickedList.end();it=itNext) {
+            ++itNext;
+            auto &sel = *it;
+            if(sel.DocName == Obj.getDocument()->getName() &&
+               sel.FeatName == Obj.getNameInDocument())
+            {
+                changed = true;
+                _PickedList.erase(it);
+            }
+        }
+        if(changed) {
+            SelectionChanges Chng;
+            Chng.Type      = SelectionChanges::PickedListChanged;
+            Notify(Chng);
+            signalSelectionChanged(Chng);
+        }
+    }
 }
 
 
@@ -1043,7 +1192,7 @@ void SelectionSingleton::slotDeletedObject(const App::DocumentObject& Obj)
  * A constructor.
  * A more elaborate description of the constructor.
  */
-SelectionSingleton::SelectionSingleton()
+SelectionSingleton::SelectionSingleton():_needPickedList(false)
 {
     hx = 0;
     hy = 0;
@@ -1109,6 +1258,15 @@ PyMethodDef SelectionSingleton::Methods[] = {
      "getSelection([string]) -- Return a list of selected objets\n"
      "Return a list of selected objects for a given document name. If no\n"
      "document name is given the selection for the active document is returned."},
+    {"preselect",            (PyCFunction) SelectionSingleton::sPreselect, 1, 
+     "addSelection(object,[string,float,float,float]) -- Preselect an object\n"
+     "where string is the sub-element name and the three floats represent a 3d point"},
+    {"getPickedList",         (PyCFunction) SelectionSingleton::sGetPickedList, 1,
+     "getPickedList([string]) -- Return a list of objets under the last mouse click\n"
+     "Return a list of objects under the last mouse click for a given document name.\n"
+     "If no document name is given the selection for the active document is returned."},
+    {"enablePickedList",      (PyCFunction) SelectionSingleton::sEnablePickedList, 1,
+     "enablePickedList(boolean) -- Enable/disable pick list"},
     {"getCompleteSelection", (PyCFunction) SelectionSingleton::sGetCompleteSelection, 1,
      "getCompleteSelection() -- Return a list of selected objects of all documents."},
     {"getSelectionEx",         (PyCFunction) SelectionSingleton::sGetSelectionEx, 1,
@@ -1197,6 +1355,24 @@ PyObject *SelectionSingleton::sAddSelection(PyObject * /*self*/, PyObject *args,
     return 0;
 }
 
+PyObject *SelectionSingleton::sPreselect(PyObject * /*self*/, PyObject *args, PyObject * /*kwd*/)
+{
+    PyObject *object;
+    char* subname=0;
+    float x=0,y=0,z=0;
+    if (!PyArg_ParseTuple(args, "O!|sfff", &(App::DocumentObjectPy::Type),&object,&subname,&x,&y,&z))
+        return NULL;
+    App::DocumentObjectPy* docObjPy = static_cast<App::DocumentObjectPy*>(object);
+    App::DocumentObject* docObj = docObjPy->getDocumentObjectPtr();
+    if (!docObj || !docObj->getNameInDocument()) {
+        PyErr_SetString(Base::BaseExceptionFreeCADError, "Cannot check invalid object");
+        return NULL;
+    }
+    Selection().setPreselect(docObj->getDocument()->getName(), 
+            docObj->getNameInDocument(), subname,x,y,z,true);
+    Py_Return;
+}
+
 PyObject *SelectionSingleton::sRemoveSelection(PyObject * /*self*/, PyObject *args, PyObject * /*kwd*/)
 {
     PyObject *object;
@@ -1271,6 +1447,16 @@ PyObject *SelectionSingleton::sGetSelection(PyObject * /*self*/, PyObject *args,
     }
 }
 
+PyObject *SelectionSingleton::sEnablePickedList(PyObject * /*self*/, PyObject *args, PyObject * /*kwd*/)
+{
+    PyObject *enable = Py_True;
+    if (!PyArg_ParseTuple(args, "|O", &enable))     // convert args: Python->C 
+        return NULL;                             // NULL triggers exception
+
+    Selection().enablePickedList(PyObject_IsTrue(enable));
+    Py_Return;
+}
+
 PyObject *SelectionSingleton::sGetCompleteSelection(PyObject * /*self*/, PyObject *args, PyObject * /*kwd*/)
 {
     if (!PyArg_ParseTuple(args, ""))     // convert args: Python->C 
@@ -1299,6 +1485,27 @@ PyObject *SelectionSingleton::sGetSelectionEx(PyObject * /*self*/, PyObject *arg
 
     std::vector<SelectionObject> sel;
     sel = Selection().getSelectionEx(documentName);
+
+    try {
+        Py::List list;
+        for (std::vector<SelectionObject>::iterator it = sel.begin(); it != sel.end(); ++it) {
+            list.append(Py::asObject(it->getPyObject()));
+        }
+        return Py::new_reference_to(list);
+    }
+    catch (Py::Exception&) {
+        return 0;
+    }
+}
+
+PyObject *SelectionSingleton::sGetPickedList(PyObject * /*self*/, PyObject *args, PyObject * /*kwd*/)
+{
+    char *documentName=0;
+    if (!PyArg_ParseTuple(args, "|s", &documentName))     // convert args: Python->C 
+        return NULL;                             // NULL triggers exception
+
+    std::vector<SelectionObject> sel;
+    sel = Selection().getPickedListEx(documentName);
 
     try {
         Py::List list;

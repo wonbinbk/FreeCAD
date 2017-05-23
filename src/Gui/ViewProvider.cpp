@@ -717,7 +717,6 @@ bool ViewProvider::getElementPicked(const SoPickedPoint *pp, std::string &subnam
 }
 
 SoDetail *ViewProvider::getDetailPath(const char *subelement, SoFullPath *pPath, bool append) const {
-    auto len = pPath->getLength();
     if(append) {
         pPath->append(pcRoot);
         pPath->append(pcModeSwitch);
@@ -727,7 +726,6 @@ SoDetail *ViewProvider::getDetailPath(const char *subelement, SoFullPath *pPath,
     for(Gui::ViewProviderExtension* ext : vector)
         if(ext->extensionGetDetailPath(subelement,pPath,det))
             return det;
-    pPath->truncate(len);
     return getDetail(subelement);
 }
 

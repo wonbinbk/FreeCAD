@@ -87,10 +87,6 @@ public:
     std::vector<int32_t> hl, sl;
     SbColor selectionColor;
     SbColor highlightColor;
-    //#0000834: Minor preselection color bug
-    //To solve this we need a seprate color packer for highlighting and selection
-    SoColorPacker colorpacker1;
-    SoColorPacker colorpacker2;
 
     bool hasSecondary;
 };
@@ -179,10 +175,8 @@ void SoBrepEdgeSet::renderHighlight(SoGLRenderAction *action, SelContextPtr ctx)
   //SoLineWidthElement::set(state, this, 4.0f);
 
     SoLazyElement::setEmissive(state, &ctx->highlightColor);
-    SoOverrideElement::setEmissiveColorOverride(state, this, true);
-    SoLazyElement::setDiffuse(state, this,1, &ctx->highlightColor,&ctx->colorpacker1);
-    SoOverrideElement::setDiffuseColorOverride(state, this, true);
-    SoLazyElement::setLightModel(state, SoLazyElement::BASE_COLOR);
+    packedColor = ctx->highlightColor.getPackedValue(0.0);
+    SoLazyElement::setPacked(state, this,1, &packedColor,false);
 
     const SoCoordinateElement * coords;
     const SbVec3f * normals;
@@ -220,10 +214,8 @@ void SoBrepEdgeSet::renderSelection(SoGLRenderAction *action, SelContextPtr ctx,
         //SoLineWidthElement::set(state, this, 4.0f);
 
         SoLazyElement::setEmissive(state, &ctx->selectionColor);
-        SoOverrideElement::setEmissiveColorOverride(state, this, true);
-        SoLazyElement::setDiffuse(state, this,1, &ctx->selectionColor,&ctx->colorpacker2);
-        SoOverrideElement::setDiffuseColorOverride(state, this, true);
-        SoLazyElement::setLightModel(state, SoLazyElement::BASE_COLOR);
+        packedColor = ctx->selectionColor.getPackedValue(0.0);
+        SoLazyElement::setPacked(state, this,1, &packedColor,false);
     }
 
     const SoCoordinateElement * coords;
