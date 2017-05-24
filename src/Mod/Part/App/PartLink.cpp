@@ -35,9 +35,9 @@ FC_LOG_LEVEL_INIT("PartLink", false, true);
 using namespace Part;
 
 //---------------------------------------------------------------------
-PROPERTY_SOURCE_WITH_EXTENSIONS(Part::Link, Part::Feature)
+PROPERTY_SOURCE_WITH_EXTENSIONS(Part::LinkBase, Part::Feature)
 
-Link::Link() {
+LinkBase::LinkBase() {
     ADD_PROPERTY_TYPE(LinkShape,(true)," Link",App::Prop_None,"Enable this to generate TopoShape from linked object");
     App::LinkExtension::initExtension(this);
     Placement.setStatus(App::Property::Status::Hidden, true);
@@ -45,16 +45,44 @@ Link::Link() {
     Shape.setStatus(App::Property::Transient,true);
 }
 
-App::DocumentObjectExecReturn *Link::execute(void) {
-    return buildShape(false);
+App::DocumentObjectExecReturn *LinkBase::execute(void) {
+    auto ret = buildShape(false);
+    if(ret) return ret;
+    return Part::Feature::execute();
 }
 
-
-App::DocumentObject *Link::getLinkedObject(bool recurse, Base::Matrix4D *mat, bool transform)
+App::DocumentObject *LinkBase::getLinkedObject(bool recurse, Base::Matrix4D *mat, bool transform)
 {
     return getLinkedObjectExt(recurse,mat,transform);
 }
 
+App::DocumentObject *LinkBase::getSubObject(const char *element, const char **subname, 
+        PyObject **pyObj, Base::Matrix4D *mat, bool transform) const
+{
+    // bypass Part::Feature's handling
+    return DocumentObject::getSubObject(element,subname,pyObj,mat,transform);
+}
+
+void LinkBase::onChanged(const App::Property* prop)
+{
+    if(prop == &Placement) {
+        // bypass Part::Feature handling
+        GeoFeature::onChanged(prop);
+    }else
+        Feature::onChanged(prop);
+}
+
+void LinkBase::onDocumentRestored() {
+    buildShape(true);
+}
+
+//---------------------------------------------------------------------
+PROPERTY_SOURCE_WITH_EXTENSIONS(Part::Link, Part::LinkBase)
+
+Link::Link() {
+    ADD_PROPERTY_TYPE(LinkedObject, (0), " Link", App::Prop_None, "Linked object");
+    App::LinkExtension::setProperties(&LinkedObject, &Placement);
+}
 
 App::DocumentObjectExecReturn *Link::buildShape(bool silent) {
     if(!LinkShape.getValue()) return 0;
@@ -69,89 +97,79 @@ App::DocumentObjectExecReturn *Link::buildShape(bool silent) {
     if(!linked || linked==this)
         EXEC_RET("no object linked");
 
-    FC_LOG("update part link " << getNameInDocument() << ": " << mat.analyse());
+    auto prop = linked->getPropertyByName("Shape");
+    if(!prop || !prop->isDerivedFrom(PropertyPartShape::getClassTypeId()))
+        EXEC_RET("No shape property. Please turn off LinkShape.");
+    TopoShape shape(static_cast<PropertyPartShape*>(prop)->getValue().Located(TopLoc_Location()));
+    if(shape.isNull())
+        EXEC_RET("No shape found");
+    shape.transformShape(mat,false,true);
+    Shape.setValue(shape);
+    return 0;
+}
 
-    auto ext = linked->getExtensionByType<App::GeoFeatureGroupExtension>(true);
-    std::vector<App::DocumentObject *> children;
-    if(!ext) {
-        auto prop = linked->getPropertyByName("Shape");
-        TopoDS_Shape shape;
-        if(prop && prop->isDerivedFrom(PropertyPartShape::getClassTypeId()))
-            shape = static_cast<PropertyPartShape*>(prop)->getValue();
-        if(shape.IsNull())
-            EXEC_RET("No shape found");
-        shape.Location(TopLoc_Location());
-        Shape.setValue(TopoShape(shape).transformGShape(mat));
-        return 0;
-    }
-    // Unfortunately, we can't support shape linking GeoFeatureGroup yet, because its
-    // compound shape apperance depends on the visibility property of its children's 
-    // view provider. It should have been stored inside GeoFeatureGroup somehow
-#if 1
-    EXEC_RET("GeoFeatureGroup shape linking is not supported! Please set LinkShape to False.");
-#else
-    children = ext->getGeoSubObjects();
+
+//---------------------------------------------------------------------
+PROPERTY_SOURCE_WITH_EXTENSIONS(Part::LinkSub, Part::LinkBase)
+
+LinkSub::LinkSub() {
+    ADD_PROPERTY_TYPE(LinkedSubs, (0), " Link", App::Prop_None, "Linked sub objects");
+    App::LinkExtension::setProperties(&LinkedSubs, &Placement);
+
+    LinkTransform.setValue(true);
+}
+
+App::DocumentObjectExecReturn *LinkSub::buildShape(bool silent) {
+    if(!LinkShape.getValue()) return 0;
+
+    Base::Matrix4D mat;
+    auto obj = getLinkedObjectExt(true,&mat,true);
+    if(!obj)
+        EXEC_RET("no object linked");
+
+    auto subs = LinkedSubs.getSubValues();
+    if(subs.empty())
+        EXEC_RET("no sub object linked");
 
     BRep_Builder builder;
     TopoDS_Compound compound;
     builder.MakeCompound(compound);
     int count = 0;
-    for(auto child : children) {
-        if(!child || !child->getNameInDocument())
-            continue;
-        Base::Matrix4D cmat;
-        child = child->getLinkedObject(true,&cmat,true);
-        if(!child || !child->getNameInDocument())
-            continue;
 
-        auto prop = child->getPropertyByName("Shape");
-        if(!prop || !prop->isDerivedFrom(PropertyPartShape::getClassTypeId()))
+    bool transform = LinkTransform.getValue();
+    for(const auto &sub : subs) {
+        const char *element = 0;
+        Base::Matrix4D m(mat);
+        auto sobj = obj->getSubObject(sub.c_str(),&element,0,&m,transform);
+        if(!sobj || !sobj->getNameInDocument()) {
+            FC_WARN("skip invalid object " << sobj->getNameInDocument() << '.' << sub.c_str());
             continue;
+        }
 
-        TopoDS_Shape s = static_cast<PropertyPartShape*>(prop)->getValue();
-        if(s.IsNull()) continue;
+        auto prop = sobj->getPropertyByName("Shape");
+        if(!prop || !prop->isDerivedFrom(PropertyPartShape::getClassTypeId())) {
+            FC_WARN("no shape found in " << sobj->getNameInDocument() << '.' << sub.c_str());
+            continue;
+        }
 
-        builder.Add(compound,TopoShape(s).transformGShape(cmat));
+        TopoShape s(static_cast<PropertyPartShape*>(prop)->getValue().Located(TopLoc_Location()));
+        if(s.isNull()) continue;
+        if(element && *element) {
+            try {
+                s = s.getSubShape(element);
+            }catch(Standard_Failure &e) {
+                FC_WARN("OCCT exception on getting " << sobj->getNameInDocument() << '.' << sub.c_str());
+                continue;
+            }
+        }
+        s.transformShape(m,false,true);
+        builder.Add(compound,s.getShape());
         ++count;
     }
 
     if(count==0)
         EXEC_RET("No shape found");
-    Shape.setValue(TopoShape(compound).transformGShape(mat));
+    Shape.setValue(compound);
     return 0;
-#endif
 }
 
-App::DocumentObject *Link::getSubObject(const char *element, const char **subname, 
-        PyObject **pyObj, Base::Matrix4D *mat, bool transform) const
-{
-    // bypass Part::Feature's handling
-    return DocumentObject::getSubObject(element,subname,pyObj,mat,transform);
-}
-
-void Link::onChanged(const App::Property* prop)
-{
-    if (prop == &LinkPlacement) {
-        if(!LinkPlacement.testStatus(App::Property::User3)) {
-            // prevent recuse
-            Placement.setStatus(App::Property::User3,true);
-            Placement.setValue(LinkPlacement.getValue());
-            Placement.setStatus(App::Property::User3,false);
-        }
-    } else if(prop == &Placement) {
-        if(!Placement.testStatus(App::Property::User3)) {
-            LinkPlacement.setStatus(App::Property::User3,true);
-            LinkPlacement.setValue(Placement.getValue());
-            LinkPlacement.setStatus(App::Property::User3,false);
-        }
-        // bypass Part::Feature handling
-        GeoFeature::onChanged(prop);
-        return;
-    }
-    
-    Feature::onChanged(prop);
-}
-
-void Link::onDocumentRestored() {
-    buildShape(true);
-}

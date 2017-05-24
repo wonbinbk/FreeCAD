@@ -151,6 +151,7 @@
         <file>px.svg</file>
         <file>AddonManager.svg</file>
         <file>link.svg</file>
+        <file>linksub.svg</file>
     </qresource>
     <!-- Alternative directory names for icons that should be loaded from a theme -->
     <!-- See also http://permalink.gmane.org/gmane.comp.lib.qt.general/26374 -->

@@ -419,10 +419,11 @@ void DocumentObject::onChanged(const Property* prop)
     if (prop == &Label && _pDoc && oldLabel != Label.getStrValue())
         _pDoc->signalRelabelObject(*this);
 
-    if (prop->getType() & Prop_Output)
-        return;
-    // set object touched
-    StatusBits.set(0);
+    if (!(prop->getType() & Prop_Output))
+        // set object touched
+        StatusBits.set(0);
+
+    TransactionalObject::onChanged(prop);
 }
 
 PyObject *DocumentObject::getPyObject(void)

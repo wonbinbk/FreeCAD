@@ -26,109 +26,188 @@
 
 #include <boost/intrusive_ptr.hpp>
 #include <App/Link.h>
-#include "ViewProviderPythonFeature.h"
 #include "ViewProviderDocumentObject.h"
 #include "ViewProviderExtension.h"
 
 namespace Gui {
 
+class SoFCSelectionRoot;
+
+class LinkInfo;
+typedef boost::intrusive_ptr<LinkInfo> LinkInfoPtr;
+
+class GuiExport ViewProviderLinkObserver: public ViewProviderExtension {
+    EXTENSION_TYPESYSTEM_HEADER_WITH_OVERRIDE();
+public:
+    ViewProviderLinkObserver();
+    void extensionOnDeleting() override;
+    void extensionOnChanged(const App::Property *) override;
+    void extensionUpdateData(const App::Property*) override;
+    void extensionHide(void) override;
+    void extensionShow(void) override;
+    void extensionFinishRestoring() override;
+    void extensionGetLinks(std::vector<ViewProviderDocumentObject*> &) const override;
+    void extensionGetNodeNames(Gui::Document *, QMap<SoNode*, QString> &) const override;
+
+    LinkInfoPtr linkInfo;
+};
+
+class GuiExport LinkHandle : public Base::BaseClass {
+    TYPESYSTEM_HEADER();
+public:
+    LinkHandle();
+    ~LinkHandle();
+
+    void unlink(LinkInfoPtr link);
+    bool isLinked() const;
+
+    SoSeparator *getLinkRoot() const {return pcLinkRoot;}
+
+    QIcon getLinkedIcon(QPixmap overlay) const;
+
+    virtual void onLinkUpdate();
+    virtual void onLinkedIconChange(LinkInfoPtr link);
+
+    std::string getSubName(LinkInfoPtr);
+
+    void setLink(App::DocumentObject *obj, bool reorder = false,
+            const std::vector<std::string> &subs = std::vector<std::string>());
+
+    void setMaterial(const App::Material *material);
+
+    static void setTransform(SoTransform *pcTransform, const Base::Matrix4D &mat);
+
+    enum SnapshotType {
+        //three type of snapshot to override linked root node:
+        
+        //override transform and visibility
+        SnapshotTransform = 0,
+        //override visibility
+        SnapshotVisible = 1,
+        //override none (for child objects of a container)
+        SnapshotChild = 2,
+
+        SnapshotMax,
+
+        //special type for subelement linking
+        SnapshotContainer = -1,
+        // subelement linking with transform override
+        SnapshotContainerTransform = -2,
+    };
+    void setNodeType(SnapshotType type);
+
+    void setVisibility(bool visible);
+    bool getVisibility() const {return visible;}
+
+    ViewProviderDocumentObject *linkGetLinkedView(bool recursive, int depth=0) const;
+    ViewProviderDocumentObject *linkGetElementView(const char *, const char **) const;
+    bool linkGetDetailPath(const char *, SoFullPath *, SoDetail *&) const;
+    bool linkGetElementPicked(const SoPickedPoint *, std::string &) const;
+
+    ViewProviderDocumentObject *getOwner() const {return owner;}
+    void setOwner(ViewProviderDocumentObject *vpd) {owner=vpd;}
+
+    friend class LinkInfo;
+
+protected:
+    ViewProviderDocumentObject *owner;
+    SoSeparator *pcLinkRoot;
+    SoMaterial  *pcMaterial;
+    SnapshotType nodeType;
+    LinkInfoPtr linkInfo;
+    struct SubInfo {
+        LinkHandle &handle;
+        SoSeparator *pcNode;
+        SoTransform *pcTransform;
+        LinkInfoPtr link;
+        std::set<std::string> elements;
+
+        SubInfo(LinkHandle &handle);
+        ~SubInfo();
+        void unlink(bool reset=false);
+        bool isLinked() const;
+    };
+    std::map<std::string, SubInfo> subInfo;
+    bool visible;
+};
+    
 class GuiExport ViewProviderLink : public ViewProviderDocumentObject
 {
     PROPERTY_HEADER(Gui::ViewProviderLink);
     typedef ViewProviderDocumentObject inherited;
 
 public:
+    App::PropertyBool LinkUseMaterial;
+    App::PropertyColor LinkShapeColor;
+    App::PropertyPercent LinkTransparency;
+    App::PropertyMaterial LinkShapeMaterial;
+    App::PropertyBool Selectable;
+
     ViewProviderLink();
     virtual ~ViewProviderLink();
 
     void attach(App::DocumentObject *pcObj) override;
+
+    bool isSelectable(void) const override {return Selectable.getValue();}
+
+    bool useNewSelectionModel(void) const override {return true;}
+
     void updateData(const App::Property*) override;
     void onChanged(const App::Property* prop) override;
     std::vector<App::DocumentObject*> claimChildren(void) const override;
-
-    bool useNewSelectionModel(void) const override;
-    std::string getElementPicked(const SoPickedPoint *) const override;
-    SoDetail* getDetail(const char* subelement) const override;
-    SoDetail* getDetailPath(const char *subelement, SoFullPath **) const override;
+    bool getElementPicked(const SoPickedPoint *, std::string &) const override;
+    SoDetail* getDetailPath(const char *, SoFullPath *, bool) const override;
 
     bool onDelete(const std::vector<std::string> &subNames) override;
     
-    bool canRemoveChildrenFromRoot() const override {
-        return moveChildFromRoot;
-    }
-
     void finishRestoring() override;
 
-    ViewProviderDocumentObject *getElementView(
-            const char *element, const char **subname) override;
+    ViewProviderDocumentObject *getLinkedView(bool recursive, int depth=0) const override;
 
-    ViewProviderDocumentObject *getLinkedView(bool recursive) override;
+    ViewProviderDocumentObject *getElementView(const char *, const char **) const override;
 
     QIcon getIcon(void) const override;
-    
+
     bool canDragObjects() const override;
     bool canDragObject(App::DocumentObject*) const override;
     void dragObject(App::DocumentObject*) override;
     bool canDropObjects() const override;
     bool canDropObject(App::DocumentObject*) const override;
-    void dropObject(App::DocumentObject*) override;
+    bool canDragAndDropObject(App::DocumentObject*) const override;
+    void dropObjectEx(App::DocumentObject*, App::DocumentObject*, const char *) override;
 
-    virtual const char * const * getOverlayPixmap(bool xlink) const;
-
-    void getNodeNames(QMap<SoNode*, QString> &nodeNames) const;
-
-    class LinkInfo;
-    friend class LinkInfo;
-    typedef boost::intrusive_ptr<LinkInfo> LinkInfoPtr;
-
-    class Observer: public ViewProviderExtension {
-        EXTENSION_TYPESYSTEM_HEADER_WITH_OVERRIDE();
-    public:
-        Observer();
-        void extensionOnDeleting() override;
-        void extensionOnChanged(const App::Property *) override;
-        void extensionUpdateData(const App::Property*) override;
-        void extensionHide(void) override;
-        void extensionShow(void) override;
-        void extensionFinishRestoring() override;
-        void extensionGetLinks(std::vector<ViewProviderDocumentObject*> &) const override;
-
-        LinkInfoPtr linkInfo;
+    enum LinkConfig {
+        HandleAll = -1,
+        HandleDragDrop = 0,
+        HandlePick = 1,
+        HandleLinkedView = 2,
+        HandleElementView = 3,
+        HandleClaimChildren = 4,
     };
+    void setConfig(LinkConfig bit, bool on);
+    bool testConfig(LinkConfig bit) {return config.test((size_t)bit);}
 
-    enum PropName {
-        PropNamePlacement,
-        PropNameObject,
-        PropNameMoveChild,
-        PropNameTransform,
-        PropNameScale,
-        PropNameMax,
+    enum PropIndex {
+        PropPlacement,
+        PropObject,
+        PropSubs,
+        PropTransform,
+        PropScale,
+        PropRecomputed,
+        PropMax,
     };
-    typedef std::map<std::string,PropName> PropNameMap;
-    typedef std::array<std::string,ViewProviderLink::PropNameMax> PropNames;
+    virtual const char *propNameFromIndex(PropIndex index) const;
+    virtual QPixmap getOverlayPixmap() const;
 
-    // ViewProviderLink will keep the passed 'conf'. DO NOT modify afterwards.
-    void setPropertyNames(std::shared_ptr<PropNameMap> conf);
-
+private:
+    int propIndexFromName(const char *name) const;
 protected:
-    void unlink();
-    bool findLink(const App::PropertyLink *prop);
-    void setup();
-    void checkProperty(const App::Property *prop, bool fromObject);
-
-    std::shared_ptr<PropNameMap> propName2Type;
-
-    std::shared_ptr<PropNames> propType2Name;
-
-    LinkInfoPtr linkInfo;
-
-    bool moveChildFromRoot;
+    LinkHandle handle;
+    std::bitset<32> config;
     bool linkTransform;
-    bool isXLink;
-    bool visible;
+    bool xlink;
+    bool sublink;
 };
-
-typedef Gui::ViewProviderPythonFeatureT<ViewProviderLink> ViewProviderLinkPython;
 
 } //namespace Gui
 

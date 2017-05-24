@@ -28,15 +28,15 @@
 
 namespace Part {
 
-class Link : public Part::Feature, public App::LinkExtension
+class LinkBase : public Part::Feature, public App::LinkExtension
 {
-    PROPERTY_HEADER_WITH_EXTENSIONS(Part::Link);
+    PROPERTY_HEADER_WITH_EXTENSIONS(Part::LinkBase);
 
 public:
 
     App::PropertyBool LinkShape;
 
-    Link();
+    LinkBase();
 
     const char* getViewProviderName(void) const override {
         return "PartGui::ViewProviderPartLink";
@@ -54,7 +54,31 @@ public:
     App::DocumentObject *getLinkedObject(bool recurse, Base::Matrix4D *mat, bool transform) override;
 
 protected:
-    App::DocumentObjectExecReturn *buildShape(bool silent);
+    virtual App::DocumentObjectExecReturn *buildShape(bool) {return 0;}
+};
+
+class Link : public Part::LinkBase
+{
+    PROPERTY_HEADER_WITH_EXTENSIONS(Part::Link);
+
+public:
+    App::PropertyLink LinkedObject;
+    Link();
+
+protected:
+    App::DocumentObjectExecReturn *buildShape(bool);
+};
+
+class LinkSub : public Part::LinkBase
+{
+    PROPERTY_HEADER_WITH_EXTENSIONS(Part::LinkSub);
+
+public:
+    App::PropertyLinkSub LinkedSubs;
+    LinkSub();
+
+protected:
+    App::DocumentObjectExecReturn *buildShape(bool);
 };
 
 }

@@ -39,25 +39,36 @@ public:
     LinkExtension();
     virtual ~LinkExtension();
 
-    PropertyXLink LinkedObject;
     PropertyPlacement LinkPlacement;
     PropertyVector LinkScale;
     PropertyBool LinkTransform;
-
-    PyObject* getExtensionPyObject(void) override;
+    PropertyBool LinkRecomputed;
 
     DocumentObject *extensionGetSubObject(const char *element, 
             const char **subname, PyObject **pyObj, 
             Base::Matrix4D *mat, bool transform) const override;
 
+    virtual App::DocumentObjectExecReturn *extensionExecute(void) override;
+    virtual void extensionOnChanged(const Property* p) override;
+
+    void setProperties(Property *link, PropertyPlacement *pla);
+
 protected:
+    DocumentObject *getLink() const;
     DocumentObject *getLinkedObjectExt(bool recurse, Base::Matrix4D *mat, bool transform);
+
+private:
+    Property *propLink;
+    PropertyPlacement *propPlacement;
 };
 
 class AppExport Link : public App::DocumentObject, public App::LinkExtension
 {
     PROPERTY_HEADER_WITH_EXTENSIONS(App::Link);
 public:
+    PropertyPlacement Placement;
+    PropertyXLink LinkedObject;
+
     Link(void);
 
     const char* getViewProviderName(void) const override{
@@ -65,9 +76,24 @@ public:
     }
 
     DocumentObject *getLinkedObject(bool recurse, Base::Matrix4D *mat, bool transform) override;
-
-    PyObject* getPyObject(void) override;
 };
+
+class AppExport LinkSub : public App::DocumentObject, public App::LinkExtension
+{
+    PROPERTY_HEADER_WITH_EXTENSIONS(App::LinkSub);
+public:
+    PropertyPlacement Placement;
+    PropertyLinkSub LinkedSubs;
+
+    LinkSub(void);
+
+    const char* getViewProviderName(void) const override{
+        return "Gui::ViewProviderLink";
+    }
+
+    DocumentObject *getLinkedObject(bool recurse, Base::Matrix4D *mat, bool transform) override;
+};
+
 
 // typedef FeaturePythonT<Link> LinkPython;
 

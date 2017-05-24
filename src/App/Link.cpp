@@ -27,22 +27,19 @@
 
 #include "GeoFeatureGroupExtension.h"
 #include "Link.h"
-#include "LinkExtensionPy.h"
-#include "LinkPy.h"
 
 using namespace App;
 
 EXTENSION_PROPERTY_SOURCE(App::LinkExtension, App::DocumentObjectExtension)
 
 LinkExtension::LinkExtension(void)
+    :propLink(0),propPlacement(0)
 {
     initExtensionType(LinkExtension::getExtensionClassTypeId());
 
     // Note: Because PropertyView will merge linked object's properties into
     // ours, we set group name as ' Link' with a leading space to try to make
     // our group before others
-    EXTENSION_ADD_PROPERTY_TYPE(LinkedObject, (0), " Link", Prop_None, "Linked object");
-    // EXTENSION_ADD_PROPERTY_TYPE(LinkMoveChild, (true), " Link", Prop_None, "Remove child object(s) from root");
     EXTENSION_ADD_PROPERTY_TYPE(LinkTransform, (false), " Link", Prop_None,
             "Link child placement. If false, the child object's placement is ignored.");
     EXTENSION_ADD_PROPERTY_TYPE(LinkScale,(Base::Vector3d(1.0,1.0,1.0))," Link",Prop_None,
@@ -50,16 +47,40 @@ LinkExtension::LinkExtension(void)
     EXTENSION_ADD_PROPERTY_TYPE(LinkPlacement,(Base::Placement())," Link",Prop_None,
             "The placement of this link. If LinkTransform is 'true', then the final\n"
             "placement is the composite of this and the child's placement.");
+    EXTENSION_ADD_PROPERTY_TYPE(LinkRecomputed, (false), " Link", 
+            PropertyType(Prop_Output|Prop_Transient|Prop_Hidden),0);
 }
 
 LinkExtension::~LinkExtension(void)
 {
 }
 
+void LinkExtension::setProperties(Property *propLink, PropertyPlacement *propPlacement) {
+    if(!propLink || (!propLink->isDerivedFrom(PropertyLink::getClassTypeId()) &&
+                    !propLink->isDerivedFrom(PropertyLinkSub::getClassTypeId())))
+        throw Base::RuntimeError("App::Link: invalid link property");
+    this->propLink = propLink;
+    this->propPlacement = propPlacement;
+}
+
+App::DocumentObjectExecReturn *LinkExtension::extensionExecute(void) {
+    // The actual value is not important, just to notify view provider that
+    // the link (in fact, its dependents, i.e. linked ones) have recomputed.
+    LinkRecomputed.touch();
+    return 0;
+}
+
+DocumentObject *LinkExtension::getLink() const{
+    if(!propLink) throw Base::RuntimeError("App::Link: no link property");
+    if(propLink->isDerivedFrom(PropertyLink::getClassTypeId()))
+        return static_cast<const PropertyLink*>(propLink)->getValue();
+    return dynamic_cast<const PropertyLinkSub*>(propLink)->getValue();
+}
+
 DocumentObject *LinkExtension::extensionGetSubObject(const char *element,
         const char **subname, PyObject **pyObj, Base::Matrix4D *mat, bool transform) const 
 {
-    auto object = LinkedObject.getValue();
+    auto object = getLink();
     if(!object) return nullptr;
 
     if(mat) {
@@ -92,7 +113,7 @@ DocumentObject *LinkExtension::extensionGetSubObject(const char *element,
 
 DocumentObject *LinkExtension::getLinkedObjectExt(bool recurse, Base::Matrix4D *mat, bool transform)
 {
-    auto object = LinkedObject.getValue();
+    auto object = getLink();
 
     if(mat) {
         if(transform)
@@ -107,22 +128,34 @@ DocumentObject *LinkExtension::getLinkedObjectExt(bool recurse, Base::Matrix4D *
     return object->getLinkedObject(recurse,mat,LinkTransform.getValue());
 }
 
-
-PyObject *LinkExtension::getExtensionPyObject(void) {
-    if (ExtensionPythonObject.is(Py::_None())){
-        auto ext = new LinkExtensionPy(this);
-        ExtensionPythonObject = Py::Object(ext,true);
+void LinkExtension::extensionOnChanged(const Property *prop) {
+    if(propPlacement) {
+        if (prop == &LinkPlacement) {
+            if(!LinkPlacement.testStatus(App::Property::User3)) {
+                // prevent recuse
+                propPlacement->setStatus(App::Property::User3,true);
+                propPlacement->setValue(LinkPlacement.getValue());
+                propPlacement->setStatus(App::Property::User3,false);
+            }
+        } else if(prop == propPlacement) {
+            if(!propPlacement->testStatus(App::Property::User3)) {
+                LinkPlacement.setStatus(App::Property::User3,true);
+                LinkPlacement.setValue(propPlacement->getValue());
+                LinkPlacement.setStatus(App::Property::User3,false);
+            }
+        }
     }
-    return Py::new_reference_to(ExtensionPythonObject);
 }
-
-
 
 //-------------------------------------------------------------------------------
 
 PROPERTY_SOURCE_WITH_EXTENSIONS(App::Link, App::DocumentObject)
 
 Link::Link() {
+    ADD_PROPERTY_TYPE(LinkedObject, (0), " Link", Prop_None, "Linked object");
+    ADD_PROPERTY_TYPE(Placement,(Base::Placement())," Link",
+            PropertyType(Prop_Output|Prop_Transient|Prop_Hidden),0);
+    LinkExtension::setProperties(&LinkedObject, &Placement);
     LinkExtension::initExtension(this);
 }
 
@@ -131,14 +164,23 @@ DocumentObject *Link::getLinkedObject(bool recurse, Base::Matrix4D *mat, bool tr
     return getLinkedObjectExt(recurse,mat,transform);
 }
 
-PyObject *Link::getPyObject(void) {
-    if (PythonObject.is(Py::_None())){
-        auto obj = new LinkPy(this);
-        PythonObject = Py::Object(obj,true);
-    }
-    return Py::new_reference_to(PythonObject);
+//-------------------------------------------------------------------------------
+
+PROPERTY_SOURCE_WITH_EXTENSIONS(App::LinkSub, App::DocumentObject)
+
+LinkSub::LinkSub() {
+    ADD_PROPERTY_TYPE(LinkedSubs, (0), " Link", Prop_None, "Linked object with sub elements");
+    ADD_PROPERTY_TYPE(Placement,(Base::Placement())," Link",
+            PropertyType(Prop_Output|Prop_Transient|Prop_Hidden),0);
+    LinkExtension::setProperties(&LinkedSubs, &Placement);
+    LinkExtension::initExtension(this);
+    LinkTransform.setValue(true);
 }
 
+DocumentObject *LinkSub::getLinkedObject(bool recurse, Base::Matrix4D *mat, bool transform)
+{
+    return getLinkedObjectExt(recurse,mat,transform);
+}
 //--------------------------------------------------------------------------------
 
 // namespace App {

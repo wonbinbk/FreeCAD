@@ -90,7 +90,8 @@ Gui::MenuItem* Workbench::setupMenuBar() const
           << "Part_CrossSections" << "Part_MakeFace" << "Part_Extrude"
           << "Part_Revolve" << "Part_Mirror" << "Part_Fillet" << "Part_Chamfer"
           << "Part_RuledSurface" << "Part_Loft" << "Part_Sweep"
-          << "Part_Offset" << "Part_Offset2D" << "Part_Thickness" << "Part_Link" << "Separator" << "Part_EditAttachment";
+          << "Part_Offset" << "Part_Offset2D" << "Part_Thickness" << "Part_Link" 
+          << "Part_LinkSub" << "Separator" << "Part_EditAttachment";
 
     Gui::MenuItem* measure = new Gui::MenuItem;
     root->insertItem(item,measure);
@@ -126,7 +127,7 @@ Gui::ToolBarItem* Workbench::setupToolBars() const
     tool->setCommand("Part tools");
     *tool << "Part_Extrude" << "Part_Revolve" << "Part_Mirror" << "Part_Fillet"
           << "Part_Chamfer" << "Part_RuledSurface" << "Part_Loft" << "Part_Sweep"
-          << "Part_CompOffset" << "Part_Thickness" << "Part_Link";
+          << "Part_CompOffset" << "Part_Thickness" << "Part_Link" << "Part_LinkSub";
 
     Gui::ToolBarItem* boolop = new Gui::ToolBarItem(root);
     boolop->setCommand("Boolean");

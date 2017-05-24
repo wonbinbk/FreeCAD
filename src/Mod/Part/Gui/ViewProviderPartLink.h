@@ -31,9 +31,11 @@ class PartGuiExport ViewProviderPartLink : public Gui::ViewProviderLink
     PROPERTY_HEADER(PartGui::ViewProviderPartLink);
     typedef Gui::ViewProviderLink inherited;
 
+    void attach(App::DocumentObject *pcObj) override;
+
 public:
     ViewProviderPartLink();
-    virtual const char * const * getOverlayPixmap(bool xlink) const;
+    virtual QPixmap getOverlayPixmap() const;
 };
 
 }

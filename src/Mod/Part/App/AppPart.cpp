@@ -451,7 +451,9 @@ PyMOD_INIT_FUNC(Part)
     Part::Helix                 ::init();
     Part::Spiral                ::init();
     Part::Wedge                 ::init();
+    Part::LinkBase              ::init();
     Part::Link                  ::init();
+    Part::LinkSub               ::init();
 
     Part::Part2DObject          ::init();
     Part::Part2DObjectPython    ::init();

@@ -140,19 +140,33 @@ void CmdPartDesignLink::activated(int iMsg)
 {
     Q_UNUSED(iMsg);
     // get the selected object
-    const auto &result = getSelection().getSelection();
-    const char *type = "App::Link";
-    if(result.size() && result.front().pObject && 
-        result.front().pObject->isDerivedFrom(Part::Feature::getClassTypeId()))
-        type = "Part::Link";
-
-    std::string link = getUniqueObjectName("PartDesignLink");
+    const auto &result = getSelection().getCompleteSelection();
+    std::set<App::DocumentObject *> sels;
+    for(const auto &sel : result) {
+        if(sel.pObject && sel.pObject->getNameInDocument())
+            sels.insert(sel.pObject);
+    }
 
     openCommand("Make Link");
-    doCommand(Doc,"App.ActiveDocument.addObject(\"%s\",\"%s\")",type,link.c_str());
-    if(result.size() && result.front().FeatName && result.front().DocName)
-        doCommand(Doc,"App.ActiveDocument.%s.LinkedObject = App.getDocument('%s').getObject('%s')" ,link.c_str(), 
-                result.front().DocName, result.front().FeatName);
+    if(sels.empty()) {
+        std::string link = getUniqueObjectName("AppLink");
+        doCommand(Doc,"App.ActiveDocument.addObject('App::Link','%s')",link.c_str());
+    }else{
+        for(auto obj : sels) {
+            const char *name, *type;
+            if(obj->isDerivedFrom(Part::Feature::getClassTypeId())) {
+                name = "PartLink";
+                type = "Part::Link";
+            }else{
+                name = "AppLink";
+                type = "App::Link";
+            }
+            std::string link = getUniqueObjectName(name);
+            doCommand(Doc,"App.ActiveDocument.addObject('%s','%s')",type,link.c_str());
+            doCommand(Doc,"App.ActiveDocument.%s.LinkedObject = App.getDocument('%s').getObject('%s')",
+                link.c_str(), obj->getDocument()->getName(), obj->getNameInDocument());
+        }
+    }
     commitCommand();
     updateActive();
 }
@@ -162,6 +176,64 @@ bool CmdPartDesignLink::isActive(void)
     return hasActiveDocument();
 }
 
+//===========================================================================
+// PartDesign_LinkSub
+//===========================================================================
+
+DEF_STD_CMD_A(CmdPartDesignLinkSub);
+
+CmdPartDesignLinkSub::CmdPartDesignLinkSub()
+  : Command("PartDesign_LinkSub")
+{
+    sAppModule    = "PartDesign";
+    sGroup        = QT_TR_NOOP("PartDesign");
+    sMenuText     = QT_TR_NOOP("Create a link sub");
+    sToolTipText  = QT_TR_NOOP("Create a link to sub objects/elements of an object");
+    sWhatsThis    = sToolTipText;
+    sStatusTip    = sToolTipText;
+    sPixmap       = "linksub";
+}
+
+void CmdPartDesignLinkSub::activated(int iMsg)
+{
+    Q_UNUSED(iMsg);
+    // get the selected object
+    const auto &result = getSelection().getSelection();
+
+    openCommand("Make LinkSub");
+    if(result.empty()) {
+        std::string link = getUniqueObjectName("PartLinkSub");
+        doCommand(Doc,"App.ActiveDocument.addObject('Part::LinkSub','%s')",link.c_str());
+    } else {
+        std::map<App::DocumentObject *, std::vector<std::string> > sels;
+        for(const auto &sel : result) {
+            if(sel.SubName && sel.pObject && sel.pObject->getNameInDocument()) 
+                sels[sel.pObject].push_back(sel.SubName);
+        }
+        if(sels.empty())
+            QMessageBox::warning(Gui::getMainWindow(), QObject::tr("Cannot create link sub"),
+                    QObject::tr("No subelement selected"));
+        else{
+            for(const auto &v : sels) {
+                std::string link = getUniqueObjectName("PartLinkSub");
+                doCommand(Doc,"App.ActiveDocument.addObject('Part::LinkSub','%s')",link.c_str());
+                std::stringstream str;
+                str << "App.ActiveDocument." << link << ".LinkedSubs = (App.ActiveDocument." << v.first->getNameInDocument() <<", (";
+                for(const auto &sub : v.second)
+                    str << '"' << sub << '"' << (&sub==&v.second.back()?')':',');
+                str << ')';
+                doCommand(Doc,str.str().c_str());
+            }
+        }
+    }
+    commitCommand();
+    updateActive();
+}
+
+bool CmdPartDesignLinkSub::isActive(void)
+{
+    return hasActiveDocument();
+}
 //===========================================================================
 // PartDesign_Body
 //===========================================================================
@@ -892,6 +964,7 @@ void CreatePartDesignBodyCommands(void)
 
     rcCmdMgr.addCommand(new CmdPartDesignPart());
     rcCmdMgr.addCommand(new CmdPartDesignLink());
+    rcCmdMgr.addCommand(new CmdPartDesignLinkSub());
     rcCmdMgr.addCommand(new CmdPartDesignBody());
     rcCmdMgr.addCommand(new CmdPartDesignMigrate());
     rcCmdMgr.addCommand(new CmdPartDesignMoveTip());

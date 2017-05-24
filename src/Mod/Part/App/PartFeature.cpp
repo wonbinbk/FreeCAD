@@ -119,35 +119,10 @@ App::DocumentObject *Feature::getSubObject(const char *element,
 
     if(subname) *subname = element;
 
-    bool gtrsf = false;
-    if(pmat) {
-        Base::Matrix4D &mat = *pmat;
+    if(pmat && transform)
+        *pmat *= Placement.getValue().toMatrix();
 
-        // check for uniform scaling
-        //
-        // scaling factors are the colum vector length. We use square distance and
-        // ignore the actual scaling signess
-        //
-        double dx = Base::Vector3d(mat[0][0],mat[1][0],mat[2][0]).Sqr();
-        double dy = Base::Vector3d(mat[0][1],mat[1][1],mat[2][1]).Sqr();
-        if(fabs(dx-dy)>Precision::SquareConfusion()) {
-            FC_TRACE("non-uniform scaling " << dx << ", " << dy);
-            gtrsf = true;
-        } else {
-            double dz = Base::Vector3d(mat[0][2],mat[1][2],mat[2][2]).Sqr();
-            if(fabs(dy-dz)>Precision::SquareConfusion()) {
-                gtrsf = true;
-                FC_TRACE("non-uniform scaling " << dx << ", " << dy << ", " << dz);
-            }
-        }
-
-        if(!transform)
-            mat *= Placement.getValue().inverse().toMatrix();
-    }
-
-    TopoDS_Shape shape = Shape.getValue();
-    // if(!transform)
-    //     shape.Location(TopLoc_Location());
+    TopoDS_Shape shape = Shape.getValue().Located(TopLoc_Location());
     TopoShape s(shape);
 
     try {
@@ -155,12 +130,7 @@ App::DocumentObject *Feature::getSubObject(const char *element,
         if(sub.IsNull()) return nullptr;
         if(pyObj) {
             TopoShape ts(sub);
-            if(pmat) {
-                if(gtrsf) // WARNING: non-uniform scaling is dangerous and slowwww
-                    ts.transformGeometry(*pmat);
-                else
-                    ts.transformShape(*pmat,false);
-            }
+            if(pmat) ts.transformShape(*pmat,false,true);
             *pyObj =  Py::new_reference_to(shape2pyshape(ts.getShape()));
         }
         return const_cast<Feature*>(this);

@@ -845,7 +845,7 @@ Gui::ViewProvider *Application::getLinkedViewOfType(const App::DocumentObject *o
     auto vp = getViewProvider(obj);
     if(!vp || !vp->isDerivedFrom(ViewProviderDocumentObject::getClassTypeId()))
         return nullptr;
-    auto vpd = static_cast<ViewProviderDocumentObject*>(vp)->getLinkedView();
+    auto vpd = static_cast<ViewProviderDocumentObject*>(vp)->getLinkedView(true);
     if(vpd && vpd->isDerivedFrom(type))
         return vpd;
     return nullptr;
@@ -1488,9 +1488,9 @@ void Application::initTypes(void)
     Gui::ViewProviderOrigin                     ::init();
     Gui::ViewProviderMaterialObject             ::init();
     Gui::ViewProviderMaterialObjectPython       ::init();
+    Gui::ViewProviderLinkObserver               ::init();
+    Gui::LinkHandle                             ::init();
     Gui::ViewProviderLink                       ::init();
-    Gui::ViewProviderLinkPython                 ::init();
-    Gui::ViewProviderLink::Observer             ::init();
 
     // Workbench
     Gui::Workbench                              ::init();

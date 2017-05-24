@@ -1775,23 +1775,92 @@ void CmdPartLink::activated(int iMsg)
 {
     Q_UNUSED(iMsg);
     // get the selected object
-    const auto &result = getSelection().getSelection();
-    std::string link = getUniqueObjectName("PartLink");
+    const auto &result = getSelection().getCompleteSelection();
+    std::set<App::DocumentObject *> sels;
+    for(const auto &sel : result) {
+        if(sel.pObject && sel.pObject->getNameInDocument())
+            sels.insert(sel.pObject);
+    }
 
-    openCommand("Make Link");
-    doCommand(Doc,"App.ActiveDocument.addObject(\"Part::Link\",\"%s\")",link.c_str());
-    if(result.size() && result.front().FeatName && result.front().DocName)
-        doCommand(Doc,"App.ActiveDocument.%s.LinkedObject = App.getDocument('%s').getObject('%s')" ,link.c_str(), 
-                result.front().DocName, result.front().FeatName);
+    openCommand("Make Part Link");
+    if(sels.empty()) {
+        std::string link = getUniqueObjectName("PartLink");
+        doCommand(Doc,"App.ActiveDocument.addObject('PartL::Link','%s')",link.c_str());
+    }else{
+        for(auto obj : sels) {
+            std::string link = getUniqueObjectName("PartLink");
+            doCommand(Doc,"App.ActiveDocument.addObject('Part::Link','%s')",link.c_str());
+            doCommand(Doc,"App.ActiveDocument.%s.LinkedObject = App.getDocument('%s').getObject('%s')",
+                link.c_str(), obj->getDocument()->getName(), obj->getNameInDocument());
+        }
+    }
     commitCommand();
     updateActive();
 }
 
 bool CmdPartLink::isActive(void)
 {
-    return !!App::GetApplication().getActiveDocument();
+    return hasActiveDocument();
 }
 
+//===========================================================================
+// Part_LinkSub
+//===========================================================================
+
+DEF_STD_CMD_A(CmdPartLinkSub);
+
+CmdPartLinkSub::CmdPartLinkSub()
+  : Command("Part_LinkSub")
+{
+    sAppModule    = "Part";
+    sGroup        = QT_TR_NOOP("Part");
+    sMenuText     = QT_TR_NOOP("Create a link sub");
+    sToolTipText  = QT_TR_NOOP("Create a link to sub objects/elements of an object");
+    sWhatsThis    = sToolTipText;
+    sStatusTip    = sToolTipText;
+    sPixmap       = "Tree_Part_LinkSub";
+}
+
+void CmdPartLinkSub::activated(int iMsg)
+{
+    Q_UNUSED(iMsg);
+    // get the selected object
+    const auto &result = getSelection().getSelection();
+
+    openCommand("Make LinkSub");
+    if(result.empty()) {
+        std::string link = getUniqueObjectName("PartLinkSub");
+        doCommand(Doc,"App.ActiveDocument.addObject('Part::LinkSub','%s')",link.c_str());
+    } else {
+        std::map<App::DocumentObject *, std::vector<std::string> > sels;
+        for(const auto &sel : result) {
+            if(sel.SubName && sel.pObject && sel.pObject->getNameInDocument()) 
+                sels[sel.pObject].push_back(sel.SubName);
+        }
+        if(sels.empty())
+            QMessageBox::warning(Gui::getMainWindow(), QObject::tr("Cannot create link sub"),
+                    QObject::tr("No subelement selected"));
+        else{
+            for(const auto &v : sels) {
+                std::string link = getUniqueObjectName("PartLinkSub");
+                doCommand(Doc,"App.ActiveDocument.addObject('Part::LinkSub','%s')",link.c_str());
+                std::stringstream str;
+                str << "App.ActiveDocument." << link << ".LinkedSubs = (App.ActiveDocument." << v.first->getNameInDocument() <<", (";
+                for(const auto &sub : v.second)
+                    str << '"' << sub << '"' << (&sub==&v.second.back()?')':',');
+                str << ')';
+                doCommand(Doc,str.str().c_str());
+            }
+        }
+    }
+    commitCommand();
+    updateActive();
+}
+
+bool CmdPartLinkSub::isActive(void)
+{
+    return hasActiveDocument();
+}
 //===========================================================================
 // Part_ShapeInfo
 //===========================================================================
@@ -2306,4 +2375,5 @@ void CreatePartCommands(void)
     rcCmdMgr.addCommand(new CmdMeasureToggle3d());
     rcCmdMgr.addCommand(new CmdMeasureToggleDelta());
     rcCmdMgr.addCommand(new CmdPartLink());
+    rcCmdMgr.addCommand(new CmdPartLinkSub());
 } 

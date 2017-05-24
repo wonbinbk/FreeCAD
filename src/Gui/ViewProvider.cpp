@@ -419,9 +419,7 @@ void ViewProvider::onChanged(const App::Property* prop)
 {
     Application::Instance->signalChangedObject(*this, *prop);
 
-    auto vector = getExtensionsDerivedFromType<Gui::ViewProviderExtension>();
-    for(Gui::ViewProviderExtension* ext : vector)
-        ext->extensionOnChanged(prop);
+    App::TransactionalObject::onChanged(prop);
 }
 
 std::string ViewProvider::toString() const
