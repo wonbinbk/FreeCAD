@@ -263,7 +263,14 @@ public:
     // check if having the same viewObject
     bool isCloneOf(const QTreeWidgetItem *) const;
 
-    const char *getFullName(std::string &subname) const;
+    // return the owner, and full quanlified subname
+    const DocumentObjectItem *getFullSubName(std::string &subname) const;
+
+    // return the top most linked group owner's name, and subname.  This method
+    // is necssary despite have getFullSubName above is because native geo group
+    // cannot handle selection with sub name. So only a linked group can have
+    // subname in selection
+    const char *getSubName(std::string &subname) const;
 
     bool isLink() const;
     bool isLinkFinal() const;

@@ -133,7 +133,7 @@ public:
     /// return the coin node detail and path to the node of the subelement
     ///
     /// If \c append is true, you shall first append your root node and the
-    /// mode switch node to pPath.  / If you have linked view provider, then
+    /// mode switch node to pPath. If you have linked view provider, then
     /// regardless of \c append, you shall append all intermediate nodes starting
     /// just after your mode switch node up till the mode switch of your picked
     /// linked view provider.
@@ -187,22 +187,25 @@ public:
     virtual bool canDragObjects() const;
     /** Check whether the object can be removed from the view provider by drag and drop */
     virtual bool canDragObject(App::DocumentObject*) const;
-    /** Tell the tree view if this object should apear there */
-    virtual bool showInTree() const
-    {
-      return true;
-    }
-    /** Tell the tree view to remove children items from the tree root*/
-    virtual bool canRemoveChildrenFromRoot() const {return true;}
     /** Remove a child from the view provider by drag and drop */
     virtual void dragObject(App::DocumentObject*);
-    /** Check whether objects can be added to the view provider by drag and drop */
+    /** Check whether objects can be added to the view provider by drag and drop or drop only */
     virtual bool canDropObjects() const;
-    /** Check whether the object can be dropped to the view provider by drag and drop */
+    /** Check whether the object can be dropped to the view provider by drag and drop or drop only*/
     virtual bool canDropObject(App::DocumentObject*) const;
+    /** Return false to force drop only operation for a give object*/
+    virtual bool canDragAndDropObject(App::DocumentObject*) const {return true;}
     /** Add an object to the view provider by drag and drop */
     virtual void dropObject(App::DocumentObject*);
+    /** Add an object with full quanlified name to the view provider by drag and drop */
+    virtual void dropObjectEx(App::DocumentObject *obj, App::DocumentObject * /*owner*/, const char * /*subname*/)
+        {dropObject(obj);}
     //@}
+
+    /** Tell the tree view if this object should apear there */
+    virtual bool showInTree() const { return true; }
+    /** Tell the tree view to remove children items from the tree root*/
+    virtual bool canRemoveChildrenFromRoot() const {return true;}
 
     /** @name Signals of the view provider */
     //@{

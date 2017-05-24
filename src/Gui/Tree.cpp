@@ -733,20 +733,26 @@ void TreeWidget::dropEvent(QDropEvent *event)
         Gui::Document* gui = vp->getDocument();
         gui->openCommand("Drag object");
         for (QList<QTreeWidgetItem*>::Iterator it = items.begin(); it != items.end(); ++it) {
-            Gui::ViewProviderDocumentObject* vpc = static_cast<DocumentObjectItem*>(*it)->object();
+            auto item = static_cast<DocumentObjectItem*>(*it);
+            Gui::ViewProviderDocumentObject* vpc = item->object();
             App::DocumentObject* obj = vpc->getObject();
 
-            if(!dropOnly) {
+            std::string subname;
+            auto owner = item->getFullSubName(subname);
+
+            if(!dropOnly && vp->canDragAndDropObject(obj)) {
                 // does this have a parent object
                 QTreeWidgetItem* parent = (*it)->parent();
                 if (parent && parent->type() == TreeWidget::ObjectType) {
                     Gui::ViewProvider* vpp = static_cast<DocumentObjectItem *>(parent)->object();
                     vpp->dragObject(obj);
+                    owner = 0;
+                    subname.clear();
                 }
             }
 
             // now add the object to the target object
-            vp->dropObject(obj);
+            vp->dropObjectEx(obj,owner?owner->object()->getObject():0,subname.c_str());
         }
         gui->commitCommand();
         onTestStatus();
@@ -1222,7 +1228,7 @@ bool DocumentItem::createNewItem(const Gui::ViewProviderDocumentObject& obj,
             QTreeWidgetItem *parent, int index, DocumentObjectDataPtr data)
 {
     const char *name;
-    if (!(name=obj.getObject()->getNameInDocument())) 
+    if (!obj.getObject() || !(name=obj.getObject()->getNameInDocument())) 
         return false;
 
     if(!data) {
@@ -1676,7 +1682,7 @@ void DocumentItem::updateItemSelection(DocumentObjectItem *item) {
 
     std::string sub;
     const char *docname = pDocument->getDocument()->getName();
-    const char *objname = item->getFullName(sub);
+    const char *objname = item->getSubName(sub);
     const char *subname = sub.empty()?0:sub.c_str();
 
     if(subname) {
@@ -2224,14 +2230,15 @@ DocumentObjectItem *DocumentObjectItem::getParentItem() const{
     return static_cast<DocumentObjectItem*>(parent());
 }
 
-const char *DocumentObjectItem::getFullName(std::string &subname) const {
+const char *DocumentObjectItem::getSubName(std::string &subname) const 
+{
     const char *name = object()->getObject()->getNameInDocument();
 
-    if(!isParentGroup())
+    if(!isParentGroup()) 
         return name;
 
     const char *objname;
-    objname  = getParentItem()->getFullName(subname);
+    objname  = getParentItem()->getSubName(subname);
 
     if(subname.length()) {
         subname += '.';
@@ -2243,6 +2250,25 @@ const char *DocumentObjectItem::getFullName(std::string &subname) const {
         
     return objname;
 }
+
+const DocumentObjectItem *DocumentObjectItem::getFullSubName(std::string &subname) const {
+
+    const char *name = object()->getObject()->getNameInDocument();
+
+    if(!isParentGroup())
+        return this;
+
+    auto ret = getParentItem()->getFullSubName(subname);
+
+    if(subname.length()) {
+        subname += '.';
+        subname += name;
+    }else
+        subname += name;
+        
+    return ret;
+}
+
 
 #include "moc_Tree.cpp"
 
