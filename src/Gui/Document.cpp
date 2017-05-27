@@ -92,6 +92,9 @@ struct DocumentP
     std::map<SoSeparator *,ViewProviderDocumentObject*> _CoinMap;
     std::map<std::string,ViewProvider*> _ViewProviderMapAnnotation;
 
+    // for mapping nodes from claimChildren3D to the top level parent root node.
+    std::map<ViewProvider *, ViewProvider *> _CliamChildren3DMap;
+
     typedef boost::signals::connection Connection;
     Connection connectNewObject;
     Connection connectDelObject;
@@ -559,6 +562,10 @@ void Document::slotTransactionRemove(const App::DocumentObject& obj, App::Transa
         auto itC = d->_CoinMap.find(viewProvider->getRoot());
         if(itC != d->_CoinMap.end())
             d->_CoinMap.erase(itC);
+
+        auto itP = d->_CliamChildren3DMap.find(viewProvider);
+        if(itP != d->_CliamChildren3DMap.end())
+            d->_CliamChildren3DMap.erase(itP);
 
         d->_ViewProviderMap.erase(&obj);
         // transaction being a nullptr indicates that undo/redo is off and the object
@@ -1479,6 +1486,7 @@ void Document::handleChildren3D(ViewProvider* viewProvider)
 {
     // check for children
     if (viewProvider && viewProvider->getChildRoot()) {
+
         std::vector<App::DocumentObject*> children = viewProvider->claimChildren3D();
         SoGroup* childGroup =  viewProvider->getChildRoot();
 
@@ -1501,6 +1509,7 @@ void Document::handleChildren3D(ViewProvider* viewProvider)
                     if(itOld!=oldChildren.end()) oldChildren.erase(itOld);
 
                     SoSeparator* childRootNode =  ChildViewProvider->getRoot();
+                    d->_CliamChildren3DMap[ChildViewProvider] = viewProvider;
                     childGroup->addChild(childRootNode);
 
                     // cycling to all views of the document to remove the viewprovider from the viewer itself
@@ -1522,8 +1531,17 @@ void Document::handleChildren3D(ViewProvider* viewProvider)
             // add the remaining old children back to toplevel invertor node
             for(auto vpd : oldChildren) {
                 auto obj = vpd->getObject();
-                if(!obj || !obj->getNameInDocument() || App::GeoFeatureGroupExtension::getGroupOfObject(obj,false))
+                if(!obj || !obj->getNameInDocument())
                     continue;
+
+                auto it = d->_CliamChildren3DMap.find(vpd);
+                if(it!=d->_CliamChildren3DMap.end()) {
+                    if(it->second == viewProvider)
+                        d->_CliamChildren3DMap.erase(it);
+                    else
+                        continue;
+                }
+
                 for (BaseView* view : d->baseViews) {
                     View3DInventor *activeView = dynamic_cast<View3DInventor *>(view);
                     if (activeView && !activeView->getViewer()->hasViewProvider(vpd))
@@ -1548,5 +1566,24 @@ void Document::handleChildren3D(ViewProvider* viewProvider)
                 }
             }
         }
+    }
+}
+
+void Document::reorderViewProviders(ViewProvider *vp1, ViewProvider *vp2) {
+    while(1) {
+        auto it = d->_CliamChildren3DMap.find(vp1);
+        if(it == d->_CliamChildren3DMap.end())
+            break;
+        vp1 = it->second;
+    }
+    while(1) {
+        auto it = d->_CliamChildren3DMap.find(vp2);
+        if(it == d->_CliamChildren3DMap.end())
+            break;
+        vp2 = it->second;
+    }
+    for(auto view : getMDIViewsOfType(View3DInventor::getClassTypeId())) {
+        auto viewer = static_cast<View3DInventor*>(view)->getViewer();
+        viewer->reorderViewProviders(vp1,vp2);
     }
 }
