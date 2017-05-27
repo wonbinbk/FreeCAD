@@ -379,12 +379,15 @@ vector<App::DocumentObject*> SelectionSingleton::getObjectsOfType(const Base::Ty
     if (!pcDoc)
         return temp;
 
+    std::set<App::DocumentObject*> objs;
     for (std::list<_SelObj>::const_iterator It = _SelList.begin();It != _SelList.end();++It) {
         App::DocumentObject *pObject;
         if (It->pDoc == pcDoc && (pObject=getObject(*It,resolve)) && 
            pObject->getTypeId().isDerivedFrom(typeId)) 
         {
-            temp.push_back(pObject);
+            auto ret = objs.insert(pObject);
+            if(ret.second)
+                temp.push_back(pObject);
         }
     }
 
