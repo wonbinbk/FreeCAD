@@ -332,8 +332,10 @@ void SoFCUnifiedSelection::doAction(SoAction *action)
             App::DocumentObject* obj = doc->getObject(selaction->SelChange.pObjectName);
             ViewProvider*vp = Application::Instance->getViewProvider(obj);
             if (vp && vp->useNewSelectionModel() && vp->isSelectable()) {
+                SoDetail *detail = nullptr;
                 detailPath->truncate(0);
-                SoDetail* detail = vp->getDetailPath(selaction->SelChange.pSubName,detailPath,true);
+                if(selaction->SelChange.pSubName && selaction->SelChange.pSubName[0])
+                    detail = vp->getDetailPath(selaction->SelChange.pSubName,detailPath,true);
                 SoSelectionElementAction::Type type = SoSelectionElementAction::None;
                 if (selaction->SelChange.Type == SelectionChanges::AddSelection) {
                     if (detail)
