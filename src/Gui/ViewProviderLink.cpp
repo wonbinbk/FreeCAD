@@ -84,7 +84,7 @@ public:
 
     typedef LinkInfoPtr Pointer;
 
-    std::array<SoFCSelectionRoot*,LinkHandle::SnapshotMax> pcSnapshots;
+    std::array<SoSeparator*,LinkHandle::SnapshotMax> pcSnapshots;
     std::array<SoSwitch*,LinkHandle::SnapshotMax> pcSwitches;
     SoSwitch *pcLinkedSwitch;
 
@@ -221,7 +221,7 @@ public:
         for(auto &node : pcSnapshots) {
             if(node) {
                 node->removeAllChildren();
-                node->resetContext();
+                // node->resetContext();
                 node->unref();
                 node = 0;
             }
@@ -299,7 +299,7 @@ public:
         if(pcSnapshot) {
             if(!update) return pcSnapshot;
         }else{
-            pcSnapshot = new SoFCSelectionRoot;
+            pcSnapshot = new SoSeparator;
             pcSnapshot->ref();
             pcModeSwitch = new SoSwitch;
             pcModeSwitch->ref();
@@ -496,8 +496,9 @@ public:
     }
 
     void slotChangeIcon() {
-        if(!isLinked()) return;
         iconMap.clear();
+        if(!isLinked()) 
+            return;
         auto me = LinkInfoPtr(this);
         for(auto link : links) 
             link->onLinkedIconChange(me);
@@ -507,6 +508,9 @@ public:
         static int iconSize = -1;
         if(iconSize < 0) 
             iconSize = QApplication::style()->standardPixmap(QStyle::SP_DirClosedIcon).width();
+
+        if(!isLinked())
+            return QIcon();
 
         if(px.isNull()) 
             return pcLinked->getIcon();
@@ -630,12 +634,16 @@ void LinkHandle::setMaterial(const App::Material *material) {
 void LinkHandle::setLink(App::DocumentObject *obj, bool reorder,
         const std::vector<std::string> &subs) 
 {
-    if(!isLinked() || linkInfo->pcLinked->getObject()!=obj) {
+    bool prevLinked = isLinked();
+    if(!prevLinked || linkInfo->pcLinked->getObject()!=obj) {
         unlink(LinkInfoPtr());
-        onLinkedIconChange(LinkInfoPtr());
 
         linkInfo = LinkInfo::get(obj,this);
-        if(!linkInfo) return;
+        if(!linkInfo) {
+            if(prevLinked) 
+                onLinkedIconChange(linkInfo);
+            return;
+        }
 
         linkInfo->links.insert(this);
         if(getVisibility())
@@ -643,6 +651,7 @@ void LinkHandle::setLink(App::DocumentObject *obj, bool reorder,
 
         if(reorder && owner)
             owner->getDocument()->reorderViewProviders(owner,linkInfo->pcLinked);
+        onLinkedIconChange(linkInfo);
     }
     for(const auto &sub : subs) 
         subInfo.insert(std::make_pair(sub,SubInfo(*this)));
@@ -716,7 +725,8 @@ void LinkHandle::setNodeType(SnapshotType type) {
 }
 
 void LinkHandle::onLinkedIconChange(LinkInfoPtr link) {
-    if(owner && link==linkInfo) owner->signalChangeIcon();
+    if(owner && link==linkInfo) 
+        owner->signalChangeIcon();
 }
 
 LinkHandle::SubInfo::SubInfo(LinkHandle &handle)
@@ -999,7 +1009,8 @@ ViewProviderDocumentObject *LinkHandle::linkGetElementView(
 }
 
 QIcon LinkHandle::getLinkedIcon(QPixmap px) const {
-    if(!isLinked()) return QIcon();
+    if(!isLinked()) 
+        return QIcon();
     return linkInfo->getIcon(px);
 }
 
