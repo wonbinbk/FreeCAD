@@ -235,6 +235,9 @@ void TreeWidget::contextMenuEvent (QContextMenuEvent * e)
         }
         if (!contextMenu.actions().isEmpty())
             contextMenu.addSeparator();
+        App::Document* doc = objitem->object()->getObject()->getDocument();
+        showHiddenAction->setChecked(doc->ShowHidden.getValue());
+        contextMenu.addAction(this->showHiddenAction);
         hideInTreeAction->setChecked(!objitem->object()->showInTree());
         contextMenu.addAction(this->hideInTreeAction);
         contextMenu.addAction(this->markRecomputeAction);
@@ -995,10 +998,15 @@ void TreeWidget::onSyncSelection() {
 }
 
 void TreeWidget::onShowHidden() {
-    if (this->contextItem && this->contextItem->type() == DocumentType) {
-        DocumentItem *docItem = static_cast<DocumentItem*>(contextItem);
+    if (!this->contextItem) return;
+    DocumentItem *docItem = nullptr;
+    if(this->contextItem->type() == DocumentType)
+        docItem = static_cast<DocumentItem*>(contextItem);
+    else if(this->contextItem->type() == ObjectType)
+        docItem = getDocumentItem(
+            static_cast<DocumentObjectItem*>(contextItem)->object()->getDocument());
+    if(docItem)
         docItem->setShowHidden(showHiddenAction->isChecked());
-    }
 }
 
 void TreeWidget::onHideInTree() {
