@@ -787,44 +787,53 @@ StdCmdToggleVisibility::StdCmdToggleVisibility()
 void StdCmdToggleVisibility::activated(int iMsg)
 {
     Q_UNUSED(iMsg); 
-    // go through all documents
-    const std::vector<App::Document*> docs = App::GetApplication().getDocuments();
-    for (std::vector<App::Document*>::const_iterator it = docs.begin(); it != docs.end(); ++it) {
-        Document *pcDoc = Application::Instance->getDocument(*it);
-        std::vector<App::DocumentObject*> sel = Selection().getObjectsOfType
-            (App::DocumentObject::getClassTypeId(), (*it)->getName());
+    std::set<ViewProvider*> filter;
+    std::set<ViewProvider*> pendings;
+    for(auto &sel : Selection().getCompleteSelection()) {
+        if(!sel.DocName || !sel.FeatName) continue;
+        const char *sub = 0;
+        auto obj = Selection().resolveObject(sel.pObject,sel.SubName,&sub);
+        if(!obj || !obj->getNameInDocument())
+            continue;
+        auto vp = Application::Instance->getViewProvider(obj);
+        if(!vp) continue;
 
-        // in case a group object and an object of the group is selected then ignore the group object
-        std::vector<App::DocumentObject*> ignore;
-        for (std::vector<App::DocumentObject*>::iterator ft=sel.begin();ft!=sel.end();++ft) {
-            if ((*ft)->getTypeId().isDerivedFrom(App::DocumentObjectGroup::getClassTypeId())) {
-                App::DocumentObjectGroup* grp = static_cast<App::DocumentObjectGroup*>(*ft);
-                std::vector<App::DocumentObject*> sub = grp->Group.getValues();
-                for (std::vector<App::DocumentObject*>::iterator st = sub.begin(); st != sub.end(); ++st) {
-                    if (std::find(sel.begin(), sel.end(), *st) != sel.end()) {
-                        ignore.push_back(*ft);
-                        break;
-                    }
+        if(sub && sub[0]) {
+            bool visible = vp->isElementVisible(sub);
+            // perform a test with unchanged visiblity
+            int ret = vp->setElementVisible(sub,visible);
+            if(ret>=0) {
+                if(ret == 0)
+                    Base::Console().Warning("Failed to set visibility of SubName %s in %s.%s\n",
+                            sel.SubName,sel.DocName,sel.FeatName);
+                else {
+                    doCommand(Gui,"Gui.getDocument('%s').getObject('%s').setElementVisible('%s',%s)",
+                            obj->getDocument()->getName(), obj->getNameInDocument(),
+                            sub,visible?"False":"True");
                 }
+
+                // filter out later whole object visibility setting
+                filter.insert(vp);
+                auto it = pendings.find(vp);
+                if(it!=pendings.end())
+                    pendings.erase(it);
+                continue;
             }
         }
-
-        if (!ignore.empty()) {
-            std::sort(sel.begin(), sel.end());
-            std::sort(ignore.begin(), ignore.end());
-            std::vector<App::DocumentObject*> diff;
-            std::back_insert_iterator<std::vector<App::DocumentObject*> > biit(diff);
-            std::set_difference(sel.begin(), sel.end(), ignore.begin(), ignore.end(), biit);
-            sel = diff;
+        if(filter.find(vp)==filter.end()) {
+            // if element visibility is not supported, pend it for later whole
+            // object visibility fallback
+            pendings.insert(vp);
         }
+    }
 
-        for (std::vector<App::DocumentObject*>::const_iterator ft=sel.begin();ft!=sel.end();++ft) {
-            if (pcDoc && pcDoc->isShow((*ft)->getNameInDocument()))
-                doCommand(Gui,"Gui.getDocument(\"%s\").getObject(\"%s\").Visibility=False"
-                             , (*it)->getName(), (*ft)->getNameInDocument());
-            else
-                doCommand(Gui,"Gui.getDocument(\"%s\").getObject(\"%s\").Visibility=True"
-                             , (*it)->getName(), (*ft)->getNameInDocument());
+    for(auto vp : pendings) {
+        if(vp->isDerivedFrom(ViewProviderDocumentObject::getClassTypeId())) {
+            auto vpd = static_cast<ViewProviderDocumentObject*>(vp);
+            doCommand(Gui,"Gui.getDocument('%s').getObject('%s').Visibility=%s",
+                    vpd->getDocument()->getDocument()->getName(), 
+                    vpd->getObject()->getNameInDocument(),
+                    vpd->isShow()?"False":"True");
         }
     }
 }

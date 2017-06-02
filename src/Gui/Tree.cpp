@@ -1981,12 +1981,20 @@ void DocumentObjectItem::testStatus(bool resetStatus) {
 void DocumentObjectItem::testStatus(bool resetStatus,QIcon &icon)
 {
     App::DocumentObject* pObject = object()->getObject();
+
+    bool visible;
+    auto parentItem = getParentItem();
+    if(parentItem && parentItem->object()->hasChildElement())
+        visible = parentItem->object()->isElementVisible(pObject->getNameInDocument());
+    else
+        visible = object()->isShow();
+
     int currentStatus =
         ((object()->getDocument()==myData->docItem.document()?0:1)<<4) |
         ((object()->showInTree() ? 0 : 1) << 3) |
         ((pObject->isError()          ? 1 : 0) << 2) |
         ((pObject->mustExecute() == 1 ? 1 : 0) << 1) |
-        (object()->isShow()         ? 1 : 0);
+        (visible         ? 1 : 0);
 
     if (!resetStatus && previousStatus==currentStatus)
         return;
@@ -2224,7 +2232,8 @@ bool DocumentObjectItem::isParentLink() const {
 }
 
 bool DocumentObjectItem::isGroup() const {
-    return object()->getLinkedView(true)->getChildRoot()!=0;
+    return object()->hasChildElement() || 
+        object()->getLinkedView(true)->getChildRoot();
 }
 
 bool DocumentObjectItem::isParentGroup() const {

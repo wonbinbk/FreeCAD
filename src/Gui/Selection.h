@@ -304,9 +304,18 @@ public:
     template<typename T> inline std::vector<T*> getObjectsOfType(
             const char* pDocName=0, bool resolve=true) const;
 
-    /// Resolve sub objects referenced in the '.' separated 'subname'
+    /** Resolve sub object referenced in the '.' separated 'subname'
+     *
+     * @param subname, dot separated sub-element name reference
+     * @param psubname, if not zero, return the remaining sub-element name
+     * @param lastElement, if false (default) return the last document object
+     * referenced in the \c subname.  \c psubname will hold non-object sub
+     * element name if there is one. If \c lastElement is true, then \c psubname 
+     * will hold the last element regardless if it is referecing an object, and
+     * the function will return the parent object of that element.
+     */
     static App::DocumentObject *resolveObject(App::DocumentObject *pObject, 
-            const char *subname, const char **psubname=0);
+            const char *subname, const char **psubname=0, bool lastElement=false);
 
     /// signal on new object
     boost::signal<void (const SelectionChanges& msg)> signalSelectionChanged;

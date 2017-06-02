@@ -328,9 +328,3 @@ void ViewProviderDocumentObject::getNodeNames(Gui::Document *doc, QMap<SoNode*, 
     }
 }
 
-
-ViewProviderDocumentObject *ViewProviderDocumentObject::getElementView(
-                                const char *, const char **) const
-{
-    return const_cast<ViewProviderDocumentObject*>(this);
-}

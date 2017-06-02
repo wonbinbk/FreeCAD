@@ -382,7 +382,7 @@ vector<App::DocumentObject*> SelectionSingleton::getObjectsOfType(const Base::Ty
     std::set<App::DocumentObject*> objs;
     for (std::list<_SelObj>::const_iterator It = _SelList.begin();It != _SelList.end();++It) {
         App::DocumentObject *pObject;
-        if (It->pDoc == pcDoc && (pObject=getObject(*It,resolve)) && 
+        if (It->pDoc == pcDoc && It->pObject && (pObject=getObject(*It,resolve)) && 
            pObject->getTypeId().isDerivedFrom(typeId)) 
         {
             auto ret = objs.insert(pObject);
@@ -527,7 +527,10 @@ unsigned int SelectionSingleton::countObjectsOfType(const Base::Type& typeId, co
         return 0;
 
     for (std::list<_SelObj>::const_iterator It = _SelList.begin();It != _SelList.end();++It) {
-        if (It->pDoc == pcDoc && It->pObject && getObject(*It,resolve)->getTypeId().isDerivedFrom(typeId)) {
+        App::DocumentObject *pObject;
+        if (It->pDoc == pcDoc && It->pObject && (pObject=getObject(*It,resolve)) && 
+           pObject->getTypeId().isDerivedFrom(typeId)) 
+        {
             iNbr++;
         }
     }
@@ -964,22 +967,21 @@ void SelectionSingleton::rmvSelection(const char* pDocName, const char* pObjectN
     }
 }
 
-App::DocumentObject *SelectionSingleton::resolveObject(
-        App::DocumentObject *pObject, const char *subname, const char **psubname)
+App::DocumentObject *SelectionSingleton::resolveObject(App::DocumentObject *pObject, 
+        const char *subname, const char **psubname, bool lastElement)
 {
     if(psubname) *psubname = subname;
     if(!pObject || !subname || *subname==0) 
         return pObject;
-    Document *pDoc = Application::Instance->getDocument(pObject->getDocument());
-    ViewProvider *vp;
-    if(!pDoc || !(vp=pDoc->getViewProvider(pObject)) || 
-       !vp->isDerivedFrom(ViewProviderDocumentObject::getClassTypeId()))
+    if(!lastElement)
+        return pObject->getSubObject(subname,psubname);
+    const char *dot = strrchr(subname,'.');
+    if(!dot)
         return pObject;
-    auto vpd = static_cast<ViewProviderDocumentObject*>(vp);
-    vpd = vpd->getElementView(subname,psubname);
-    if(vpd && vpd!=vp && vpd->getObject()) 
-        return vpd->getObject();
-    return pObject;
+    std::string sub(subname,dot-subname);
+    if(psubname)
+        *psubname = dot+1;
+    return pObject->getSubObject(sub.c_str(),0);
 }
 
 void SelectionSingleton::setSelection(const char* pDocName, const std::vector<App::DocumentObject*>& sel)

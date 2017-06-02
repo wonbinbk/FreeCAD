@@ -148,6 +148,28 @@ PyObject*  ViewProviderPy::isVisible(PyObject *args)
     } PY_CATCH;
 }
 
+PyObject*  ViewProviderPy::isElementVisible(PyObject *args)
+{
+    char *element = 0;
+    if (!PyArg_ParseTuple(args, "s", &element))
+        return NULL;
+    PY_TRY {
+        return Py_BuildValue("O", (getViewProviderPtr()->isElementVisible(element) ? Py_True : Py_False));
+    } PY_CATCH;
+}
+
+PyObject*  ViewProviderPy::setElementVisible(PyObject *args)
+{
+    char *element = 0;
+    PyObject *visible = Py_True;
+    if (!PyArg_ParseTuple(args, "s|O", &element,&visible))
+        return NULL;
+    PY_TRY {
+        return Py_BuildValue("h", getViewProviderPtr()->setElementVisible(element,PyObject_IsTrue(visible)));
+    } PY_CATCH;
+}
+
+
 PyObject* ViewProviderPy::addDisplayMode(PyObject * args)
 {
     char* mode;

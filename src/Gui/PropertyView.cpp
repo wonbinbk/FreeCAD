@@ -198,19 +198,18 @@ void PropertyView::onSelectionChanged(const SelectionChanges& msg)
     std::vector<PropInfo> propViewMap;
     bool checkLink = true;
     ViewProviderDocumentObject *vpLast = 0;
-    std::vector<SelectionSingleton::SelObj> array = Gui::Selection().getCompleteSelection();
-    for (std::vector<SelectionSingleton::SelObj>::const_iterator it = array.begin(); it != array.end(); ++it) {
+    const auto &array = Gui::Selection().getCompleteSelection();
+    for(auto &sel : array) {
         App::DocumentObject *ob=0;
         ViewProvider *vp=0;
 
         std::vector<App::Property*> dataList;
         std::map<std::string, App::Property*> viewList;
-        if ((*it).pObject) {
-            ob = (*it).pObject;
+        if (sel.pObject) {
+            ob = sel.pObject;
 
             // get also the properties of the associated view provider
-            Gui::Document* doc = Gui::Application::Instance->getDocument(it->pDoc);
-            vp = doc->getViewProvider((*it).pObject);
+            vp = Application::Instance->getViewProvider(sel.pObject);
             if(!vp) {
                 checkLink = false;
                 ob->getPropertyList(dataList);
@@ -218,15 +217,16 @@ void PropertyView::onSelectionChanged(const SelectionChanges& msg)
             }
 
             if(vp->isDerivedFrom(ViewProviderDocumentObject::getClassTypeId())) {
-                // try to resolve the potential object (of a linked group) inside subname reference
                 auto cvp = static_cast<ViewProviderDocumentObject*>(vp);
-                auto evp = cvp->getElementView(it->SubName);
-                if(evp) {
-                    App::DocumentObject *obj = evp->getObject();
-                    if(obj) {
-                        vp = evp;
-                        cvp = evp;
-                        ob = obj;
+
+                // try to resolve the potential object (of a linked group) inside subname reference
+                auto subObj = ob->getSubObject(sel.SubName);
+                if(subObj && subObj!=ob && subObj->getNameInDocument()) {
+                    ViewProvider *svp = Application::Instance->getViewProvider(subObj);
+                    if(svp->isDerivedFrom(ViewProviderDocumentObject::getClassTypeId())) {
+                        vp = svp;
+                        cvp = static_cast<ViewProviderDocumentObject*>(svp);
+                        ob = subObj;
                     }
                 }
 
@@ -252,19 +252,20 @@ void PropertyView::onSelectionChanged(const SelectionChanges& msg)
         std::vector<App::Property*>::iterator pt;
         if (ob) {
             for (pt = dataList.begin(); pt != dataList.end(); ++pt) {
+                if (ob->isHidden(*pt) || (*pt)->testStatus(App::Property::Hidden)) 
+                    continue;
+
                 PropInfo nameType;
                 nameType.propName = ob->getPropertyName(*pt);
                 nameType.propId = (*pt)->getTypeId().getKey();
 
-                if (!ob->isHidden(*pt)) {
-                    std::vector<PropInfo>::iterator pi = std::find_if(propDataMap.begin(), propDataMap.end(), PropFind(nameType));
-                    if (pi != propDataMap.end()) {
-                        pi->propList.push_back(*pt);
-                    }
-                    else {
-                        nameType.propList.push_back(*pt);
-                        propDataMap.push_back(nameType);
-                    }
+                std::vector<PropInfo>::iterator pi = std::find_if(propDataMap.begin(), propDataMap.end(), PropFind(nameType));
+                if (pi != propDataMap.end()) {
+                    pi->propList.push_back(*pt);
+                }
+                else {
+                    nameType.propList.push_back(*pt);
+                    propDataMap.push_back(nameType);
                 }
             }
         }
@@ -272,19 +273,20 @@ void PropertyView::onSelectionChanged(const SelectionChanges& msg)
         if (vp) {
             std::map<std::string, App::Property*>::iterator pt;
             for (pt = viewList.begin(); pt != viewList.end(); ++pt) {
+                if (vp->isHidden(pt->second) || pt->second->testStatus(App::Property::Hidden))
+                    continue;
+
                 PropInfo nameType;
                 nameType.propName = pt->first;
                 nameType.propId = pt->second->getTypeId().getKey();
 
-                if (!vp->isHidden(pt->second)) {
-                    std::vector<PropInfo>::iterator pi = std::find_if(propViewMap.begin(), propViewMap.end(), PropFind(nameType));
-                    if (pi != propViewMap.end()) {
-                        pi->propList.push_back(pt->second);
-                    }
-                    else {
-                        nameType.propList.push_back(pt->second);
-                        propViewMap.push_back(nameType);
-                    }
+                std::vector<PropInfo>::iterator pi = std::find_if(propViewMap.begin(), propViewMap.end(), PropFind(nameType));
+                if (pi != propViewMap.end()) {
+                    pi->propList.push_back(pt->second);
+                }
+                else {
+                    nameType.propList.push_back(pt->second);
+                    propViewMap.push_back(nameType);
                 }
             }
         }
