@@ -61,6 +61,17 @@ Py::Object ViewProviderDocumentObjectPy::getObject(void) const
     return Py::Object(obj->getPyObject(), true); // do not inc'ref twice
 }
 
+PyObject* ViewProviderDocumentObjectPy::getLinkedView(PyObject *args)
+{
+    PyObject *recursive = Py_True;
+    if (!PyArg_ParseTuple(args, "|O", &recursive))
+        return NULL;
+    PY_TRY {
+        auto vpd = getViewProviderDocumentObjectPtr()->getLinkedView(PyObject_IsTrue(recursive));
+        return vpd->getPyObject();
+    }PY_CATCH
+}
+
 PyObject *ViewProviderDocumentObjectPy::getCustomAttributes(const char* /*attr*/) const
 {
     return 0;
