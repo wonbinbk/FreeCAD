@@ -29,7 +29,21 @@
 #include "ViewProviderDocumentObject.h"
 #include "ViewProviderExtension.h"
 
+class SoBase;
+
 namespace Gui {
+
+// Convenience smart pointer to wrap coin node. It is basically
+// boost::intrusive plus implicit pointer conversion to save the trouble of
+// typing get() all the time.
+template<class T>
+class CoinPtr: public boost::intrusive_ptr<T> {
+public:
+    using boost::intrusive_ptr<T>::intrusive_ptr;
+    operator T *() const {
+        return this->get();
+    }
+};
 
 class SoFCSelectionRoot;
 
@@ -55,13 +69,14 @@ public:
 class GuiExport LinkHandle : public Base::BaseClass {
     TYPESYSTEM_HEADER();
 public:
+
     LinkHandle();
     ~LinkHandle();
 
     void unlink(LinkInfoPtr link);
     bool isLinked() const;
 
-    SoSeparator *getLinkRoot() const {return pcLinkRoot;}
+    SoFCSelectionRoot *getLinkRoot() const {return pcLinkRoot;}
 
     QIcon getLinkedIcon(QPixmap overlay) const;
 
@@ -100,7 +115,6 @@ public:
     bool getVisibility() const {return visible;}
 
     ViewProviderDocumentObject *linkGetLinkedView(bool recursive, int depth=0) const;
-    ViewProviderDocumentObject *linkGetElementView(const char *, const char **) const;
     bool linkGetDetailPath(const char *, SoFullPath *, SoDetail *&) const;
     bool linkGetElementPicked(const SoPickedPoint *, std::string &) const;
 
@@ -111,14 +125,15 @@ public:
 
 protected:
     ViewProviderDocumentObject *owner;
-    SoSeparator *pcLinkRoot;
-    SoMaterial  *pcMaterial;
+    CoinPtr<SoFCSelectionRoot> pcLinkRoot;
+    CoinPtr<SoSeparator> pcLinkedRoot;
+    CoinPtr<SoMaterial> pcMaterial;
     SnapshotType nodeType;
     LinkInfoPtr linkInfo;
     struct SubInfo {
         LinkHandle &handle;
-        SoSeparator *pcNode;
-        SoTransform *pcTransform;
+        CoinPtr<SoSeparator> pcNode;
+        CoinPtr<SoTransform> pcTransform;
         LinkInfoPtr link;
         std::set<std::string> elements;
 
@@ -128,6 +143,16 @@ protected:
         bool isLinked() const;
     };
     std::map<std::string, SubInfo> subInfo;
+
+    struct Element {
+        CoinPtr<SoSwitch> pcSwitch;
+        CoinPtr<SoFCSelectionRoot> pcRoot;
+        CoinPtr<SoMaterial> pcMaterial;
+        CoinPtr<SoTransform> pcTransform;
+    };
+    std::vector<Element> nodeArray;
+    std::map<SoNode*,int> nodeMap;
+
     bool visible;
 };
     
@@ -164,8 +189,6 @@ public:
 
     ViewProviderDocumentObject *getLinkedView(bool recursive, int depth=0) const override;
 
-    ViewProviderDocumentObject *getElementView(const char *, const char **) const override;
-
     QIcon getIcon(void) const override;
 
     bool canDragObjects() const override;
@@ -175,17 +198,6 @@ public:
     bool canDropObject(App::DocumentObject*) const override;
     bool canDragAndDropObject(App::DocumentObject*) const override;
     void dropObjectEx(App::DocumentObject*, App::DocumentObject*, const char *) override;
-
-    enum LinkConfig {
-        HandleAll = -1,
-        HandleDragDrop = 0,
-        HandlePick = 1,
-        HandleLinkedView = 2,
-        HandleElementView = 3,
-        HandleClaimChildren = 4,
-    };
-    void setConfig(LinkConfig bit, bool on);
-    bool testConfig(LinkConfig bit) {return config.test((size_t)bit);}
 
     enum PropIndex {
         PropPlacement,
@@ -203,7 +215,6 @@ private:
     int propIndexFromName(const char *name) const;
 protected:
     LinkHandle handle;
-    std::bitset<32> config;
     bool linkTransform;
     bool xlink;
     bool sublink;

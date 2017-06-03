@@ -71,6 +71,7 @@ void appendPath(SoPath *path, SoNode *node) {
 #define appendPath(_path, _node) _path->append(_node)
 #endif
 
+////////////////////////////////////////////////////////////////////////////
 class Gui::LinkInfo {
 
 public:
@@ -84,12 +85,12 @@ public:
 
     typedef LinkInfoPtr Pointer;
 
-    std::array<SoSeparator*,LinkHandle::SnapshotMax> pcSnapshots;
-    std::array<SoSwitch*,LinkHandle::SnapshotMax> pcSwitches;
-    SoSwitch *pcLinkedSwitch;
+    std::array<CoinPtr<SoSeparator>,LinkHandle::SnapshotMax> pcSnapshots;
+    std::array<CoinPtr<SoSwitch>,LinkHandle::SnapshotMax> pcSwitches;
+    CoinPtr<SoSwitch> pcLinkedSwitch;
 
     // for group type view providers
-    SoGroup *pcChildGroup;
+    CoinPtr<SoGroup> pcChildGroup;
     typedef std::map<SoNode *, Pointer> NodeMap;
     NodeMap nodeMap;
 
@@ -155,13 +156,11 @@ public:
     }
 
     LinkInfo(ViewProviderDocumentObject *vp)
-        :ref(0),vref(0),pcLinked(vp),pcLinkedSwitch(0),pcChildGroup(0) 
+        :ref(0),vref(0),pcLinked(vp) 
     {
         FC_TRACE("new link to " << pcLinked->getObject()->getNameInDocument());
         connChangeIcon = vp->signalChangeIcon.connect(
                 boost::bind(&LinkInfo::slotChangeIcon,this));
-        pcSnapshots.fill(0);
-        pcSwitches.fill(0);
     }
 
     ~LinkInfo() {
@@ -221,26 +220,19 @@ public:
         for(auto &node : pcSnapshots) {
             if(node) {
                 node->removeAllChildren();
-                // node->resetContext();
-                node->unref();
-                node = 0;
+                node.reset();
             }
         }
         for(auto &node : pcSwitches) {
             if(node) {
                 node->removeAllChildren();
-                node->unref();
-                node = 0;
+                node.reset();
             }
         }
-        if(pcLinkedSwitch) {
-            pcLinkedSwitch->unref();
-            pcLinkedSwitch = 0;
-        }
+        pcLinkedSwitch.reset();
         if(pcChildGroup) {
             pcChildGroup->removeAllChildren();
-            pcChildGroup->unref();
-            pcChildGroup = 0;
+            pcChildGroup.reset();
         }
     }
 
@@ -300,15 +292,11 @@ public:
             if(!update) return pcSnapshot;
         }else{
             pcSnapshot = new SoSeparator;
-            pcSnapshot->ref();
             pcModeSwitch = new SoSwitch;
-            pcModeSwitch->ref();
         }
 
-        if(pcLinkedSwitch) {
-            pcLinkedSwitch->unref();
-            pcLinkedSwitch = 0;
-        }
+        pcLinkedSwitch.reset();
+
         pcSnapshot->removeAllChildren();
         pcModeSwitch->whichChild = -1;
         pcModeSwitch->removeAllChildren();
@@ -330,7 +318,6 @@ public:
                 continue;
             }
             pcLinkedSwitch = static_cast<SoSwitch*>(node);
-            pcLinkedSwitch->ref();
 
             pcSnapshot->addChild(pcModeSwitch);
             for(int i=0,count=pcLinkedSwitch->getNumChildren();i<count;++i) {
@@ -362,10 +349,9 @@ public:
         else{
             FC_TRACE("update group '" << getLinkedName() << "' " << propName);
 
-            if(!pcChildGroup) {
+            if(!pcChildGroup)
                 pcChildGroup = new SoGroup;
-                pcChildGroup->ref();
-            }else
+            else
                 pcChildGroup->removeAllChildren();
 
             NodeMap nodeMap;
@@ -387,28 +373,6 @@ public:
         for(size_t i=0;i<pcSnapshots.size();++i) 
             if(pcSnapshots[i]) 
                 getSnapshot(i,true);
-    }
-
-    ViewProviderDocumentObject *getElementView(
-            bool checkname, const char *element, const char **psubname) const 
-    {
-        if(!isLinked()) return 0;
-
-        const char *subname;
-        if(checkname) {
-            subname = checkSubname(pcLinked->getObject(),element);
-            if(!subname) return 0;
-        }else
-            subname = element;
-
-        if(!pcChildGroup || !subname || *subname==0)
-            return pcLinked->getElementView(subname,psubname);
-
-        for(auto &v : nodeMap) {
-            auto *vp = v.second->getElementView(true,subname,psubname);
-            if(vp) return vp;
-        }
-        return 0;
     }
 
     bool getElementPicked(bool addname, int type, 
@@ -596,24 +560,19 @@ void ViewProviderLinkObserver::extensionGetNodeNames(
 TYPESYSTEM_SOURCE(Gui::LinkHandle,Base::BaseClass);
 
 LinkHandle::LinkHandle()
-    :owner(0),pcLinkRoot(0),pcMaterial(0),nodeType(SnapshotTransform),visible(false)
+    :owner(0),nodeType(SnapshotTransform),visible(false)
 {
     pcLinkRoot = new SoFCSelectionRoot;
-    pcLinkRoot->ref();
 }
 
 LinkHandle::~LinkHandle() {
     unlink(LinkInfoPtr());
-    pcLinkRoot->unref();
-    if(pcMaterial) 
-        pcMaterial->unref();
 }
 
 void LinkHandle::setMaterial(const App::Material *material) {
     if(material) {
         if(!pcMaterial) {
             pcMaterial = new SoMaterial;
-            pcMaterial->ref();
             pcMaterial->setOverride(true);
             pcLinkRoot->insertChild(pcMaterial,0);
         }
@@ -626,8 +585,7 @@ void LinkHandle::setMaterial(const App::Material *material) {
         pcMaterial->transparency.setValue(Mat.transparency);
     }else if(pcMaterial) {
         pcLinkRoot->removeChild(pcMaterial);
-        pcMaterial->unref();
-        pcMaterial = 0;
+        pcMaterial.reset();
     }
 }
 
@@ -730,7 +688,7 @@ void LinkHandle::onLinkedIconChange(LinkInfoPtr link) {
 }
 
 LinkHandle::SubInfo::SubInfo(LinkHandle &handle)
-    :handle(handle),pcNode(0),pcTransform(0)
+    :handle(handle)
 {}
 
 LinkHandle::SubInfo::~SubInfo() {
@@ -750,13 +708,9 @@ void LinkHandle::SubInfo::unlink(bool reset) {
                 if(idx>=0)
                     root->removeChild(idx);
             }
-            pcNode->unref();
-            pcNode = 0;
+            pcNode.reset();
         }
-        if(pcTransform) {
-            pcTransform->unref();
-            pcTransform = 0;
-        }
+        pcTransform.reset();
     }else if(pcNode) {
         pcNode->removeAllChildren();
         pcNode->addChild(pcTransform);
@@ -777,19 +731,23 @@ void LinkHandle::onLinkUpdate() {
     }
 
     // TODO: is it a good idea to clear any selection here?
-    static_cast<SoFCSelectionRoot*>(pcLinkRoot)->resetContext();
+    pcLinkRoot->resetContext();
 
     if(nodeType >= 0) {
         pcLinkRoot->removeAllChildren();
         if(pcMaterial) 
             pcLinkRoot->addChild(pcMaterial);
-        auto node = linkInfo->getSnapshot(nodeType);
-        if(node) 
-            pcLinkRoot->addChild(node);
+        pcLinkedRoot = linkInfo->getSnapshot(nodeType);
+        if(pcLinkedRoot) 
+            pcLinkRoot->addChild(pcLinkedRoot);
         return;
     }
 
     // rebuild link sub objects tree
+    if(!pcLinkedRoot) {
+        pcLinkedRoot = new SoFCSelectionRoot;
+        pcLinkRoot->addChild(pcLinkedRoot);
+    }
 
     auto obj = linkInfo->pcLinked->getObject();
     for(auto it=subInfo.begin(),itNext=it;it!=subInfo.end();it=itNext) {
@@ -833,12 +791,10 @@ void LinkHandle::onLinkUpdate() {
             sub.link->setVisible(true);
             if(!sub.pcNode) {
                 sub.pcNode = new SoFCSelectionRoot;
-                sub.pcNode->ref();
                 sub.pcTransform = new SoTransform;
-                sub.pcTransform->ref();
                 sub.pcNode->addChild(sub.pcTransform);
                 sub.pcNode->addChild(sub.link->getSnapshot(SnapshotTransform));
-                pcLinkRoot->addChild(sub.pcNode);
+                pcLinkedRoot->addChild(sub.pcNode);
             }
         }
         setTransform(sub.pcTransform,mat);
@@ -848,21 +804,21 @@ void LinkHandle::onLinkUpdate() {
     // marked as 'secondary'
 
     SoSelectionElementAction action(SoSelectionElementAction::None,true);
-    action.apply(pcLinkRoot);
+    action.apply(pcLinkedRoot);
 
-    SoFullPath *path = 0;
+    CoinPtr<SoFullPath> path;
     for(auto &v : subInfo) {
         auto &sub = v.second;
         if(!sub.isLinked() || !sub.pcNode || sub.elements.empty()) 
             continue;
         if(!path) {
            path = static_cast<SoFullPath*>(new SoPath(10));
-           path->ref();
            appendPath(path,pcLinkRoot);
+           appendPath(path,pcLinkedRoot);
         }
-        path->truncate(1);
+        path->truncate(2);
         appendPath(path,sub.pcNode);
-        if(path->getLength()!=2) {
+        if(path->getLength()!=3) {
             if(FC_LOG_INSTANCE.isEnabled(FC_LOGLEVEL_LOG))
                 FC_WARN("node path error");
             continue;
@@ -870,7 +826,7 @@ void LinkHandle::onLinkUpdate() {
 
         SoSelectionElementAction action(SoSelectionElementAction::Append,true);
         for(const auto &element : sub.elements) {
-            path->truncate(2);
+            path->truncate(3);
             SoDetail *det = 0;
             if(!sub.link->getDetail(false,SnapshotTransform,element.c_str(),det,path))
                 continue;
@@ -879,7 +835,6 @@ void LinkHandle::onLinkUpdate() {
             delete det;
         }
     }
-    if(path) path->unref();
 }
 
 void LinkHandle::setVisibility(bool visible) {
@@ -902,7 +857,7 @@ bool LinkHandle::linkGetElementPicked(const SoPickedPoint *pp, std::string &subn
         return false;
     }
     auto path = pp->getPath();
-    auto idx = path->findNode(pcLinkRoot);
+    auto idx = path->findNode(pcLinkedRoot);
     if(idx<0 || idx+1>=path->getLength()) return false;
     auto node = path->getNode(idx+1);
     for(auto &v : subInfo) {
@@ -956,6 +911,7 @@ bool LinkHandle::linkGetDetailPath(const char *subname, SoFullPath *path, SoDeta
         if(linkInfo->getDetail(false,nodeType,subname,det,path))
             return true;
     }else {
+        appendPath(path,pcLinkedRoot);
         for(auto &v : subInfo) {
             auto &sub = v.second;
             if(!sub.isLinked() || !sub.pcNode || 
@@ -981,11 +937,10 @@ void LinkHandle::unlink(LinkInfoPtr link) {
             linkInfo->remove(this);
             linkInfo.reset();
         }
-        if(pcLinkRoot) {
-            pcLinkRoot->removeAllChildren();
-            if(pcMaterial) 
-                pcLinkRoot->addChild(pcMaterial);
-        }
+        pcLinkRoot->removeAllChildren();
+        if(pcMaterial) 
+            pcLinkRoot->addChild(pcMaterial);
+        pcLinkedRoot.reset();
         subInfo.clear();
         return;
     }
@@ -998,14 +953,6 @@ void LinkHandle::unlink(LinkInfoPtr link) {
             }
         }
     }
-}
-
-ViewProviderDocumentObject *LinkHandle::linkGetElementView(
-        const char *element, const char **subname) const 
-{
-    if(!isLinked() || !linkInfo->pcChildGroup || !element || *element==0) 
-        return nullptr;
-    return linkInfo->getElementView(false,element,subname);
 }
 
 QIcon LinkHandle::getLinkedIcon(QPixmap px) const {
@@ -1184,15 +1131,6 @@ int ViewProviderLink::propIndexFromName(const char *name) const {
     auto it = props.find(name);
     if(it == props.end()) return PropMax;
     return it->second;
-}
-
-void ViewProviderLink::setConfig(LinkConfig bit, bool on) {
-    if(bit != HandleAll)
-        config.set((size_t)bit,on);
-    else if(on)
-        config.set();
-    else
-        config.reset();
 }
 
 bool ViewProviderLink::onDelete(const std::vector<std::string> &subs) {
@@ -1396,8 +1334,3 @@ SoDetail* ViewProviderLink::getDetailPath(
     return 0;
 }
 
-ViewProviderDocumentObject *ViewProviderLink::getElementView(
-        const char *element, const char **subname) const
-{
-    return handle.linkGetElementView(element,subname);
-}
