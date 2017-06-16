@@ -206,10 +206,12 @@ public:
     /** @name Restoring view provider from document load */
     //@{
     virtual void startRestoring() {
+        ViewProviderT::startRestoring();
         imp->startRestoring();
     }
     virtual void finishRestoring() {
         imp->finishRestoring();
+        ViewProviderT::finishRestoring();
     }
     //@}
 
