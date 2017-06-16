@@ -462,6 +462,12 @@ void DocumentObject::touch(void)
     StatusBits.set(0);
 }
 
+void DocumentObject::onDocumentRestored() {
+    auto exts = getExtensionsDerivedFromType<App::DocumentObjectExtension>();
+    for(auto ext : exts) 
+        ext->extensionOnDocumentRestored();
+}
+
 /**
  * @brief Check whether the document object is touched or not.
  * @return true if document object is touched, false if not.
