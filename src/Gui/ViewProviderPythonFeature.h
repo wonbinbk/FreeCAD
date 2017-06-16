@@ -82,6 +82,12 @@ public:
     std::vector<std::string> getDisplayModes(void) const;
     /// set the display mode
     std::string setDisplayMode(const char* ModeName);
+    /// return true to activate tree view group object handling
+    ValueT hasChildElement() const;
+    /// Get sub-element visibility
+    ValueT isElementVisible(const char *) const;
+    /// Set sub-element visibility
+    ValueT setElementVisible(const char *, bool);
     //@}
 
     /** @name Drag and drop */
@@ -98,6 +104,10 @@ public:
     ValueT canDropObject(App::DocumentObject*) const;
     /// If the dropped object type is accepted the object will be added as child
     ValueT dropObject(App::DocumentObject*);
+    /** Return false to force drop only operation for a give object*/
+    ValueT canDragAndDropObject(App::DocumentObject*) const;
+    /** Add an object with full quanlified name to the view provider by drag and drop */
+    ValueT dropObjectEx(App::DocumentObject *obj, App::DocumentObject *, const char *);
     //@}
 
 private:
@@ -281,6 +291,27 @@ public:
             return ViewProviderT::dropObject(obj);
         }
     }
+    /** Return false to force drop only operation for a give object*/
+    virtual bool canDragAndDropObject(App::DocumentObject *obj) const override {
+        switch (imp->canDragAndDropObject(obj)) {
+        case ViewProviderPythonFeatureImp::Accepted:
+            return true;
+        case ViewProviderPythonFeatureImp::Rejected:
+            return false;
+        default:
+            return ViewProviderT::canDragAndDropObject(obj);
+        }
+    }
+    /** Add an object with full quanlified name to the view provider by drag and drop */
+    virtual void dropObjectEx(App::DocumentObject *obj, App::DocumentObject *owner, const char *element) {
+        switch (imp->dropObjectEx(obj,owner,element)) {
+        case ViewProviderPythonFeatureImp::NotImplemented:
+            ViewProviderT::dropObjectEx(obj,owner,element);
+            break;
+        default:
+            break;
+        }
+    }
     //@}
 
     /** @name Display methods */
@@ -307,6 +338,39 @@ public:
         std::string mask = imp->setDisplayMode(ModeName);
         ViewProviderT::setDisplayMaskMode(mask.c_str());
         ViewProviderT::setDisplayMode(ModeName);
+    }
+    /// return true to activate tree view group object handling
+    virtual bool hasChildElement() const override {
+        switch(imp->hasChildElement()) {
+        case ViewProviderPythonFeatureImp::NotImplemented:
+            return ViewProviderT::hasChildElement();
+        case ViewProviderPythonFeatureImp::Accepted:
+            return true;
+        default:
+            return false;
+        }
+    }
+    /// Get sub-element visibility
+    virtual bool isElementVisible(const char *element) const override {
+        switch(imp->isElementVisible(element)) {
+        case ViewProviderPythonFeatureImp::NotImplemented:
+            return ViewProviderT::isElementVisible(element);
+        case ViewProviderPythonFeatureImp::Accepted:
+            return true;
+        default:
+            return false;
+        }
+    }
+    /// Set sub-element visibility
+    virtual int setElementVisible(const char *element, bool visible) override {
+        switch(imp->setElementVisible(element,visible)) {
+        case ViewProviderPythonFeatureImp::NotImplemented:
+            return ViewProviderT::setElementVisible(element,visible);
+        case ViewProviderPythonFeatureImp::Accepted:
+            return 1;
+        default:
+            return 0;
+        }
     }
     //@}
 
