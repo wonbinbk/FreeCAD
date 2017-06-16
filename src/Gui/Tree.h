@@ -79,6 +79,7 @@ public:
 protected:
     /// Observer message from the Selection
     void onSelectionChanged(const SelectionChanges& msg);
+    void syncSelection(const char *pDocName=0);
     void contextMenuEvent (QContextMenuEvent * e);
     void drawRow(QPainter *, const QStyleOptionViewItem &, const QModelIndex &) const;
     /** @name Drag and drop */
@@ -145,11 +146,11 @@ private:
     QAction* finishEditingAction;
     QAction* skipRecomputeAction;
     QAction* markRecomputeAction;
-    QAction* selectAllInstances;
-    QAction* selectLinked;
-    QAction* selectLinkedFinal;
-    QAction* selectAllLinks;
-    QAction* syncSelection;
+    QAction* selectAllInstancesAction;
+    QAction* selectLinkedAction;
+    QAction* selectLinkedFinalAction;
+    QAction* selectAllLinksAction;
+    QAction* syncSelectionAction;
     QAction* showHiddenAction;
     QAction* hideInTreeAction;
     QTreeWidgetItem* contextItem;
@@ -237,6 +238,8 @@ private:
     Connection connectResObject;
     Connection connectHltObject;
     Connection connectExpObject;
+
+    friend class TreeWidget;
 };
 
 /** The link between the tree and a document object.
