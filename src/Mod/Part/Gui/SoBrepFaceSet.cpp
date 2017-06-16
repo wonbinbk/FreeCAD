@@ -56,6 +56,7 @@
 #include <Inventor/misc/SoContextHandler.h>
 #include <Inventor/elements/SoShapeStyleElement.h>
 #include <Inventor/elements/SoCacheElement.h>
+#include <Inventor/elements/SoTextureEnabledElement.h>
 #endif
 
 #include "SoBrepFaceSet.h"
@@ -653,6 +654,7 @@ bool SoBrepFaceSet::overrideMaterialBinding(SoState *state, SelContextPtr ctx, S
             SoOverrideElement::setMaterialBindingOverride(state, this, true);
             packedColors.push_back(ctx->selectionColor.getPackedValue(trans0));
             SoLazyElement::setPacked(state, this,1, &packedColors[0],true);
+            SoTextureEnabledElement::set(state,this,false);
             return true;
         }
 
@@ -729,6 +731,7 @@ bool SoBrepFaceSet::overrideMaterialBinding(SoState *state, SelContextPtr ctx, S
 
         SoMaterialBindingElement::set(state, this, SoMaterialBindingElement::PER_PART_INDEXED);
         SoLazyElement::setPacked(state, this, packedColors.size(), &packedColors[0], true);
+        SoTextureEnabledElement::set(state,this,false);
         return true;
     }
     return false;
@@ -1022,6 +1025,7 @@ void SoBrepFaceSet::renderHighlight(SoGLRenderAction *action, SelContextPtr ctx)
         packedColor = ctx->highlightColor.getPackedValue(0.0);
         SoLazyElement::setPacked(state, this,1, &packedColor,false);
     }
+    SoTextureEnabledElement::set(state,this,false);
 
     Binding mbind = this->findMaterialBinding(state);
     Binding nbind = this->findNormalBinding(state);
@@ -1099,6 +1103,7 @@ void SoBrepFaceSet::renderSelection(SoGLRenderAction *action, SelContextPtr ctx,
             packedColor = ctx->selectionColor.getPackedValue(0.0);
             SoLazyElement::setPacked(state, this,1, &packedColor,false);
         }
+        SoTextureEnabledElement::set(state,this,false);
     }
 
     Binding mbind = this->findMaterialBinding(state);
