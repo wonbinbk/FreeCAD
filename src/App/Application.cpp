@@ -1279,7 +1279,10 @@ void Application::initTypes(void)
     App ::GeoFeatureGroupExtensionPython::init();
     App ::OriginGroupExtension          ::init();
     App ::OriginGroupExtensionPython    ::init();
+    App ::LinkBaseExtension             ::init();
+    App ::LinkBaseExtensionPython       ::init();
     App ::LinkExtension                 ::init();
+    App ::LinkExtensionPython           ::init();
 
     // Document classes
     App ::TransactionalObject       ::init();
@@ -1307,7 +1310,10 @@ void Application::initTypes(void)
     App ::Part                      ::init();
     App ::Origin                    ::init();
     App ::Link                      ::init();
+    App ::LinkPython                ::init();
     App ::LinkSub                   ::init();
+    App ::LinkSubPython             ::init();
+    App ::LinkElement               ::init();
 
     // Expression classes
     App ::Expression                ::init();

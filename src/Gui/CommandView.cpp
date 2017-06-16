@@ -790,37 +790,63 @@ void StdCmdToggleVisibility::activated(int iMsg)
     std::set<ViewProvider*> filter;
     std::set<ViewProvider*> pendings;
     for(auto &sel : Selection().getCompleteSelection()) {
-        if(!sel.DocName || !sel.FeatName) continue;
+        if(!sel.DocName || !sel.FeatName || !sel.pObject) 
+            continue;
         const char *sub = 0;
-        auto obj = Selection().resolveObject(sel.pObject,sel.SubName,&sub);
+        // get parent object
+        auto obj = Selection().resolveObject(sel.pObject,sel.SubName,&sub,true);
         if(!obj || !obj->getNameInDocument())
             continue;
         auto vp = Application::Instance->getViewProvider(obj);
         if(!vp) continue;
 
-        if(sub && sub[0]) {
+        // try call parent object's setElementVisibility
+        if(vp->hasChildElement() && sub && sub[0]) {
+            auto subObj = obj->getSubObject(sub);
+            ViewProvider *subVp = 0;
+            if(subObj) {
+                subVp = Application::Instance->getViewProvider(obj);
+                // prevent setting the same sub object visibility more than once
+                if(!subVp || filter.find(subVp)!=filter.end())
+                    continue;
+            }
+
             bool visible = vp->isElementVisible(sub);
             // perform a test with unchanged visiblity
             int ret = vp->setElementVisible(sub,visible);
             if(ret>=0) {
-                if(ret == 0)
+                if(ret == 0) {
+                    // this means the sub-element is not found
                     Base::Console().Warning("Failed to set visibility of SubName %s in %s.%s\n",
                             sel.SubName,sel.DocName,sel.FeatName);
-                else {
+                } else {
                     doCommand(Gui,"Gui.getDocument('%s').getObject('%s').setElementVisible('%s',%s)",
                             obj->getDocument()->getName(), obj->getNameInDocument(),
                             sub,visible?"False":"True");
                 }
 
-                // filter out later whole object visibility setting
+                // filter out parent object visibility setting
                 filter.insert(vp);
                 auto it = pendings.find(vp);
                 if(it!=pendings.end())
                     pendings.erase(it);
+
+                if(subVp) {
+                    // filter out sub object visibility setting
+                    filter.insert(subVp);
+                    auto it = pendings.find(subVp);
+                    if(it!=pendings.end())
+                        pendings.erase(it);
+                }
                 continue;
             }
+
+            // Fall back to whole object visibility setting, use sub object if
+            // there is one, or else use the parent object.
+            if(subVp) 
+                vp = subVp;
         }
-        if(filter.find(vp)==filter.end()) {
+        if(vp && filter.find(vp)==filter.end()) {
             // if element visibility is not supported, pend it for later whole
             // object visibility fallback
             pendings.insert(vp);

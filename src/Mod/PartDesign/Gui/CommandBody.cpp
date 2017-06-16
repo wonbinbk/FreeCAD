@@ -149,20 +149,12 @@ void CmdPartDesignLink::activated(int iMsg)
 
     openCommand("Make Link");
     if(sels.empty()) {
-        std::string link = getUniqueObjectName("AppLink");
-        doCommand(Doc,"App.ActiveDocument.addObject('App::Link','%s')",link.c_str());
+        std::string link = getUniqueObjectName("Link");
+        doCommand(Doc,"App.ActiveDocument.addObject('Part::Link','%s')",link.c_str());
     }else{
         for(auto obj : sels) {
-            const char *name, *type;
-            if(obj->isDerivedFrom(Part::Feature::getClassTypeId())) {
-                name = "PartLink";
-                type = "Part::Link";
-            }else{
-                name = "AppLink";
-                type = "App::Link";
-            }
-            std::string link = getUniqueObjectName(name);
-            doCommand(Doc,"App.ActiveDocument.addObject('%s','%s')",type,link.c_str());
+            std::string link = getUniqueObjectName("Link");
+            doCommand(Doc,"App.ActiveDocument.addObject('Part::Link','%s')",link.c_str());
             doCommand(Doc,"App.ActiveDocument.%s.LinkedObject = App.getDocument('%s').getObject('%s')",
                 link.c_str(), obj->getDocument()->getName(), obj->getNameInDocument());
         }
@@ -202,7 +194,7 @@ void CmdPartDesignLinkSub::activated(int iMsg)
 
     openCommand("Make LinkSub");
     if(result.empty()) {
-        std::string link = getUniqueObjectName("PartLinkSub");
+        std::string link = getUniqueObjectName("LinkSub");
         doCommand(Doc,"App.ActiveDocument.addObject('Part::LinkSub','%s')",link.c_str());
     } else {
         std::map<App::DocumentObject *, std::vector<std::string> > sels;
@@ -215,7 +207,7 @@ void CmdPartDesignLinkSub::activated(int iMsg)
                     QObject::tr("No subelement selected"));
         else{
             for(const auto &v : sels) {
-                std::string link = getUniqueObjectName("PartLinkSub");
+                std::string link = getUniqueObjectName("LinkSub");
                 doCommand(Doc,"App.ActiveDocument.addObject('Part::LinkSub','%s')",link.c_str());
                 std::stringstream str;
                 str << "App.ActiveDocument." << link << ".LinkedSubs = (App.ActiveDocument." << v.first->getNameInDocument() <<", (";

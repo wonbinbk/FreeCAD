@@ -31,7 +31,8 @@ class PartGuiExport ViewProviderPartLink : public Gui::ViewProviderLink
     PROPERTY_HEADER(PartGui::ViewProviderPartLink);
     typedef Gui::ViewProviderLink inherited;
 
-    void attach(App::DocumentObject *pcObj) override;
+protected:
+    virtual QIcon getIconDefault() const override;
 
 public:
     ViewProviderPartLink();

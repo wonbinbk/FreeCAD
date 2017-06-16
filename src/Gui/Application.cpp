@@ -1491,6 +1491,8 @@ void Application::initTypes(void)
     Gui::ViewProviderLinkObserver               ::init();
     Gui::LinkHandle                             ::init();
     Gui::ViewProviderLink                       ::init();
+    Gui::ViewProviderLinkPython                 ::init();
+    Gui::ViewProviderLinkElement                ::init();
 
     // Workbench
     Gui::Workbench                              ::init();

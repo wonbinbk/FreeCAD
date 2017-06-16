@@ -25,7 +25,10 @@
 #define GUI_VIEWPROVIDER_LINK_H
 
 #include <boost/intrusive_ptr.hpp>
+#include <boost/preprocessor/seq/for_each.hpp>
+#include <App/PropertyGeo.h>
 #include <App/Link.h>
+#include <Gui/ViewProviderPythonFeature.h>
 #include "ViewProviderDocumentObject.h"
 #include "ViewProviderExtension.h"
 
@@ -83,12 +86,14 @@ public:
     virtual void onLinkUpdate();
     virtual void onLinkedIconChange(LinkInfoPtr link);
 
-    std::string getSubName(LinkInfoPtr);
+    void setLink(App::DocumentObject *obj, bool reorder=false,
+        const std::vector<std::string> &subs = std::vector<std::string>()); 
 
-    void setLink(App::DocumentObject *obj, bool reorder = false,
-            const std::vector<std::string> &subs = std::vector<std::string>());
+    void setMaterial(int index, const App::Material *material);
+    void setTransform(int index, const Base::Matrix4D &mat);
+    void setSize(int size);
 
-    void setMaterial(const App::Material *material);
+    int getSize() const { return nodeArray.size(); }
 
     static void setTransform(SoTransform *pcTransform, const Base::Matrix4D &mat);
 
@@ -118,10 +123,16 @@ public:
     bool linkGetDetailPath(const char *, SoFullPath *, SoDetail *&) const;
     bool linkGetElementPicked(const SoPickedPoint *, std::string &) const;
 
+    int setElementVisible(int index, bool visible);
+    bool isElementVisible(int index) const;
+
     ViewProviderDocumentObject *getOwner() const {return owner;}
     void setOwner(ViewProviderDocumentObject *vpd) {owner=vpd;}
 
     friend class LinkInfo;
+
+protected:
+    void replaceLinkedRoot(SoSeparator *);
 
 protected:
     ViewProviderDocumentObject *owner;
@@ -155,6 +166,8 @@ protected:
 
     bool visible;
 };
+
+class ViewProviderLinkElement;
     
 class GuiExport ViewProviderLink : public ViewProviderDocumentObject
 {
@@ -163,9 +176,9 @@ class GuiExport ViewProviderLink : public ViewProviderDocumentObject
 
 public:
     App::PropertyBool LinkUseMaterial;
-    App::PropertyColor LinkShapeColor;
-    App::PropertyPercent LinkTransparency;
     App::PropertyMaterial LinkShapeMaterial;
+    App::PropertyMaterialList MaterialList;
+    App::PropertyBoolList UseMaterialList;
     App::PropertyBool Selectable;
 
     ViewProviderLink();
@@ -199,25 +212,65 @@ public:
     bool canDragAndDropObject(App::DocumentObject*) const override;
     void dropObjectEx(App::DocumentObject*, App::DocumentObject*, const char *) override;
 
-    enum PropIndex {
-        PropPlacement,
-        PropObject,
-        PropSubs,
-        PropTransform,
-        PropScale,
-        PropRecomputed,
-        PropMax,
-    };
-    virtual const char *propNameFromIndex(PropIndex index) const;
+    int setElementVisible(const char * /*element*/, bool /*visible*/) override;
+    bool isElementVisible(const char * /*element*/) const  override;
+
+    bool hasChildElement() const override;
+
+    std::vector<std::string> getDisplayModes(void) const override;
+
     virtual QPixmap getOverlayPixmap() const;
 
-private:
-    int propIndexFromName(const char *name) const;
+protected:
+    enum LinkType {
+        LinkTypeNone,
+        LinkTypeNormal,
+        LinkTypeX,
+        LinkTypeSubs,
+    };
+
+    bool hasElements(const App::LinkBaseExtension *ext = 0) const;
+    const App::LinkBaseExtension *getLinkExtension() const;
+    App::LinkBaseExtension *getLinkExtension();
+
+    void updateDataPrivate(App::LinkBaseExtension *ext, const App::Property*);
+    void updateElementChildren(App::LinkBaseExtension *ext);
+
+    bool setLinkType(LinkType type, bool reset=false);
+    QIcon getLinkedIcon() const;
+    virtual QIcon getIconDefault() const;
+    void onChangeIcon() const;
+    std::vector<App::DocumentObject*> claimChildrenPrivate(void) const;
+
 protected:
     LinkHandle handle;
+    std::vector<App::DocumentObject*> childrenCache;
+    LinkType linkType;
     bool linkTransform;
-    bool xlink;
-    bool sublink;
+
+    friend class ViewProviderLinkElement;
+};
+
+typedef ViewProviderPythonFeatureT<ViewProviderLink> ViewProviderLinkPython;
+
+class ViewProviderLinkElement: public ViewProviderDocumentObject {
+    PROPERTY_HEADER(Gui::ViewProviderLinkElement);
+    typedef ViewProviderDocumentObject inherited;
+public:
+    App::PropertyMaterial ShapeMaterial;
+    App::PropertyBool UseMaterial;
+
+    ViewProviderLinkElement();
+    void onChanged(const App::Property* prop) override;
+    bool onDelete(const std::vector<std::string> &) override {return false;}
+    ViewProviderDocumentObject *getLinkedView(bool recursive, int depth=0) const override;
+    QIcon getIcon(void) const override;
+    std::vector<App::DocumentObject*> claimChildren(void) const override;
+
+private:
+    ViewProviderLink *owner;
+    int index;
+    friend class ViewProviderLink;
 };
 
 } //namespace Gui

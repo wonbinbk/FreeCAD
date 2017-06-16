@@ -21,6 +21,7 @@
  ****************************************************************************/
 
 #include "PreCompiled.h"
+#include <Gui/BitmapFactory.h>
 #include "ViewProviderPartLink.h"
 
 using namespace PartGui;
@@ -29,18 +30,22 @@ PROPERTY_SOURCE(PartGui::ViewProviderPartLink, Gui::ViewProviderLink)
 
 ViewProviderPartLink::ViewProviderPartLink()
 {
-    sPixmap = "Tree_Part_Link";
 }
 
-void ViewProviderPartLink::attach(App::DocumentObject *pcObj) {
-    inherited::attach(pcObj);
-    if(inherited::sublink)
-        sPixmap = "Tree_Part_LinkSub";
+QIcon ViewProviderPartLink::getIconDefault() const {
+    const char *pixmap;
+    if(hasElements())
+        pixmap = "links";
+    else if(linkType == LinkTypeSubs)
+        pixmap = "Tree_Part_LinkSub";
+    else
+        pixmap = "Tree_Part_Link";
+    return Gui::BitmapFactory().pixmap(pixmap);
 }
 
 QPixmap ViewProviderPartLink::getOverlayPixmap() const
 {
-    static QPixmap px[2];
+    static QPixmap px[6];
     if(px[0].isNull()) {
         // right top pointing arrow for normal link
         const char * const feature_link_xpm[]={
@@ -83,13 +88,64 @@ QPixmap ViewProviderPartLink::getOverlayPixmap() const
             "########",
             "##aaaaa#",
             "######a#",
+            "aaaaa#a#",
             "##aaa#a#",
-            "###aa#a#",
-            "##a#a#a#",
-            "#a######",
+            "#aa#a#a#",
+            "aa##a###",
             "########"};
         px[2] = QPixmap(feature_linksub_xpm);
+
+        const char * const feature_links_xpm[]={
+            "8 8 3 1",
+            ". c None",
+            "# c #000000",
+            "a c #b0e0e6",
+            "########",
+            "##aaaaa#",
+            "####aaa#",
+            "###aaaa#",
+            "##aaa#a#",
+            "#aaa##a#",
+            "#aa#####",
+            "########"};
+        px[3] = QPixmap(feature_links_xpm);
+
+        const char * const feature_xlinks_xpm[]={
+            "8 8 3 1",
+            ". c None",
+            "# c #000000",
+            "a c #b0e0e6",
+            "########",
+            "#aaaaa##",
+            "#aaa####",
+            "#aaaa###",
+            "#a#aaa##",
+            "#a##aaa#",
+            "#####aa#",
+            "########"};
+        px[4] = QPixmap(feature_xlinks_xpm);
+
+        const char * const feature_linksubs_xpm[]={
+            "8 8 3 1",
+            ". c None",
+            "# c #000000",
+            "a c #aaf254",
+            "########",
+            "##aaaaa#",
+            "######a#",
+            "aaaaa#a#",
+            "##aaa#a#",
+            "#aa#a#a#",
+            "aa##a###",
+            "########"};
+        px[5] = QPixmap(feature_linksubs_xpm);
     }
-    if(inherited::sublink) return px[2];
-    return px[inherited::xlink?1:0];
+    int index = 0;
+    if(linkType == LinkTypeSubs) 
+        index = 2;
+    else if(linkType == LinkTypeX)
+        index = 1;
+    if(handle.getSize())
+        index += 3;
+    return px[index];
 }
