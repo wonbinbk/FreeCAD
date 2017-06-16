@@ -4591,6 +4591,10 @@ class Draft2Sketch(Modifier):
 class Array(Modifier):
     "The Shape2DView FreeCAD command definition"
 
+    def __init__(self,useLink=False):
+        Modifier.__init__(self)
+        self.useLink = useLink
+
     def GetResources(self):
         return {'Pixmap'  : 'Draft_Array',
                 'MenuText': QtCore.QT_TRANSLATE_NOOP("Draft_Array", "Array"),
@@ -4612,13 +4616,26 @@ class Array(Modifier):
         if FreeCADGui.Selection.getSelection():
             obj = FreeCADGui.Selection.getSelection()[0]
             FreeCADGui.addModule("Draft")
-            self.commit(translate("draft","Array"),
-                        ['Draft.makeArray(FreeCAD.ActiveDocument.'+obj.Name+',FreeCAD.Vector(1,0,0),FreeCAD.Vector(0,1,0),2,2)',
-                         'FreeCAD.ActiveDocument.recompute()'])
+            self.commit(translate("draft","Array"),['Draft.makeArray(FreeCAD.ActiveDocument.{},FreeCAD.Vector(1,0,0),FreeCAD.Vector(0,1,0),2,2,useLink={})'.format(obj.Name,self.useLink), 'FreeCAD.ActiveDocument.recompute()'])
         self.finish()
+
+class LinkArray(Array):
+    "The Shape2DView FreeCAD command definition"
+
+    def __init__(self):
+        Array.__init__(self,True)
+
+    def GetResources(self):
+        return {'Pixmap'  : 'Draft_LinkArray',
+                'MenuText': QtCore.QT_TRANSLATE_NOOP("Draft_LinkArray", "LinkArray"),
+                'ToolTip': QtCore.QT_TRANSLATE_NOOP("Draft_LinkArray", "Creates a polar or rectangular link array from a selected object")}
 
 class PathArray(Modifier):
     "The PathArray FreeCAD command definition"
+
+    def __init__(self,useLink=False):
+        Modifier.__init__(self)
+        self.useLink = useLink
 
     def GetResources(self):
         return {'Pixmap'  : 'Draft_PathArray',
@@ -4648,10 +4665,21 @@ class PathArray(Modifier):
             defCount = 4
             defAlign = False
             FreeCAD.ActiveDocument.openTransaction("PathArray")
-            Draft.makePathArray(base,path,defCount,defXlate,defAlign,pathsubs)
+            Draft.makePathArray(base,path,defCount,defXlate,defAlign,pathsubs,useLink=self.useLink)
             FreeCAD.ActiveDocument.commitTransaction()
             FreeCAD.ActiveDocument.recompute()                                  # feature won't appear until recompute.
         self.finish()
+
+class PathLinkArray(PathArray):
+    "The PathLinkArray FreeCAD command definition"
+
+    def __init__(self):
+        PathArray.__init__(self,True)
+
+    def GetResources(self):
+        return {'Pixmap'  : 'Draft_PathLinkArray',
+                'MenuText': QtCore.QT_TRANSLATE_NOOP("Draft_PathLinkArray", "PathLinkArray"),
+                'ToolTip': QtCore.QT_TRANSLATE_NOOP("Draft_PathLinkArray", "Creates links of a selected object along a selected path.")}
 
 class Point(Creator):
     "this class will create a vertex after the user clicks a point on the screen"
@@ -5347,8 +5375,10 @@ FreeCADGui.addCommand('Draft_DelPoint',DelPoint())
 FreeCADGui.addCommand('Draft_WireToBSpline',WireToBSpline())
 FreeCADGui.addCommand('Draft_Draft2Sketch',Draft2Sketch())
 FreeCADGui.addCommand('Draft_Array',Array())
+FreeCADGui.addCommand('Draft_LinkArray',LinkArray())
 FreeCADGui.addCommand('Draft_Clone',Draft_Clone())
 FreeCADGui.addCommand('Draft_PathArray',PathArray())
+FreeCADGui.addCommand('Draft_PathLinkArray',PathLinkArray())
 FreeCADGui.addCommand('Draft_Heal',Heal())
 FreeCADGui.addCommand('Draft_VisGroup',VisGroup())
 FreeCADGui.addCommand('Draft_Mirror',Mirror())
