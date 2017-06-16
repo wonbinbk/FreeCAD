@@ -201,6 +201,118 @@ class AppExport PropertyLists : public Property
 public:
     virtual void setSize(int newSize)=0;   
     virtual int getSize(void) const =0;   
+
+    const std::set<int> &getTouchList() const {
+        return _touchList;
+    }
+
+    void clearTouchList() {
+        _touchList.clear();
+    }
+
+    virtual void setPyObject(PyObject *) override;
+
+protected:
+    virtual void setPyValues(const std::vector<PyObject*> &vals, const std::vector<int> &indices) {
+        (void)vals;
+        (void)indices;
+        return;
+    }
+
+protected:
+    std::set<int> _touchList;
+};
+
+/** Helper class to implement PropertyLists */
+template<class T, class ListT = std::vector<T> >
+class PropertyListsT: public PropertyLists
+{
+    typedef typename ListT::const_reference const_reference;
+public:
+    // To make it possible to call ADD_PROPERTY_XXX macros without default value
+    void setValue (void){}
+
+    void setSize(int newSize, const_reference def) {
+        _lValueList.resize(newSize,def);
+    }
+
+    virtual void setSize(int newSize) override {
+        _lValueList.resize(newSize);
+    }
+
+    virtual int getSize(void) const override {
+        return static_cast<int>(_lValueList.size());
+    }
+
+    void setValue(const_reference value) {
+        ListT vals;
+        vals.resize(1,value);
+        setValues(vals);
+    }
+
+    virtual void setValues(const ListT &newValues) {
+        aboutToSetValue();
+        _touchList.clear();
+        _lValueList = newValues;
+        hasSetValue();
+    }
+
+    void setValue(const ListT &newValues) {
+        setValues(newValues);
+    }
+
+    const ListT &getValues(void) const{return _lValueList;}
+
+    // alias to getValues
+    const ListT &getValue(void) const{return getValues();}
+
+    const_reference operator[] (int idx) const {return _lValueList[idx];} 
+
+protected:
+
+    /** Helper function to set one value
+     *
+     * The reason to define a protected _set1Value() instead of a public
+     * set1Value() is to maintain source code compatibility with added 
+     * \c TouchList functionality. Derived class shall define its own
+     * set1Value() with a proper default \c touch parameter. 
+     */
+    void _set1Value(int index, const_reference value, bool touch) {
+        assert(index>=0);
+        if(touch)
+            aboutToSetValue();
+        _touchList.insert(index);
+        _lValueList[index] = value;
+        if(touch) {
+            hasSetValue();
+            _touchList.clear();
+        }
+    }
+
+    /** Derived class is expected to make this public with a proper default \c touch */
+    virtual void set1Value(int index, const_reference value, bool touch)=0;
+
+    void setPyValues(const std::vector<PyObject*> &vals, const std::vector<int> &indices) override {
+        ListT values;
+        // old version boost::dynamic_bitset don't have reserve(). What a shame!
+        // values.reserve(vals.size());
+        for(auto item : vals)
+            values.push_back(getPyValue(item));
+        if(indices.empty())
+            setValues(values);
+        else {
+            assert(values.size()==indices.size());
+            int i,count;
+            for(i=0,count=values.size()-1;i<count;++i)
+                set1Value(indices[i],values[i],false);
+            set1Value(indices[i],values[i],true);
+        }
+    }
+
+    virtual T getPyValue(PyObject *item) const = 0;
+
+protected:
+    ListT _lValueList;
 };
 
 /** A template class that is used to inhibit multiple nested calls to aboutToSetValue/hasSetValue for properties.

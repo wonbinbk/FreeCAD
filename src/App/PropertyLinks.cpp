@@ -202,51 +202,53 @@ PropertyLinkList::~PropertyLinkList()
 
 }
 
-void PropertyLinkList::setSize(int newSize)
-{
-    _lValueList.resize(newSize);
-}
+void PropertyLinkList::set1Value(int idx, DocumentObject* const &value, bool touch) {
+    assert(idx>=0 && idx<static_cast<int>(_lValueList.size()));
+    auto obj = _lValueList[idx];
+    if(obj == value) return;
 
-int PropertyLinkList::getSize(void) const
-{
-    return static_cast<int>(_lValueList.size());
-}
+    if(!value || !value->getNameInDocument())
+        throw Base::ValueError("invalid document object");
 
-void PropertyLinkList::setValue(DocumentObject* lValue)
-{
+    if(_nameMap.size() && obj && obj->getNameInDocument()) {
+        auto it = _nameMap.find(obj->getNameInDocument());
+        if(it!=_nameMap.end())
+            _nameMap.erase(it);
+        _nameMap.insert(std::make_pair(std::string(value->getNameInDocument()),idx));
+    }else 
+        _nameMap.clear();
+
 #ifndef USE_OLD_DAG   
-    //maintain the back link in the DocumentObject class
-    for(auto *obj : _lValueList)
+    if(obj) 
         obj->_removeBackLink(static_cast<DocumentObject*>(getContainer()));
-    if(lValue)
-        lValue->_addBackLink(static_cast<DocumentObject*>(getContainer()));
+    if(value)
+        value->_addBackLink(static_cast<DocumentObject*>(getContainer()));
 #endif
-    
-    if (lValue){
-        aboutToSetValue();
-        _lValueList.resize(1);
-        _lValueList[0] = lValue;
-        hasSetValue();
-    }
-    else {
-        aboutToSetValue();
-        _lValueList.clear();
-        hasSetValue();
-    }
+
+    _set1Value(idx,value,touch);
 }
 
-void PropertyLinkList::setValues(const std::vector<DocumentObject*>& lValue)
-{
-    aboutToSetValue();
+void PropertyLinkList::setValues(const std::vector<DocumentObject*>& lValue) {
+    if(lValue.size()==1 && !lValue[0]) {
+        // one null element means clear, as backward compatibility for old code
+        setValues(std::vector<DocumentObject*>());
+        return;
+    }
+
+    for(auto obj : lValue) {
+        if(!obj || !obj->getNameInDocument())
+            throw Base::ValueError("PropertyLinkList: invalid document object");
+    }
+    _nameMap.clear();
+
 #ifndef USE_OLD_DAG
     //maintain the back link in the DocumentObject class
-    for(auto *obj : _lValueList)
-        obj->_removeBackLink(static_cast<DocumentObject*>(getContainer()));
-    for(auto *obj : lValue)
-        obj->_addBackLink(static_cast<DocumentObject*>(getContainer()));
+    for(auto obj : _lValueList)
+        if(obj) obj->_removeBackLink(static_cast<DocumentObject*>(getContainer()));
+    for(auto obj : lValue)
+        if(obj) obj->_addBackLink(static_cast<DocumentObject*>(getContainer()));
 #endif
-    _lValueList = lValue;
-    hasSetValue();
+    inherited::setValues(lValue);
 }
 
 PyObject *PropertyLinkList::getPyObject(void)
@@ -258,42 +260,23 @@ PyObject *PropertyLinkList::getPyObject(void)
     Py::List sequence(count);
 #endif
     for (int i = 0; i<count; i++) {
-        sequence.setItem(i, Py::asObject(_lValueList[i]->getPyObject()));
+        auto obj = _lValueList[i];
+        if(obj)
+            sequence.setItem(i, Py::asObject(_lValueList[i]->getPyObject()));
+        else
+            sequence.setItem(i, Py::None());
     }
 
     return Py::new_reference_to(sequence);
 }
 
-void PropertyLinkList::setPyObject(PyObject *value)
-{
-    if (PyTuple_Check(value) || PyList_Check(value)) {
-        Py::Sequence list(value);
-        Py::Sequence::size_type size = list.size();
-        std::vector<DocumentObject*> values;
-        values.resize(size);
-
-        for (Py::Sequence::size_type i = 0; i < size; i++) {
-            Py::Object item = list[i];
-            if (!PyObject_TypeCheck(*item, &(DocumentObjectPy::Type))) {
-                std::string error = std::string("type in list must be 'DocumentObject', not ");
-                error += (*item)->ob_type->tp_name;
-                throw Base::TypeError(error);
-            }
-
-            values[i] = static_cast<DocumentObjectPy*>(*item)->getDocumentObjectPtr();
-        }
-
-        setValues(values);
-    }
-    else if (PyObject_TypeCheck(value, &(DocumentObjectPy::Type))) {
-        DocumentObjectPy  *pcObject = static_cast<DocumentObjectPy*>(value);
-        setValue(pcObject->getDocumentObjectPtr());
-    }
-    else {
+DocumentObject *PropertyLinkList::getPyValue(PyObject *item) const {
+    if (!PyObject_TypeCheck(item, &(DocumentObjectPy::Type))) {
         std::string error = std::string("type must be 'DocumentObject' or list of 'DocumentObject', not ");
-        error += value->ob_type->tp_name;
+        error += item->ob_type->tp_name;
         throw Base::TypeError(error);
     }
+    return static_cast<DocumentObjectPy*>(item)->getDocumentObjectPtr();
 }
 
 void PropertyLinkList::Save(Base::Writer &writer) const
@@ -360,6 +343,22 @@ void PropertyLinkList::Paste(const Property &from)
 unsigned int PropertyLinkList::getMemSize(void) const
 {
     return static_cast<unsigned int>(_lValueList.size() * sizeof(App::DocumentObject *));
+}
+
+DocumentObject *PropertyLinkList::find(const char *name, int *pindex) const {
+    if(!name) return 0;
+    if(_nameMap.empty()) {
+        for(int i=0;i<(int)_lValueList.size();++i) {
+            auto obj = _lValueList[i];
+            if(obj && obj->getNameInDocument()) 
+                _nameMap[obj->getNameInDocument()] = i;
+        }
+    }
+    auto it = _nameMap.find(name);
+    if(it == _nameMap.end())
+        return 0;
+    if(pindex) *pindex = it->second;
+    return _lValueList[it->second];
 }
 
 //**************************************************************************
