@@ -439,12 +439,13 @@ PyObject *DocumentObject::getPyObject(void)
 
 DocumentObject *DocumentObject::getSubObject(const char *element, 
             const char **subname, PyObject **pyObj, 
-            Base::Matrix4D *mat, bool transform) const
+            Base::Matrix4D *mat, bool transform, int depth) const
 {
+    DocumentObject *ret = 0;
     auto exts = getExtensionsDerivedFromType<App::DocumentObjectExtension>();
     for(auto ext : exts) {
-        auto obj = ext->extensionGetSubObject(element,subname,pyObj,mat,transform);
-        if(obj) return obj;
+        if(ext->extensionGetSubObject(ret,element,subname,pyObj,mat,transform, depth))
+            return ret;
     }
     if(!element || *element==0) {
         if(subname) *subname = element;
@@ -453,8 +454,16 @@ DocumentObject *DocumentObject::getSubObject(const char *element,
     return 0;
 }
 
-DocumentObject *DocumentObject::getLinkedObject(bool, Base::Matrix4D *, bool) {
-    return this;
+DocumentObject *DocumentObject::getLinkedObject(
+        bool recursive, Base::Matrix4D *mat, bool transform, int depth) const 
+{
+    DocumentObject *ret = 0;
+    auto exts = getExtensionsDerivedFromType<App::DocumentObjectExtension>();
+    for(auto ext : exts) {
+        if(ext->extensionGetLinkedObject(ret,recursive,mat,transform,depth))
+            return ret;
+    }
+    return const_cast<DocumentObject*>(this);
 }
 
 void DocumentObject::touch(void)

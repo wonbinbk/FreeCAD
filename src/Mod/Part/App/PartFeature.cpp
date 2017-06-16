@@ -112,9 +112,9 @@ Py::Object shape2pyshape(const TopoDS_Shape &shape);
 }
 
 App::DocumentObject *Feature::getSubObject(const char *element, 
-    const char **subname, PyObject **pyObj, Base::Matrix4D *pmat, bool transform) const
+    const char **subname, PyObject **pyObj, Base::Matrix4D *pmat, bool transform, int depth) const
 {
-    auto ret = App::DocumentObject::getSubObject(element,subname,pyObj,pmat,transform);
+    auto ret = App::DocumentObject::getSubObject(element,subname,pyObj,pmat,transform,depth);
     if(ret && ret!=this) return ret;
 
     if(subname) *subname = element;
@@ -122,17 +122,18 @@ App::DocumentObject *Feature::getSubObject(const char *element,
     if(pmat && transform)
         *pmat *= Placement.getValue().toMatrix();
 
-    TopoDS_Shape shape = Shape.getValue().Located(TopLoc_Location());
-    TopoShape s(shape);
+    if(!pyObj) {
+        if(element==0 || *element==0 || Shape.getShape().hasSubShape(element))
+            return const_cast<Feature*>(this);
+        return nullptr;
+    }
 
     try {
-        const TopoDS_Shape &sub = (element==0||*element==0)?shape:s.getSubShape(element);
-        if(sub.IsNull()) return nullptr;
-        if(pyObj) {
-            TopoShape ts(sub);
-            if(pmat) ts.transformShape(*pmat,false,true);
-            *pyObj =  Py::new_reference_to(shape2pyshape(ts.getShape()));
-        }
+        TopoDS_Shape shape = Shape.getValue().Located(TopLoc_Location());
+        TopoShape ts = (element==0||*element==0)?shape:TopoShape(shape).getSubShape(element);
+        if(pmat && ts.isNull()) 
+            ts.transformShape(*pmat,false,true);
+        *pyObj =  Py::new_reference_to(shape2pyshape(ts.getShape()));
         return const_cast<Feature*>(this);
     }catch(Standard_Failure &e) {
         std::string str;

@@ -70,11 +70,19 @@ public:
 
     /** Get the sub object by name
      * @sa DocumentObject::getSubObject()
+     *
+     * @return Return turn if handled, the sub object is returned in \c ret
      */
-    virtual DocumentObject * extensionGetSubObject(const char * /*element*/,
-            const char ** /*subname*/, PyObject ** /*pyObj*/,
-            Base::Matrix4D * /*mat*/, bool /*transform*/) const
-        {return 0;}
+    virtual bool extensionGetSubObject( DocumentObject *&ret, const char *element,
+            const char **subname, PyObject **pyObj, Base::Matrix4D *mat, bool transform, int depth) const;
+
+    /** Get the linked object
+     *  @sa DocumentObject::getLinkedObject()
+     *
+     * @return Return turn if handled, the linked object is returned in \c ret
+     */
+    virtual bool extensionGetLinkedObject(DocumentObject *&ret, bool recursive,
+            Base::Matrix4D *mat, bool transform, int depth) const;
 };
 
 } //App

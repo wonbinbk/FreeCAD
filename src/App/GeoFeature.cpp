@@ -60,9 +60,9 @@ const PropertyComplexGeoData* GeoFeature::getPropertyOfGeometry() const
     return nullptr;
 }
 
-DocumentObject *GeoFeature::getLinkedObject(bool, Base::Matrix4D *mat, bool transform)
+DocumentObject *GeoFeature::getLinkedObject(bool, Base::Matrix4D *mat, bool transform, int /*depth*/) const
 {
     if(mat && transform)
         *mat *= Placement.getValue().toMatrix();
-    return this;
+    return const_cast<GeoFeature*>(this);
 }

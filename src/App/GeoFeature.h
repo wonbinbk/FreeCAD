@@ -62,7 +62,8 @@ public:
      */
     virtual const PropertyComplexGeoData* getPropertyOfGeometry() const;
 
-    DocumentObject *getLinkedObject(bool recurse, Base::Matrix4D *mat, bool transform) override;
+    DocumentObject *getLinkedObject(
+            bool recurse, Base::Matrix4D *mat, bool transform, int depth) const override;
 };
 
 } //namespace App

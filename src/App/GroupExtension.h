@@ -95,6 +95,10 @@ public:
     
     virtual PyObject* getExtensionPyObject(void);
 
+    bool extensionGetSubObject(DocumentObject *&, const char * /*element*/,
+            const char ** /*subname*/, PyObject ** /*pyObj*/,
+            Base::Matrix4D * /*mat*/, bool /*transform*/, int /*depth*/) const override;
+
     /// Properties
     PropertyLinkList Group;
 

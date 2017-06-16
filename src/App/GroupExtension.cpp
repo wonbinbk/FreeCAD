@@ -205,6 +205,30 @@ PyObject* GroupExtension::getExtensionPyObject(void) {
     return Py::new_reference_to(ExtensionPythonObject);
 }
 
+bool GroupExtension::extensionGetSubObject(DocumentObject *&ret, 
+        const char *element, const char **subname, 
+        PyObject **pyObj, Base::Matrix4D *mat, bool /*transform*/, int depth) const 
+{
+    if(!element || *element==0) return false;
+
+    std::string _name;
+    const char *name = element;
+    const char *next = 0;
+    next = strchr(element,'.');
+    if(next) {
+        _name = std::string(element,next-element);
+        name = _name.c_str();
+        ++next;
+    }
+    auto child = Group.find(name);
+    if(child) {
+        ret = child->getSubObject(next,subname,pyObj,mat,true,depth);
+        return true;
+    }
+    return false;
+}
+
+
 
 namespace App {
 EXTENSION_PROPERTY_SOURCE_TEMPLATE(App::GroupExtensionPython, App::GroupExtension)

@@ -161,12 +161,11 @@ DocumentObject* GeoFeatureGroupExtension::getGroupOfObject(const DocumentObject*
 }
 
 
-DocumentObject *GeoFeatureGroupExtension::extensionGetSubObject(const char *element,
-        const char **subname, PyObject **pyObj, Base::Matrix4D *mat, bool transform) const 
+bool GeoFeatureGroupExtension::extensionGetSubObject(DocumentObject *&ret, const char *element,
+        const char **subname, PyObject **pyObj, Base::Matrix4D *mat, bool transform, int depth) const 
 {
-    if(!element || *element==0) return 0;
+    if(!element || *element==0) return false;
 
-    std::vector<PyObject *> ret;
     std::string _name;
     const char *name = element;
     const char *next = 0;
@@ -176,23 +175,23 @@ DocumentObject *GeoFeatureGroupExtension::extensionGetSubObject(const char *elem
         name = _name.c_str();
         ++next;
     }
-    for(auto child : getGeoSubObjects()) {
-        if(!child || !child->getNameInDocument() || 
-            strcmp(name,child->getNameInDocument())!=0)
-            continue;
-
-        if(!mat || !transform)
-            return child->getSubObject(next,subname,pyObj,mat,true);
+    auto child = Group.find(name);
+    if(child) {
+        if(!mat || !transform) {
+            ret = child->getSubObject(next,subname,pyObj,mat,true,depth);
+            return true;
+        }
+        // DO NOT change matrix if the sub object is not found, because our caller
+        // may try other alternatives.
         Base::Matrix4D _mat;
         _mat = (*mat)*const_cast<GeoFeatureGroupExtension*>(this)->placement().getValue().toMatrix();
-        auto ret = child->getSubObject(next,subname,pyObj,&_mat,true);
+        ret = child->getSubObject(next,subname,pyObj,&_mat,true,depth);
         if(ret) {
             *mat = _mat;
-            return ret;
+            return true;
         }
-        break;
     }
-    return 0;
+    return false;
 }
 
 // Python feature ---------------------------------------------------------

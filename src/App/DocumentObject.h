@@ -222,11 +222,13 @@ public:
      * @param transform: if ture, apply object's own placement on to returned
      * shape before appling \c mat.
      *
+     * @param depth: depth limitation as hint for cyclic link detection
+     *
      * @return The document object corresponding to or owning the sub element.
      */
     virtual DocumentObject *getSubObject(const char *element, 
             const char **subname=0, PyObject **pyObj=0, 
-            Base::Matrix4D *mat=0, bool transform=true) const;
+            Base::Matrix4D *mat=0, bool transform=true, int depth=0) const;
 
     /** Return the linked object with optional transformation
      * 
@@ -245,7 +247,7 @@ public:
      * Otherwise, it may return 0 if the link is not valid.
      */
     virtual DocumentObject *getLinkedObject(bool recurse=false, 
-            Base::Matrix4D *mat=0, bool transform=false);
+            Base::Matrix4D *mat=0, bool transform=false, int depth=0) const;
 
     friend class Document;
     friend class Transaction;

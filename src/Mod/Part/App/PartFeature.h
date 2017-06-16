@@ -66,7 +66,7 @@ public:
 
     virtual DocumentObject *getSubObject(const char *element, 
             const char **subname, PyObject **pyObj, 
-            Base::Matrix4D *mat, bool transform) const override;
+            Base::Matrix4D *mat, bool transform, int depth) const override;
 
     TopLoc_Location getLocation() const;
     
