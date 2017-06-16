@@ -82,8 +82,10 @@ DocumentObjectExecReturn *DocumentObject::execute(void)
 {
     //call all extensions
     auto vector = getExtensionsDerivedFromType<App::DocumentObjectExtension>();
-    for(auto ext : vector)
-        ext->extensionExecute();
+    for(auto ext : vector) {
+        auto ret = ext->extensionExecute();
+        if(ret) return ret;
+    }
 
     return StdReturn;
 }
