@@ -141,6 +141,7 @@ TreeWidget::TreeWidget(QWidget* parent)
     Application::Instance->signalActiveDocument.connect(boost::bind(&TreeWidget::slotActiveDocument, this, _1));
     Application::Instance->signalRelabelDocument.connect(boost::bind(&TreeWidget::slotRelabelDocument, this, _1));
     Application::Instance->signalShowHidden.connect(boost::bind(&TreeWidget::slotShowHidden, this, _1));
+    App::GetApplication().signalChangedChildren.connect(boost::bind(&TreeWidget::slotChangedChildren, this, _1));
     
     // Gui::Document::signalChangedObject informs the App::Document property
     // change, not view provider's own property, which is what the signal below
@@ -842,6 +843,15 @@ void TreeWidget::slotChangedViewObject(const Gui::ViewProvider& vp, const App::P
     if(&prop == &vpd.ShowInTree) {
         for(auto &v : DocumentMap) 
             v.second->setItemVisibility(vpd);
+    }
+}
+
+void TreeWidget::slotChangedChildren(const App::DocumentObject &obj)
+{
+    auto vp = Application::Instance->getViewProvider(&obj);
+    if(vp && vp->isDerivedFrom(ViewProviderDocumentObject::getClassTypeId())) {
+        for(auto &v : DocumentMap) 
+            v.second->slotChangeObject(*static_cast<ViewProviderDocumentObject*>(vp),false);
     }
 }
 

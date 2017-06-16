@@ -134,6 +134,7 @@ private:
     void slotRelabelDocument(const Gui::Document&);
     void slotShowHidden(const Gui::Document &);
     void slotChangedViewObject(const Gui::ViewProvider &, const App::Property &);
+    void slotChangedChildren(const App::DocumentObject &);
 
     void changeEvent(QEvent *e);
     void setupText();
