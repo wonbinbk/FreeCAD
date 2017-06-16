@@ -183,8 +183,9 @@ public:
      * @param sType       the type of created object
      * @param pObjectName if nonNULL use that name otherwise generate a new uniq name based on the \a sType
      * @param isNew       if false don't call the \c DocumentObject::setupObject() callback (default is true)
+     * @param viewType    override object's view provider name
      */
-    DocumentObject *addObject(const char* sType, const char* pObjectName=0, bool isNew=true);
+    DocumentObject *addObject(const char* sType, const char* pObjectName=0, bool isNew=true, const char *viewType=0);
     /// Remove a feature out of the document
     void remObject(const char* sName);
     /** Add an existing feature with sName (ASCII) to this document and set it active.

@@ -1265,6 +1265,7 @@ void Document::writeObjects(const std::vector<App::DocumentObject*>& obj,
         writer.Stream() << writer.ind() << "<Object "
         << "type=\"" << (*it)->getTypeId().getName() << "\" "
         << "name=\"" << (*it)->getNameInDocument()       << "\" "
+        << "ViewType=\"" << (*it)->getViewProviderNameStored() << "\" "
         << "/>" << endl;
     }
 
@@ -1304,13 +1305,14 @@ Document::readObjects(Base::XMLReader& reader)
         reader.readElement("Object");
         std::string type = reader.getAttribute("type");
         std::string name = reader.getAttribute("name");
+        const char *viewType = reader.hasAttribute("ViewType")?reader.getAttribute("ViewType"):0;
 
         try {
             // Use name from XML as is and do NOT remove trailing digits because
             // otherwise we may cause a dependency to itself
             // Example: Object 'Cut001' references object 'Cut' and removing the
             // digits we make an object 'Cut' referencing itself.
-            App::DocumentObject* obj = addObject(type.c_str(), name.c_str(), /*isNew=*/ false);
+            App::DocumentObject* obj = addObject(type.c_str(), name.c_str(), /*isNew=*/ false, viewType);
             if (obj) {
                 objs.push_back(obj);
                 // use this name for the later access because an object with
@@ -2166,7 +2168,7 @@ void Document::recomputeFeature(DocumentObject* Feat)
         _recomputeFeature(Feat);
 }
 
-DocumentObject * Document::addObject(const char* sType, const char* pObjectName, bool isNew)
+DocumentObject * Document::addObject(const char* sType, const char* pObjectName, bool isNew, const char *viewType)
 {
     Base::BaseClass* base = static_cast<Base::BaseClass*>(Base::Type::createInstanceByName(sType,true));
 
@@ -2217,6 +2219,12 @@ DocumentObject * Document::addObject(const char* sType, const char* pObjectName,
 
     // mark the object as new (i.e. set status bit 2) and send the signal
     pcObject->StatusBits.set(2);
+
+    if(!viewType)
+        viewType = pcObject->getViewProviderNameOverride();
+    if(viewType) 
+        pcObject->_pcViewProviderName = viewType;
+
     signalNewObject(*pcObject);
 
     // do no transactions if we do a rollback!
@@ -2265,6 +2273,10 @@ void Document::addObject(DocumentObject* pcObject, const char* pObjectName)
 
     // mark the object as new (i.e. set status bit 2) and send the signal
     pcObject->StatusBits.set(2);
+
+    const char *viewType = pcObject->getViewProviderNameOverride();
+    pcObject->_pcViewProviderName = viewType?viewType:"";
+
     signalNewObject(*pcObject);
 
     // do no transactions if we do a rollback!
@@ -2289,6 +2301,9 @@ void Document::_addObject(DocumentObject* pcObject, const char* pObjectName)
         if (d->activeUndoTransaction)
             d->activeUndoTransaction->addObjectDel(pcObject);
     }
+
+    const char *viewType = pcObject->getViewProviderNameOverride();
+    pcObject->_pcViewProviderName = viewType?viewType:"";
 
     // send the signal
     signalNewObject(*pcObject);
