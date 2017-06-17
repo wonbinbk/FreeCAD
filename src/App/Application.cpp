@@ -1311,8 +1311,6 @@ void Application::initTypes(void)
     App ::Origin                    ::init();
     App ::Link                      ::init();
     App ::LinkPython                ::init();
-    App ::LinkSub                   ::init();
-    App ::LinkSubPython             ::init();
     App ::LinkElement               ::init();
 
     // Expression classes

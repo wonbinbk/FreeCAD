@@ -26,6 +26,7 @@
 # include <sstream>
 #endif
 
+#include "DocumentObjectPy.h"
 #include "LinkBaseExtensionPy.h"
 #include "LinkBaseExtensionPy.cpp"
 
@@ -158,6 +159,61 @@ PyObject* LinkBaseExtensionPy::getLinkPropertyInfo(PyObject *args)
 
     PyErr_SetString(PyExc_ValueError, "invalid arguments");
     return 0;
+}
+
+PyObject* LinkBaseExtensionPy::setLink(PyObject *args)
+{
+    auto ext = getLinkBaseExtensionPtr();
+    auto propLink = ext->getLinkedObjectProperty();
+    if(!propLink) {
+        PyErr_SetString(PyExc_RuntimeError, "no link property found");
+        return 0;
+    }
+
+    PyObject *pcObj;
+    PyObject *pcSubs = Py_None;
+    if(!PyArg_ParseTuple(args,"O!|O",&DocumentObjectPy::Type,&pcObj,&pcSubs))
+        return 0;
+
+    DocumentObject *pcObject = static_cast<DocumentObjectPy*>(pcObj)->getDocumentObjectPtr();
+    if(!pcObject || !pcObject->getNameInDocument()) {
+        PyErr_SetString(PyExc_ValueError, "invalid object");
+        return 0;
+    }
+
+    std::vector<std::string> subs;
+    if(pcSubs != Py_None) {
+        if(PyString_Check(pcSubs)) 
+            subs.push_back(PyString_AsString(pcSubs));
+        else if(PyTuple_Check(pcSubs) || PyList_Check(pcSubs)) {
+            Py::Sequence seq(pcSubs);
+            for(Py::Sequence::iterator it = seq.begin();it!=seq.end();++it) {
+                PyObject* item = (*it).ptr();
+                if(!PyString_Check(item)) {
+                    PyErr_SetString(PyExc_TypeError, "sub element must be of string type");
+                    return 0;
+                }
+                subs.push_back(PyString_AsString(item));
+            }
+        }else{
+            PyErr_SetString(PyExc_TypeError, "subs must be of type string, tuple or list");
+            return 0;
+        }
+    }
+
+    auto propSubs = ext->getSubListProperty();
+    if(!propSubs) {
+        if(subs.size()) {
+            PyErr_SetString(PyExc_RuntimeError, "sub elements not supported by this link");
+            return 0;
+        }
+    }else{
+        propSubs->setStatus(Property::User3,true);
+        propSubs->setValue(subs);
+        propSubs->setStatus(Property::User3,false);
+    }
+    propLink->setValue(pcObject);
+    Py_Return;
 }
 
 PyObject *LinkBaseExtensionPy::getCustomAttributes(const char* /*attr*/) const

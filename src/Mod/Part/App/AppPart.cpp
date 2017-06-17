@@ -457,8 +457,6 @@ PyMOD_INIT_FUNC(Part)
     Part::LinkExtensionPython   ::init();
     Part::Link                  ::init();
     Part::LinkPython            ::init();
-    Part::LinkSub               ::init();
-    Part::LinkSubPython         ::init();
 
     Part::Part2DObject          ::init();
     Part::Part2DObjectPython    ::init();

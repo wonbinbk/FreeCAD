@@ -164,7 +164,7 @@ TopoDS_Shape LinkBaseExtension::combineElements(const TopoDS_Shape &shape) {
 TopoDS_Shape LinkBaseExtension::getLinkedShape(const char *subname)
 {
     TopoDS_Shape shape;
-    auto linked = getLink();
+    auto linked = getLinkedObject();
     if(!linked)
         return shape;
     try {
@@ -187,38 +187,32 @@ App::DocumentObjectExecReturn *LinkBaseExtension::buildShape(bool silent) {
     }while(0)
 
     auto propShape = getShapeProperty();
-    if(!propShape || !getLinkShape()) return 0;
+    if(!propShape || !getLinkShape() || !getLinkedObject()) 
+        return 0;
 
     TopoDS_Shape shape;
-    if(getLinkedSubsProperty())
-        shape = getLinkedSubShape();
-    else
-        shape = getLinkedShape();
-    shape = combineElements(shape);
+    auto subs = getSubList();
+    if(subs.empty()) 
+        shape = combineElements(getLinkedShape());
+    else {
+        BRep_Builder builder;
+        TopoDS_Compound compound;
+        builder.MakeCompound(compound);
+        int count = 0;
+        for(const auto &sub : subs) {
+            TopoDS_Shape shape = getLinkedShape(sub.c_str());
+            if(shape.IsNull()) continue;
+            builder.Add(compound,shape);
+            ++count;
+        }
+        if(count)
+            shape = combineElements(compound);
+    }
+    shape = combineElements(getLinkedShape());
     if(shape.IsNull())
         EXEC_RET("No shape found");
     propShape->setValue(shape);
     return 0;
-}
-
-TopoDS_Shape LinkBaseExtension::getLinkedSubShape() {
-    auto subs = getLinkedSubsProperty()->getSubValues();
-    if(subs.empty())
-        return getLinkedShape();
-
-    BRep_Builder builder;
-    TopoDS_Compound compound;
-    builder.MakeCompound(compound);
-    int count = 0;
-    for(const auto &sub : subs) {
-        TopoDS_Shape shape = getLinkedShape(sub.c_str());
-        if(shape.IsNull()) continue;
-        builder.Add(compound,shape);
-        ++count;
-    }
-    if(count==0)
-        return TopoDS_Shape();
-    return compound;
 }
 
 void LinkBaseExtension::setProperty(int idx, App::Property *prop) {
@@ -280,20 +274,3 @@ template<> const char* Part::LinkPython::getViewProviderName(void) const {
 template class AppExport FeaturePythonT<Part::Link>;
 }
 
-//---------------------------------------------------------------------
-PROPERTY_SOURCE_WITH_EXTENSIONS(Part::LinkSub, Part::Feature)
-
-LinkSub::LinkSub() {
-    LinkExtension::initExtension(this);
-    LINK_PROPS_ADD(LINK_PARAMS_PART_LINKSUB);
-    setProperty(PropPlacement, &Placement);
-    setProperty(PropShape, &Shape);
-}
-
-namespace App {
-PROPERTY_SOURCE_TEMPLATE(Part::LinkSubPython, Part::Feature)
-template<> const char* Part::LinkSubPython::getViewProviderName(void) const {
-    return "Gui::ViewProviderLinkPython";
-}
-template class AppExport FeaturePythonT<Part::LinkSub>;
-}

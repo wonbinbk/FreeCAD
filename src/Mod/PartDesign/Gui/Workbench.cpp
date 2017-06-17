@@ -437,7 +437,6 @@ Gui::MenuItem* Workbench::setupMenuBar() const
     part->setCommand("&Part Design");
     *part << "PartDesign_Part"
           << "PartDesign_Link"
-          << "PartDesign_LinkSub"
           << "PartDesign_Body"
           << "PartDesign_NewSketch"
           << "Sketcher_LeaveSketch"
@@ -506,7 +505,6 @@ Gui::ToolBarItem* Workbench::setupToolBars() const
     part->setCommand("Part Design Helper");
     *part << "PartDesign_Part"
           << "PartDesign_Link"
-          << "PartDesign_LinkSub"
           << "PartDesign_Body"
           << "PartDesign_NewSketch"
           << "Sketcher_EditSketch"

@@ -86,7 +86,7 @@ public:
     virtual void onLinkUpdate();
     virtual void onLinkedIconChange(LinkInfoPtr link);
 
-    void setLink(App::DocumentObject *obj, bool reorder=false,
+    void setLink(App::DocumentObject *obj,
         const std::vector<std::string> &subs = std::vector<std::string>()); 
 
     void setMaterial(int index, const App::Material *material);
@@ -227,6 +227,7 @@ protected:
         LinkTypeNormal,
         LinkTypeX,
         LinkTypeSubs,
+        LinkTypeXSubs,
     };
 
     bool hasElements(const App::LinkBaseExtension *ext = 0) const;
@@ -236,7 +237,12 @@ protected:
     void updateDataPrivate(App::LinkBaseExtension *ext, const App::Property*);
     void updateElementChildren(App::LinkBaseExtension *ext);
 
-    bool setLinkType(LinkType type, bool reset=false);
+    bool setLinkType(App::LinkBaseExtension *ext);
+
+    bool hasLinkSubs() const {
+        return linkType==LinkTypeSubs || linkType==LinkTypeXSubs;
+    }
+
     QIcon getLinkedIcon() const;
     virtual QIcon getIconDefault() const;
     void onChangeIcon() const;

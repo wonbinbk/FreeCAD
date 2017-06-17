@@ -36,7 +36,7 @@ QIcon ViewProviderPartLink::getIconDefault() const {
     const char *pixmap;
     if(hasElements())
         pixmap = "links";
-    else if(linkType == LinkTypeSubs)
+    else if(hasLinkSubs())
         pixmap = "Tree_Part_LinkSub";
     else
         pixmap = "Tree_Part_Link";
@@ -45,14 +45,20 @@ QIcon ViewProviderPartLink::getIconDefault() const {
 
 QPixmap ViewProviderPartLink::getOverlayPixmap() const
 {
-    static QPixmap px[6];
+#define LINK_ICON_COUNT 4
+    static QPixmap px[LINK_ICON_COUNT];
+    static QPixmap px2[LINK_ICON_COUNT];
+
     if(px[0].isNull()) {
+        int i = 0;
+        const char **xpm[LINK_ICON_COUNT];
+
         // right top pointing arrow for normal link
-        const char * const feature_link_xpm[]={
-            "8 8 3 1",
+        const char *xpm_link[] = 
+           {"8 8 3 1",
             ". c None",
             "# c #000000",
-            "a c #aaf254",
+            "a c #ffffff",
             "########",
             "##aaaaa#",
             "####aaa#",
@@ -61,14 +67,14 @@ QPixmap ViewProviderPartLink::getOverlayPixmap() const
             "#aaa##a#",
             "#aa#####",
             "########"};
-        px[0] = QPixmap(feature_link_xpm);
+        xpm[i++] = xpm_link;
 
         // left top pointing arrow for xlink
-        const char * const feature_xlink_xpm[]={
-            "8 8 3 1",
+        const char *xpm_xlink[] =
+           {"8 8 3 1",
             ". c None",
             "# c #000000",
-            "a c #aaf254",
+            "a c #ffffff",
             "########",
             "#aaaaa##",
             "#aaa####",
@@ -77,14 +83,14 @@ QPixmap ViewProviderPartLink::getOverlayPixmap() const
             "#a##aaa#",
             "#####aa#",
             "########"};
-        px[1] = QPixmap(feature_xlink_xpm);
+        xpm[i++] = xpm_xlink;
 
-        // double arrow for link subs
-        const char * const feature_linksub_xpm[]={
-            "8 8 3 1",
+        // double right arrow for link subs
+        const char *xpm_linksub[] = 
+           {"8 8 3 1",
             ". c None",
             "# c #000000",
-            "a c #aaf254",
+            "a c #ffffff",
             "########",
             "##aaaaa#",
             "######a#",
@@ -93,59 +99,46 @@ QPixmap ViewProviderPartLink::getOverlayPixmap() const
             "#aa#a#a#",
             "aa##a###",
             "########"};
-        px[2] = QPixmap(feature_linksub_xpm);
+        xpm[i++] = xpm_linksub;
 
-        const char * const feature_links_xpm[]={
-            "8 8 3 1",
+        // double left arrow for xlink subs
+        const char *xpm_xlinksub[] =
+           {"8 8 3 1",
             ". c None",
             "# c #000000",
-            "a c #b0e0e6",
-            "########",
-            "##aaaaa#",
-            "####aaa#",
-            "###aaaa#",
-            "##aaa#a#",
-            "#aaa##a#",
-            "#aa#####",
-            "########"};
-        px[3] = QPixmap(feature_links_xpm);
-
-        const char * const feature_xlinks_xpm[]={
-            "8 8 3 1",
-            ". c None",
-            "# c #000000",
-            "a c #b0e0e6",
+            "a c #ffffff",
             "########",
             "#aaaaa##",
-            "#aaa####",
-            "#aaaa###",
+            "#a######",
+            "#a#aaaaa",
             "#a#aaa##",
-            "#a##aaa#",
-            "#####aa#",
+            "#a#a#aa#",
+            "###a##aa",
             "########"};
-        px[4] = QPixmap(feature_xlinks_xpm);
+        xpm[i++] = xpm_xlinksub;
+        for(int i=0;i<LINK_ICON_COUNT;++i){
+            const char *replace_color = "a c #aaf254";
+            xpm[i][3] = replace_color;
+            px[i] = QPixmap(xpm[i]);
 
-        const char * const feature_linksubs_xpm[]={
-            "8 8 3 1",
-            ". c None",
-            "# c #000000",
-            "a c #aaf254",
-            "########",
-            "##aaaaa#",
-            "######a#",
-            "aaaaa#a#",
-            "##aaa#a#",
-            "#aa#a#a#",
-            "aa##a###",
-            "########"};
-        px[5] = QPixmap(feature_linksubs_xpm);
+            const char *replace_color2 = "a c #ffd700";
+            xpm[i][3] = replace_color2;
+            px2[i] = QPixmap(xpm[i]);
+        }
     }
-    int index = 0;
-    if(linkType == LinkTypeSubs) 
-        index = 2;
-    else if(linkType == LinkTypeX)
+    int index;
+    switch(linkType) {
+    case LinkTypeX:
         index = 1;
-    if(handle.getSize())
-        index += 3;
-    return px[index];
+        break;
+    case LinkTypeSubs:
+        index = 2;
+        break;
+    case LinkTypeXSubs:
+        index = 3;
+        break;
+    default:
+        index = 0;
+    }
+    return hasElements()?px2[index]:px[index];
 }

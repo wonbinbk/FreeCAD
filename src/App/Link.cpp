@@ -134,8 +134,6 @@ DocumentObject *LinkBaseExtension::getContainer(){
 
 DocumentObject *LinkBaseExtension::getLink(int depth) const{
     checkDepth(depth);
-    if(getLinkedSubsProperty())
-        return getLinkedSubs();
     if(getLinkedObjectProperty())
         return getLinkedObject();
     return 0;
@@ -436,24 +434,6 @@ template<> const char* App::LinkPython::getViewProviderName(void) const {
     return "Gui::ViewProviderLinkPython";
 }
 template class AppExport FeaturePythonT<App::Link>;
-}
-
-//-------------------------------------------------------------------------------
-
-PROPERTY_SOURCE_WITH_EXTENSIONS(App::LinkSub, App::DocumentObject)
-
-LinkSub::LinkSub() {
-    LINK_PROPS_ADD(LINK_PARAMS_LINKSUB);
-    LinkExtension::initExtension(this);
-    LinkTransform.setValue(true);
-}
-
-namespace App {
-PROPERTY_SOURCE_TEMPLATE(App::LinkSubPython, App::DocumentObject)
-template<> const char* App::LinkSubPython::getViewProviderName(void) const {
-    return "Gui::ViewProviderLinkPython";
-}
-template class AppExport FeaturePythonT<App::LinkSub>;
 }
 
 //--------------------------------------------------------------------------------

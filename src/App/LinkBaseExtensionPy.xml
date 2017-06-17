@@ -49,6 +49,11 @@
         </UserDocu>
       </Documentation>
     </Methode>
+    <Methode Name="setLink">
+      <Documentation>
+        <UserDocu>setLink(obj,subs=None): set link object with optional sub elements.</UserDocu>
+      </Documentation>
+    </Methode>
     <CustomAttributes />
   </PythonExport>
 </GenerateModel>

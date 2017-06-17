@@ -606,10 +606,10 @@ void LinkHandle::setMaterial(int index, const App::Material *material) {
     pcMat->transparency.setValue(Mat.transparency);
 }
 
-void LinkHandle::setLink(App::DocumentObject *obj, bool reorder,
-        const std::vector<std::string> &subs) 
+void LinkHandle::setLink(App::DocumentObject *obj, const std::vector<std::string> &subs) 
 {
     bool prevLinked = isLinked();
+    bool reorder = false;
     if(!prevLinked || linkInfo->pcLinked->getObject()!=obj) {
         unlink(LinkInfoPtr());
 
@@ -624,12 +624,15 @@ void LinkHandle::setLink(App::DocumentObject *obj, bool reorder,
         if(getVisibility())
             linkInfo->setVisible(true);
 
-        if(reorder && owner)
-            owner->getDocument()->reorderViewProviders(owner,linkInfo->pcLinked);
+        reorder = true;
         onLinkedIconChange(linkInfo);
     }
-    for(const auto &sub : subs) 
-        subInfo.insert(std::make_pair(sub,SubInfo(*this)));
+    for(const auto &sub : subs) {
+        if(sub.size())
+            subInfo.insert(std::make_pair(sub,SubInfo(*this)));
+    }
+    if(reorder && owner && subInfo.size())
+        owner->getDocument()->reorderViewProviders(owner,linkInfo->pcLinked);
     onLinkUpdate();
 }
 
@@ -1149,7 +1152,7 @@ QIcon ViewProviderLink::getIconDefault() const {
     const char *pixmap;
     if(hasElements())
         pixmap = "links";
-    else if(linkType == LinkTypeSubs)
+    else if(hasLinkSubs())
         pixmap = "linksub";
     else 
         pixmap = "link";
@@ -1168,12 +1171,17 @@ QIcon ViewProviderLink::getIcon() const {
 }
 
 QPixmap ViewProviderLink::getOverlayPixmap() const {
-    static QPixmap px[6];
+#define LINK_ICON_COUNT 4
+    static QPixmap px[LINK_ICON_COUNT];
+    static QPixmap px2[LINK_ICON_COUNT];
 
     if(px[0].isNull()) {
+        int i = 0;
+        const char **xpm[LINK_ICON_COUNT];
+
         // right top pointing arrow for normal link
-        const char * const feature_link_xpm[]={
-            "8 8 3 1",
+        const char *xpm_link[] = 
+           {"8 8 3 1",
             ". c None",
             "# c #000000",
             "a c #ffffff",
@@ -1185,11 +1193,11 @@ QPixmap ViewProviderLink::getOverlayPixmap() const {
             "#aaa##a#",
             "#aa#####",
             "########"};
-        px[0] = QPixmap(feature_link_xpm);
+        xpm[i++] = xpm_link;
 
         // left top pointing arrow for xlink
-        const char * const feature_xlink_xpm[]={
-            "8 8 3 1",
+        const char *xpm_xlink[] =
+           {"8 8 3 1",
             ". c None",
             "# c #000000",
             "a c #ffffff",
@@ -1201,11 +1209,11 @@ QPixmap ViewProviderLink::getOverlayPixmap() const {
             "#a##aaa#",
             "#####aa#",
             "########"};
-        px[1] = QPixmap(feature_xlink_xpm);
+        xpm[i++] = xpm_xlink;
 
-        // double arrow for link subs
-        const char * const feature_linksub_xpm[]={
-            "8 8 3 1",
+        // double right arrow for link subs
+        const char *xpm_linksub[] = 
+           {"8 8 3 1",
             ". c None",
             "# c #000000",
             "a c #ffffff",
@@ -1217,61 +1225,47 @@ QPixmap ViewProviderLink::getOverlayPixmap() const {
             "#aa#a#a#",
             "aa##a###",
             "########"};
-        px[2] = QPixmap(feature_linksub_xpm);
+        xpm[i++] = xpm_linksub;
 
-        const char * const feature_links_xpm[]={
-            "8 8 3 1",
+        // double left arrow for xlink subs
+        const char *xpm_xlinksub[] =
+           {"8 8 3 1",
             ". c None",
             "# c #000000",
-            "a c #ffff66",
-            "########",
-            "##aaaaa#",
-            "####aaa#",
-            "###aaaa#",
-            "##aaa#a#",
-            "#aaa##a#",
-            "#aa#####",
-            "########"};
-        px[3] = QPixmap(feature_links_xpm);
-
-        const char * const feature_xlinks_xpm[]={
-            "8 8 3 1",
-            ". c None",
-            "# c #000000",
-            "a c #ffff66",
+            "a c #ffffff",
             "########",
             "#aaaaa##",
-            "#aaa####",
-            "#aaaa###",
+            "#a######",
+            "#a#aaaaa",
             "#a#aaa##",
-            "#a##aaa#",
-            "#####aa#",
+            "#a#a#aa#",
+            "###a##aa",
             "########"};
-        px[4] = QPixmap(feature_xlinks_xpm);
+        xpm[i++] = xpm_xlinksub;
 
-        const char * const feature_linksubs_xpm[]={
-            "8 8 3 1",
-            ". c None",
-            "# c #000000",
-            "a c #ffff66",
-            "########",
-            "##aaaaa#",
-            "######a#",
-            "aaaaa#a#",
-            "##aaa#a#",
-            "#aa#a#a#",
-            "aa##a###",
-            "########"};
-        px[5] = QPixmap(feature_linksubs_xpm);
+        for(int i=0;i<LINK_ICON_COUNT;++i) {
+            px[i] = QPixmap(xpm[i]);
+
+            const char *replace_color = "a c #ffffaa";
+            xpm[i][3] = replace_color;
+            px2[i] = QPixmap(xpm[i]);
+        }
     }
-    int index = 0;
-    if(linkType == LinkTypeSubs) 
-        index = 2;
-    else if(linkType == LinkTypeX)
+    int index;
+    switch(linkType) {
+    case LinkTypeX:
         index = 1;
-    if(handle.getSize())
-        index += 3;
-    return px[index];
+        break;
+    case LinkTypeSubs:
+        index = 2;
+        break;
+    case LinkTypeXSubs:
+        index = 3;
+        break;
+    default:
+        index = 0;
+    }
+    return hasElements()?px2[index]:px[index];
 }
 
 bool ViewProviderLink::onDelete(const std::vector<std::string> &subs) {
@@ -1373,30 +1367,40 @@ void ViewProviderLink::onChanged(const App::Property* prop) {
     inherited::onChanged(prop);
 }
 
-bool ViewProviderLink::setLinkType(LinkType type, bool reset) {
-    if(!reset && linkType == type) return true;
-    switch(type) {
-    case LinkTypeSubs:
-        if(linkType != LinkTypeNone)
+bool ViewProviderLink::setLinkType(App::LinkBaseExtension *ext) {
+    auto propLink = ext->getLinkedObjectProperty();
+    if(!propLink) return false;
+    bool xlink = propLink->isDerivedFrom(App::PropertyXLink::getClassTypeId()) &&
+        static_cast<const App::PropertyXLink*>(propLink)->getDocumentPath();
+    LinkType type = LinkTypeNone;
+    const auto &subs = ext->getSubList();
+    for(const auto &sub : subs) {
+        if(sub.size()){
+            type = xlink?LinkTypeXSubs:LinkTypeSubs;
             break;
-        handle.setNodeType(linkTransform?LinkHandle::SnapshotContainer:
-                LinkHandle::SnapshotContainerTransform);
+        }
+    }
+    if(type == LinkTypeNone)
+        type = xlink?LinkTypeX:LinkTypeNormal;
+    if(linkType != type) {
         linkType = type;
         signalChangeIcon();
-        return true;
+    }
+    switch(type) {
+    case LinkTypeSubs:
+    case LinkTypeXSubs:
+        handle.setNodeType(linkTransform?LinkHandle::SnapshotContainer:
+                LinkHandle::SnapshotContainerTransform);
+        break;
     case LinkTypeNormal:
     case LinkTypeX:
-        if(linkType!=LinkTypeNone && linkType!=LinkTypeNormal && linkType!=LinkTypeX)
-            break;
         handle.setNodeType(linkTransform?LinkHandle::SnapshotVisible:
                 LinkHandle::SnapshotTransform);
-        linkType = type;
-        return true;
+        break;
     default:
-        return false;
+        break;
     }
-    FC_ERR("Link: link type conflict");
-    return false;
+    return true;
 }
 
 App::LinkBaseExtension *ViewProviderLink::getLinkExtension() {
@@ -1436,7 +1440,7 @@ void ViewProviderLink::updateElementChildren(App::LinkBaseExtension *ext) {
 void ViewProviderLink::updateDataPrivate(App::LinkBaseExtension *ext, const App::Property *prop) {
     if(!prop) return;
     if(prop == ext->getLinkRecomputedProperty()) {
-        if(linkType == LinkTypeSubs)
+        if(hasLinkSubs())
             handle.onLinkUpdate();
         updateElementChildren(ext);
     }else if(prop == ext->getScaleProperty()) {
@@ -1449,20 +1453,15 @@ void ViewProviderLink::updateDataPrivate(App::LinkBaseExtension *ext, const App:
             ViewProviderGeometryObject::updateTransform(ext->getPlacement(), pcTransform);
             pcTransform->scaleFactor.setValue(v);
         }
-    }else if(prop == ext->getLinkedObjectProperty()) {
-        bool xlink = prop->isDerivedFrom(App::PropertyXLink::getClassTypeId()) &&
-                static_cast<const App::PropertyXLink*>(prop)->getDocumentPath();
-        if(setLinkType(xlink?LinkTypeX:LinkTypeNormal))
-            handle.setLink(ext->getLinkedObject());
-    }else if(prop == ext->getLinkedSubsProperty()) {
-        if(setLinkType(LinkTypeSubs)) {
-            auto propLink = ext->getLinkedSubsProperty();
-            handle.setLink(propLink->getValue(),true,propLink->getSubValues());
-        }
+    }else if(prop == ext->getLinkedObjectProperty() ||
+             prop == ext->getSubListProperty()) 
+    {
+        if(!prop->testStatus(App::Property::User3) && setLinkType(ext))
+            handle.setLink(ext->getLinkedObject(),ext->getSubList());
     }else if(prop == ext->getLinkTransformProperty()) {
         if(linkTransform != ext->getLinkTransform()) {
             linkTransform = !linkTransform;
-            setLinkType(linkType,true);
+            setLinkType(ext);
         }
     }else if(prop == ext->getElementCountProperty()) {
         auto propCount = ext->getElementCountProperty();
@@ -1575,11 +1574,8 @@ void ViewProviderLink::finishRestoring() {
     FC_TRACE("finish restoring");
     auto ext = getLinkExtension();
     if(!ext) return;
-    App::Property *prop;
-    if((prop=ext->getLinkedSubsProperty()))
-        updateDataPrivate(ext,prop);
-    else if((prop=ext->getLinkedObjectProperty()))
-        updateDataPrivate(ext,prop);
+    App::Property *prop = ext->getLinkedObjectProperty();
+    updateDataPrivate(ext,prop);
     if(ext->getLinkPlacementProperty())
         updateDataPrivate(ext,ext->getLinkPlacementProperty());
     else
@@ -1615,7 +1611,7 @@ std::vector<App::DocumentObject*> ViewProviderLink::claimChildren(void) const {
 }
 
 std::vector<App::DocumentObject*> ViewProviderLink::claimChildrenPrivate(void) const {
-    if(linkType!=LinkTypeSubs) {
+    if(!hasLinkSubs()) {
         auto linked = getLinkedView(true);
         if(linked!=this)
             return linked->claimChildren();
@@ -1647,8 +1643,7 @@ void ViewProviderLink::dragObject(App::DocumentObject* obj) {
 }
 
 bool ViewProviderLink::canDropObject(App::DocumentObject* obj) const {
-    if(hasElements()) return false;
-    if(linkType==LinkTypeSubs || !handle.isLinked()) return true;
+    if(!handle.isLinked() || hasLinkSubs()) return true;
     auto linked = getLinkedView(true);
     if(linked!=this)
         return linked->canDropObject(obj);
@@ -1656,8 +1651,7 @@ bool ViewProviderLink::canDropObject(App::DocumentObject* obj) const {
 }
 
 bool ViewProviderLink::canDropObjects() const {
-    if(hasElements()) return false;
-    if(linkType==LinkTypeSubs || !handle.isLinked()) return true;
+    if(!handle.isLinked() || hasLinkSubs()) return true;
     auto linked = getLinkedView(true);
     if(linked!=this)
         return linked->canDropObjects();
@@ -1668,31 +1662,53 @@ void ViewProviderLink::dropObjectEx(App::DocumentObject* obj,
         App::DocumentObject *owner, const char *subname) 
 {
     auto ext = getLinkExtension();
-    if(!ext || hasElements(ext)) return;
-    if(linkType==LinkTypeSubs) {
-        auto propLinkSub = ext->getLinkedSubsProperty();
-        if(!propLinkSub)
-            throw Base::RuntimeError("Link: no linksub property");
-        std::vector<std::string> subs;
-        if(subname && *subname) subs.push_back(subname);
-        propLinkSub->setValue(owner,subs);
-        return;
-    }
+    if(!ext) return;
 
-    auto linked = getLinkedView(true);
-    if(linked!=this) {
-        linked->dropObject(obj);
-        return;
-    }
     auto propLink = ext->getLinkedObjectProperty();
     if(!propLink)
         throw Base::RuntimeError("Link: no link property");
-    propLink->setValue(obj);
+
+    auto propSubs = ext->getSubListProperty();
+    auto linked = ext->getLinkedObject();
+    if(!linked || (linked!=owner && hasLinkSubs())) {
+        if(owner && subname && *subname && propSubs) {
+            propSubs->setSize(0);
+            propSubs->setSize(1,std::string(subname));
+            propLink->setValue(owner);
+        }else{
+            if(propSubs) 
+                propSubs->setSize(0);
+            propLink->setValue(obj);
+        }
+        return;
+    }
+    if(linked == owner) {
+        if(!propSubs) {
+            if(linked != obj)
+                propLink->setValue(obj);
+            return;
+        }
+        if(!subname || !*subname)
+            return;
+        const auto &subs = ext->getSubList();
+        for(const auto &sub : subs)
+            if(sub == subname)
+                return;
+        propSubs->setSize(propSubs->getSize()+1,std::string(subname));
+        propSubs->touch();
+        return;
+    }
+
+    if(linked == obj)
+        return;
+
+    auto linkedView = getLinkedView(true);
+    if(linkedView!=this)
+        linkedView->dropObjectEx(obj,owner,subname);
 }
 
 bool ViewProviderLink::canDragAndDropObject(App::DocumentObject* obj) const {
-    if(hasElements()) return false;
-    if(linkType!=LinkTypeSubs || !handle.isLinked()) return false;
+    if(hasLinkSubs() || !handle.isLinked()) return false;
     auto linked = getLinkedView(true);
     if(linked!=this) 
         return linked->canDragAndDropObject(obj);

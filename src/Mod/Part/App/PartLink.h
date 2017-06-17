@@ -73,7 +73,6 @@ protected:
     App::DocumentObjectExecReturn *buildShape(bool);
     TopoDS_Shape combineElements(const TopoDS_Shape &shape);
     TopoDS_Shape getLinkedShape(const char *element=0);
-    TopoDS_Shape getLinkedSubShape();
 };
 
 //////////////////////////////////////////////////////////////////////////////////////////////
@@ -129,33 +128,6 @@ public:
 };
 
 typedef App::FeaturePythonT<Link> LinkPython;
-
-//////////////////////////////////////////////////////////////////////////////////////////////
-
-class LinkSub : public Part::Feature, public Part::LinkExtension
-{
-    PROPERTY_HEADER_WITH_EXTENSIONS(Part::Feature);
-    typedef Part::Feature inherited;
-
-public:
-#define LINK_PARAMS_PART_LINKSUB \
-    LINK_PARAM_EXT(SUBS)
-
-    LINK_PROPS_DEFINE(LINK_PARAMS_PART_LINKSUB)
-
-    LinkSub();
-
-    const char* getViewProviderName(void) const override {
-        return "PartGui::ViewProviderPartLink";
-    }
-
-    void onDocumentRestored() override {
-        LINK_PROPS_SET(LINK_PARAMS_PART_LINKSUB);
-        inherited::onDocumentRestored();
-    }
-};
-
-typedef App::FeaturePythonT<LinkSub> LinkSubPython;
 
 }
 

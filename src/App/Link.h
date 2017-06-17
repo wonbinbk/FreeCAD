@@ -67,7 +67,8 @@ public:
     (LinkedObject, App::DocumentObject*, App::PropertyLink, 0, "Linked object", ##__VA_ARGS__)
 
 #define LINK_PARAM_SUBS(...) \
-    (LinkedSubs, App::DocumentObject*, App::PropertyLinkSub, 0, "Linked object with sub-element", ##__VA_ARGS__)
+    (SubList, std::vector<std::string>, App::PropertyStringList, std::vector<std::string>(), \
+     "Sub-element list of the linked object", ##__VA_ARGS__)
 
 #define LINK_PARAM_TRANSFORM(...) \
     (LinkTransform, bool, App::PropertyBool, false, \
@@ -302,6 +303,7 @@ public:
 #define _LINK_PARAMS_EXT \
     LINK_PARAM_EXT_ATYPE(RECOMPUTED,App::PropertyType(App::Prop_Output|App::Prop_Transient|App::Prop_Hidden)) \
     LINK_PARAM_EXT(LINK_PLACEMENT)\
+    LINK_PARAM_EXT(SUBS)\
     LINK_PARAM_EXT(SCALE)\
     LINK_PARAM_EXT(TRANSFORM)\
     LINK_PARAM_EXT(SCALES)\
@@ -358,33 +360,6 @@ public:
 };
 
 typedef App::FeaturePythonT<Link> LinkPython;
-
-///////////////////////////////////////////////////////////////////////////
-
-class AppExport LinkSub : public App::DocumentObject, public App::LinkExtension
-{
-    PROPERTY_HEADER_WITH_EXTENSIONS(App::LinkSub);
-    typedef App::DocumentObject inherited;
-public:
-#define LINK_PARAMS_LINKSUB \
-    LINK_PARAM_EXT(SUBS)\
-    LINK_PARAM_EXT_ATYPE(PLACEMENT,App::PropertyType(App::Prop_Transient|App::Prop_Hidden)) 
-
-    LINK_PROPS_DEFINE(LINK_PARAMS_LINKSUB)
-
-    LinkSub(void);
-
-    const char* getViewProviderName(void) const override{
-        return "Gui::ViewProviderLink";
-    }
-
-    void onDocumentRestored() override {
-        LINK_PROPS_SET(LINK_PARAMS_LINKSUB);
-        inherited::onDocumentRestored();
-    }
-};
-
-typedef App::FeaturePythonT<LinkSub> LinkSubPython;
 
 ///////////////////////////////////////////////////////////////////////////
 
