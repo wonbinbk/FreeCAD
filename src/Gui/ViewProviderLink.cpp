@@ -44,7 +44,6 @@
 #include "Selection.h"
 #include "MainWindow.h"
 #include "ViewProviderLink.h"
-#include "ViewProviderLinkPy.h"
 #include "ViewProviderGeometryObject.h"
 #include <App/GeoFeatureGroupExtension.h>
 #include <SoFCUnifiedSelection.h>
