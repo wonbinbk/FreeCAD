@@ -271,6 +271,6 @@ PROPERTY_SOURCE_TEMPLATE(Part::LinkPython, Part::Feature)
 template<> const char* Part::LinkPython::getViewProviderName(void) const {
     return "Gui::ViewProviderLinkPython";
 }
-template class AppExport FeaturePythonT<Part::Link>;
+template class PartExport FeaturePythonT<Part::Link>;
 }
 

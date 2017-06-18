@@ -54,7 +54,6 @@ using namespace Gui;
 
 ////////////////////////////////////////////////////////////////////////////
 
-
 #ifdef FC_DEBUG
 void appendPath(SoPath *path, SoNode *node) {
     if(path->getLength()) {
@@ -198,7 +197,7 @@ public:
     void remove(LinkHandle *l) {
         auto it = links.find(l);
         if(it!=links.end()) {
-            if(l->linkInfo.get()!=this || l->getVisibility()) 
+            if(l->linkInfo!=this || l->getVisibility()) 
                 setVisible(false);
             links.erase(it);
         }
@@ -266,18 +265,8 @@ public:
         }
     }
 
-    friend void intrusive_ptr_add_ref(LinkInfo *px){
-        ++px->ref;
-    }
-
-    friend void intrusive_ptr_release(LinkInfo *px){
-        int r = --px->ref;
-        assert(r>=0);
-        if(r==0) 
-            delete px;
-        else if(r==1) 
-            px->clear();
-    }
+    friend void ::intrusive_ptr_add_ref(LinkInfo *px);
+    friend void ::intrusive_ptr_release(LinkInfo *px);
 
     SoSeparator *getSnapshot(int type, bool update=false) {
         if(type<0 || type>=LinkHandle::SnapshotMax)
@@ -491,6 +480,19 @@ public:
         return iconLink;
     }
 };
+
+void intrusive_ptr_add_ref(LinkInfo *px){
+    ++px->ref;
+}
+
+void intrusive_ptr_release(LinkInfo *px){
+    int r = --px->ref;
+    assert(r>=0);
+    if(r==0) 
+        delete px;
+    else if(r==1) 
+        px->clear();
+}
 
 ////////////////////////////////////////////////////////////////////////////////////
 

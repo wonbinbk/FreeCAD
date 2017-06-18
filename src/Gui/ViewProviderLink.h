@@ -28,7 +28,8 @@
 #include <boost/preprocessor/seq/for_each.hpp>
 #include <App/PropertyGeo.h>
 #include <App/Link.h>
-#include <Gui/ViewProviderPythonFeature.h>
+#include "SoFCUnifiedSelection.h"
+#include "ViewProviderPythonFeature.h"
 #include "ViewProviderDocumentObject.h"
 #include "ViewProviderExtension.h"
 
@@ -42,13 +43,17 @@ namespace Gui {
 template<class T>
 class CoinPtr: public boost::intrusive_ptr<T> {
 public:
-    using boost::intrusive_ptr<T>::intrusive_ptr;
+    // Too bad, VC2013 does not support constructor inheritance
+    //using boost::intrusive_ptr<T>::intrusive_ptr;
+    typedef boost::intrusive_ptr<T> inherited;
+    CoinPtr() {}
+    CoinPtr(T *p, bool add_ref=true):inherited(p,add_ref){}
+    template<class Y> CoinPtr(CoinPtr<Y> const &r):inherited(r){}
+
     operator T *() const {
         return this->get();
     }
 };
-
-class SoFCSelectionRoot;
 
 class LinkInfo;
 typedef boost::intrusive_ptr<LinkInfo> LinkInfoPtr;
@@ -281,5 +286,8 @@ private:
 
 } //namespace Gui
 
+// forward decleration to please VC 2013
+void intrusive_ptr_add_ref(Gui::LinkInfo *px);
+void intrusive_ptr_release(Gui::LinkInfo *px);
 
 #endif // GUI_VIEWPROVIDER_LINK_H
