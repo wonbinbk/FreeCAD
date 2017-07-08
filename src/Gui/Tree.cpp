@@ -86,6 +86,12 @@ TreeWidget::TreeWidget(QWidget* parent)
     connect(this->syncSelectionAction, SIGNAL(triggered()),
             this, SLOT(onSyncSelection()));
 
+    this->syncViewAction = new QAction(this);
+    this->syncViewAction->setCheckable(true);
+    this->syncViewAction->setChecked(hGrp->GetBool("SyncView",false));
+    connect(this->syncViewAction, SIGNAL(triggered()),
+            this, SLOT(onSyncView()));
+
     this->showHiddenAction = new QAction(this);
     this->showHiddenAction->setCheckable(true);
     connect(this->showHiddenAction, SIGNAL(triggered()),
@@ -207,6 +213,7 @@ void TreeWidget::contextMenuEvent (QContextMenuEvent * e)
     // get the current item
     this->contextItem = itemAt(e->pos());
     contextMenu.addAction(this->syncSelectionAction);
+    contextMenu.addAction(this->syncViewAction);
 
     if (this->contextItem && this->contextItem->type() == DocumentType) {
         if (!contextMenu.actions().isEmpty())
@@ -951,6 +958,9 @@ void TreeWidget::setupText() {
     this->syncSelectionAction->setText(tr("Sync selection"));
     this->syncSelectionAction->setStatusTip(tr("Auto expand item when selected in 3D view"));
 
+    this->syncViewAction->setText(tr("Sync view"));
+    this->syncViewAction->setStatusTip(tr("Auto switch to the 3D view containing the selected item"));
+
     this->showHiddenAction->setText(tr("Show hidden items"));
     this->showHiddenAction->setStatusTip(tr("Show hidden tree view items"));
 
@@ -988,6 +998,11 @@ void TreeWidget::setupText() {
 void TreeWidget::onSyncSelection() {
     GET_TREEVIEW_PARAM(hGrp);
     hGrp->SetBool("SyncSelection",syncSelectionAction->isChecked());
+}
+
+void TreeWidget::onSyncView() {
+    GET_TREEVIEW_PARAM(hGrp);
+    hGrp->SetBool("SyncView",syncViewAction->isChecked());
 }
 
 void TreeWidget::onShowHidden() {
@@ -1705,6 +1720,9 @@ void DocumentItem::updateItemSelection(DocumentObjectItem *item) {
     else if(!Gui::Selection().addSelection(docname,objname,subname)) {
         item->selected = 0;
         item->setSelected(false);
+    }else if(getTree()->syncViewAction->isChecked()) {
+        MDIView *view = document()->getActiveView();
+        if (view) getMainWindow()->setActiveWindow(view);
     }
 }
 

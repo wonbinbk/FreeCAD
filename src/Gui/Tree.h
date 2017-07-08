@@ -117,6 +117,7 @@ protected Q_SLOTS:
     void onSelectLinkedFinal();
     void onSelectAllLinks();
     void onSyncSelection();
+    void onSyncView();
     void onShowHidden();
     void onHideInTree();
 
@@ -151,6 +152,7 @@ private:
     QAction* selectLinkedFinalAction;
     QAction* selectAllLinksAction;
     QAction* syncSelectionAction;
+    QAction* syncViewAction;
     QAction* showHiddenAction;
     QAction* hideInTreeAction;
     QTreeWidgetItem* contextItem;
