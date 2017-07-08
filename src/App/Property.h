@@ -26,6 +26,7 @@
 
 // Std. configurations
 
+#include <Base/Exception.h>
 #include <Base/Persistence.h>
 #ifndef BOOST_105400
 #include <boost/any.hpp>
@@ -216,7 +217,7 @@ protected:
     virtual void setPyValues(const std::vector<PyObject*> &vals, const std::vector<int> &indices) {
         (void)vals;
         (void)indices;
-        return;
+        throw Base::NotImplementedError("not implemented");
     }
 
 protected:
@@ -278,11 +279,17 @@ protected:
      * set1Value() with a proper default \c touch parameter. 
      */
     void _set1Value(int index, const_reference value, bool touch) {
-        assert(index>=0);
+        int size = getSize();
+        if(index<-1 || index>size)
+            throw Base::RuntimeError("index out of bound");
         if(touch)
             aboutToSetValue();
+        if(index==-1 || index == size) {
+            index = size;
+            setSize(index+1,value);
+        }else
+            _lValueList[index] = value;
         _touchList.insert(index);
-        _lValueList[index] = value;
         if(touch) {
             hasSetValue();
             _touchList.clear();
@@ -292,7 +299,8 @@ protected:
     /** Derived class is expected to make this public with a proper default \c touch */
     virtual void set1Value(int index, const_reference value, bool touch)=0;
 
-    void setPyValues(const std::vector<PyObject*> &vals, const std::vector<int> &indices) override {
+    void setPyValues(const std::vector<PyObject*> &vals, const std::vector<int> &indices) override 
+    {
         ListT values;
         // old version boost::dynamic_bitset don't have reserve(). What a shame!
         // values.reserve(vals.size());
@@ -302,10 +310,8 @@ protected:
             setValues(values);
         else {
             assert(values.size()==indices.size());
-            int i,count;
-            for(i=0,count=values.size()-1;i<count;++i)
-                set1Value(indices[i],values[i],false);
-            set1Value(indices[i],values[i],true);
+            for(int i=0,count=values.size();i<count;++i)
+                set1Value(indices[i],values[i],i+1==count);
         }
     }
 
