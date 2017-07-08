@@ -265,8 +265,32 @@ public:
         }
     }
 
+    inline void addref() {
+        ++ref;
+    }
+
+    inline void release(){
+        int r = --ref;
+        assert(r>=0);
+        if(r==0) 
+            delete this;
+        else if(r==1) 
+            clear();
+    }
+
+    // VC2013 has trouble with template argument dependent lookup in
+    // namespace. Have to put the below functions in global namespace.
+    //
+    // However, gcc seems to behave the oppsite, hence the conditional
+    // compilation  here.
+    //
+#ifdef _MSC_VER
     friend void ::intrusive_ptr_add_ref(LinkInfo *px);
     friend void ::intrusive_ptr_release(LinkInfo *px);
+#else
+    friend inline void intrusive_ptr_add_ref(LinkInfo *px) { px->addref(); }
+    friend inline void intrusive_ptr_release(LinkInfo *px) { px->release(); }
+#endif
 
     SoSeparator *getSnapshot(int type, bool update=false) {
         if(type<0 || type>=LinkHandle::SnapshotMax)
@@ -481,18 +505,15 @@ public:
     }
 };
 
-void intrusive_ptr_add_ref(LinkInfo *px){
-    ++px->ref;
+#ifdef _MSC_VER
+void intrusive_ptr_add_ref(Gui::LinkInfo *px){
+    px->addref();
 }
 
-void intrusive_ptr_release(LinkInfo *px){
-    int r = --px->ref;
-    assert(r>=0);
-    if(r==0) 
-        delete px;
-    else if(r==1) 
-        px->clear();
+void intrusive_ptr_release(Gui::LinkInfo *px){
+    px->release();
 }
+#endif
 
 ////////////////////////////////////////////////////////////////////////////////////
 

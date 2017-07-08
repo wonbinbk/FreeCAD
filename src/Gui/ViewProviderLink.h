@@ -286,8 +286,10 @@ private:
 
 } //namespace Gui
 
+#ifdef _MSC_VER
 // forward decleration to please VC 2013
 void intrusive_ptr_add_ref(Gui::LinkInfo *px);
 void intrusive_ptr_release(Gui::LinkInfo *px);
+#endif
 
 #endif // GUI_VIEWPROVIDER_LINK_H
