@@ -649,6 +649,7 @@ void LinkHandle::setLink(App::DocumentObject *obj, const std::vector<std::string
         reorder = true;
         onLinkedIconChange(linkInfo);
     }
+    subInfo.clear();
     for(const auto &sub : subs) {
         if(sub.size())
             subInfo.insert(std::make_pair(sub,SubInfo(*this)));
