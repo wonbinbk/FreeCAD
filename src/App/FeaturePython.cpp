@@ -95,6 +95,39 @@ bool FeaturePythonImp::execute()
     return false;
 }
 
+bool FeaturePythonImp::isTouched() const
+{
+    // Run the execute method of the proxy object.
+    Base::PyGILStateLocker lock;
+    try {
+        Property* proxy = object->getPropertyByName("Proxy");
+        if (proxy && proxy->getTypeId() == PropertyPythonObject::getClassTypeId()) {
+            Py::Object feature = static_cast<PropertyPythonObject*>(proxy)->getValue();
+            if (feature.hasAttr(std::string("isTouched"))) {
+                if (feature.hasAttr("__object__")) {
+                    Py::Callable method(feature.getAttr(std::string("isTouched")));
+                    Py::Tuple args;
+                    Py::Object res(method.apply(args));
+                    return res.isTrue();
+                }
+                else {
+                    Py::Callable method(feature.getAttr(std::string("isTouched")));
+                    Py::Tuple args(1);
+                    args.setItem(0, Py::Object(object->getPyObject(), true));
+                    Py::Object res(method.apply(args));
+                    return res.isTrue();
+                }
+            }
+        }
+    }
+    catch (Py::Exception&) {
+        Base::PyException e; // extract the Python error text
+        e.ReportException();
+    }
+    return false;
+}
+
+
 void FeaturePythonImp::onBeforeChange(const Property* prop)
 {
     // Run the execute method of the proxy object.

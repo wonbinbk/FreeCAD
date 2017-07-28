@@ -45,6 +45,7 @@ public:
     ~FeaturePythonImp();
 
     bool execute();
+    bool isTouched() const;
     void onBeforeChange(const Property* prop);
     void onChanged(const Property* prop);
     void onDocumentRestored();
@@ -89,6 +90,9 @@ public:
         if (this->isTouched())
             return 1;
         return FeatureT::mustExecute();
+    }
+    virtual bool isTouched() const override {
+        return FeatureT::isTouched() || imp->isTouched();
     }
     /// recalculate the Feature
     virtual DocumentObjectExecReturn *execute(void) {

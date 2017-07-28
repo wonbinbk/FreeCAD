@@ -167,5 +167,11 @@ or None if the GUI is not up</UserDocu>
 			<Parameter Name="ViewObject" Type="Object"/>
 		</Attribute>
 		<CustomAttributes />
+		<Attribute Name="Touched">
+			<Documentation>
+                <UserDocu>Check/set/purge the object's touched status</UserDocu>
+			</Documentation>
+			<Parameter Name="Touched" Type="Boolean"/>
+		</Attribute>
 	</PythonExport>
 </GenerateModel>

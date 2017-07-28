@@ -511,6 +511,29 @@ PyObject*  DocumentObjectPy::getParentGeoFeatureGroup(PyObject *args)
     }
 }
 
+Py::Boolean DocumentObjectPy::getTouched() const
+{
+    try {
+        return Py::Boolean(getDocumentObjectPtr()->isTouched());
+    }
+    catch (const Base::Exception& e) {
+        throw Py::RuntimeError(e.what());
+    }
+}
+
+void DocumentObjectPy::setTouched(Py::Boolean arg)
+{
+    try {
+        if(arg.isTrue())
+            getDocumentObjectPtr()->touch();
+        else
+            getDocumentObjectPtr()->purgeTouched();
+    }
+    catch (const Base::Exception& e) {
+        throw Py::RuntimeError(e.what());
+    }
+}
+
 PyObject *DocumentObjectPy::getCustomAttributes(const char* attr) const
 {
     // search for dynamic property
