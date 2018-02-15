@@ -2993,6 +2993,29 @@ def clone(obj,delta=None,forcedraft=False):
     select(cl)
     return cl
 
+def makeCloneSubs():
+    clone = None
+    if gui:
+        sels = FreeCADGui.Selection.getSelectionEx('',False)
+    else:
+        sels = []
+    linkSels = []
+    for sel in sels:
+        if not clone and \
+           not sel.SubElementNames and \
+           isinstance(getattr(sel.Object,'Proxy',None),_CloneSubs):
+           clone = sel.Object
+           continue
+        subs = sel.SubElementNames
+        linkSels.append((sel.Object,subs if subs else ('',)))
+    if not clone:
+        clone = FreeCAD.ActiveDocument.addObject("Part::FeaturePython","CloneSubs")
+        _CloneSubs(clone)
+        if gui:
+            _ViewProviderCloneSubs(clone.ViewObject)
+    clone.Proxy.setLinks(clone,linkSels,True)
+
+
 def getCloneBase(obj,strict=False):
     '''getCloneBase(obj,[strict]): returns the object cloned by this object, if
     any, or this object if it is no clone. If strict is True, if this object is
@@ -6033,6 +6056,124 @@ class _Clone(_DraftObject):
                     return obj.Objects[0].Proxy.getSubVolume(obj.Objects[0],placement)
         return None
 
+class _CloneSubs(_DraftObject):
+    "The CloneSub object"
+
+    def __init__(self,obj):
+        _DraftObject.__init__(self,obj,"CloneSub")
+        obj.addProperty("App::PropertyLinkSubListGlobal","Links","Draft",
+                QT_TRANSLATE_NOOP("App::Property","The objects included in this clone"))
+        obj.addProperty("App::PropertyBool","ClaimChildren","Draft",
+                QT_TRANSLATE_NOOP("App::Property","Claim linked object as children"))
+        obj.setPropertyStatus('ClaimChildren','Output')
+        vobj.addProperty("App::PropertyBool","Relative","Draft",
+                QT_TRANSLATE_NOOP("App::Property", "Enable relative sub-object linking"))
+        obj.setPropertyStatus('Relative','Output')
+        obj.addProperty("App::PropertyVector","Scale","Draft",
+                QT_TRANSLATE_NOOP("App::Property","The scale factor of this clone"))
+        obj.addProperty("App::PropertyBool","Fuse","Draft",
+                QT_TRANSLATE_NOOP("App::Property","If this clones several objects, this specifies if the result is a fusion or a compound"))
+        obj.Scale = Vector(1,1,1)
+
+    def getShape(self,obj):
+        shapes = []
+        mat = FreeCAD.Matrix()
+        mat.scale(obj.Scale)
+        import Part
+        for link,subs in obj.Links:
+            if not subs:
+                subs = ['']
+            elif len(subs)>1:
+                try:
+                    subs.remove('')
+                except ValueError:
+                    pass
+            for sub in subs:
+                shape = Part.getShape(link,sub,mat,True)
+                if shape and not shape.isNull():
+                    shapes.append(shape)
+        if not shapes:
+            return
+        # make compound event if there is only one shape, in order to preserve
+        # shape's placement
+        shape = Part.makeCompound(shapes)
+        if obj.Fuse:
+            solids = shape.Solids
+            if len(solids) == 1:
+                return solids[0]
+            elif len(solids) > 1:
+                try:
+                    sh = solids[0].multiFuse(solids[1:])
+                    sh = sh.removeSplitter()
+                except Exception:
+                    pass
+                else:
+                    return sh
+            elif not shape.Shells:
+                edges = shape.Edges
+                if len(edges)>1:
+                    import DraftGeomUtils
+                    wires = DraftGeomUtils.findWires(shape.Edges)
+                    if wires:
+                        shape = Part.makeCompound(wires)
+        return shape
+
+    def execute(self,obj):
+        shape = self.getShape(obj)
+        if not shape or shape.isNull():
+            raise RuntimeError('failed to generate shape')
+        obj.Shape = shape
+        if hasattr(obj,"positionBySupport"):
+            obj.positionBySupport()
+
+    def setLinks(self,obj,sels,reset=False):
+        links = [] if reset else obj.Links
+        inList = set(obj.InListExRecursive)
+        for selObj,subs in sels :
+            if selObj==obj or selObj in inList:
+                raise RuntimeError('Cyclic dependency')
+            if selObj.getDocument()!=obj.getDocument():
+                raise RuntimeError('Direct external linking is not supported')
+            for subname in subs:
+                if subname and not obj.Relative:
+                    sobj = selObj.getSubObject(subname,1)
+                    if not sobj:
+                        raise RuntimeError('Cannot find sub-object {}.{}'.format(
+                            selObj.Name,subname))
+                    if sobj.getDocument()!=obj.getDocument():
+                        sobj.selObj
+                    elif subname[-1] == '.':
+                        subname = ''
+                    else:
+                        subname = subname.split('.')[-1]
+                else:
+                    sobj = selObj
+                newLinks = []
+                found = False
+                for link,subs in links:
+                    if link != sobj:
+                        newLinks.append((link,subs))
+                        continue
+                    found = True
+                    if not subname:
+                        newLinks.append((sobj,('',)))
+                    elif subname in subs:
+                        newLinks = links
+                        break
+                    else:
+                        subs = list(subs)
+                        try:
+                            subs.remove('')
+                        except ValueError:
+                            pass
+                        subs.append(subname)
+                        newLinks.append((sobj,subs))
+                if not found:
+                    newLinks.append((sobj,(subname,)))
+                links = newLinks
+        obj.Links = links
+
+
 class _ViewProviderClone:
     "a view provider that displays a Clone icon instead of a Draft icon"
 
@@ -6078,6 +6219,61 @@ class _ViewProviderClone:
                                 colors.append(c)
         if colors:
             vobj.DiffuseColor = colors
+
+
+class _ViewProviderCloneSubs:
+    def __init__(self,vobj):
+        vobj.Proxy = self
+        self.ViewObject = vobj
+        self._tid = 0
+
+    def attach(self,vobj):
+        self.ViewObject = vobj
+        self._tid = 0
+
+    def getIcon(self):
+        return ":/icons/Draft_CloneSubs.svg"
+
+    def __getstate__(self):
+        return None
+
+    def __setstate__(self, state):
+        return None
+
+    def getDisplayModes(self, vobj):
+        modes=[]
+        return modes
+
+    def setDisplayMode(self, mode):
+        return mode
+
+    def canDropObjects(self):
+        return True
+
+    def canDropObject(self,_child):
+        return True
+
+    def canDragAndDropObject(self,_obj):
+        return False
+
+    def dropObjectEx(self,vobj,obj,owner,subname):
+        if not owner:
+            owner = obj
+
+        tid = FreeCAD.getActiveTransaction()
+        reset = False
+        if tid and tid[1]!=self._tid:
+            self._tid = tid
+            from PySide import QtGui
+            if QtGui.QApplication.keyboardModifiers()==QtCore.Qt.ControlModifier:
+                reset = True
+        vobj.Object.Proxy.setLinks(vobj.Object,[(owner,(subname,))],reset)
+
+    def claimChildren(self):
+        obj = self.ViewObject.Object
+        if obj.ClaimChildren:
+            return [ link[0] for link in obj.Links ]
+        return []
 
 class _ViewProviderDraftArray(_ViewProviderDraft):
     "a view provider that displays a Array icon instead of a Draft icon"

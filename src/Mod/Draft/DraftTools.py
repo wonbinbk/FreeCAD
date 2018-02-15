@@ -4903,6 +4903,19 @@ class Draft_Clone(Modifier):
                 FreeCADGui.Selection.addSelection(FreeCAD.ActiveDocument.Objects[-(1+i)])
         self.finish()
 
+class Draft_CloneSubs(Modifier):
+    "The Draft CloneSubs command definition"
+
+    def GetResources(self):
+        return {'Pixmap'  : 'Draft_CloneSubs',
+                'Accel' : "C, S",
+                'MenuText': QtCore.QT_TRANSLATE_NOOP("Draft_CloneSubs", "Clone Sub-objects"),
+                'ToolTip' : QtCore.QT_TRANSLATE_NOOP("Draft_CloneSubs", "Clones the selected sub-object(s)")}
+
+    def Activated(self):
+        Modifier.Activated(self)
+        FreeCADGui.addModule("Draft")
+        FreeCADGui.doCommand('Draft.makeCloneSubs()')
 
 class ToggleGrid():
     "The Draft ToggleGrid command definition"
@@ -5647,6 +5660,7 @@ FreeCADGui.addCommand('Draft_Draft2Sketch',Draft2Sketch())
 FreeCADGui.addCommand('Draft_Array',Array())
 FreeCADGui.addCommand('Draft_LinkArray',LinkArray())
 FreeCADGui.addCommand('Draft_Clone',Draft_Clone())
+FreeCADGui.addCommand('Draft_CloneSubs',Draft_CloneSubs())
 FreeCADGui.addCommand('Draft_PathArray',PathArray())
 FreeCADGui.addCommand('Draft_PathLinkArray',PathLinkArray())
 FreeCADGui.addCommand('Draft_Heal',Heal())
