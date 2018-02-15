@@ -384,18 +384,23 @@ Base::BoundBox3d ViewProviderDocumentObject::getBoundingBox() const {
 
 bool ViewProviderDocumentObject::getElementPicked(const SoPickedPoint *pp, std::string &subname) const
 {
-    auto childRoot = getChildRoot();
-    if(!childRoot)
-        return ViewProvider::getElementPicked(pp,subname);
-
     if(!isSelectable()) return false;
     auto vector = getExtensionsDerivedFromType<Gui::ViewProviderExtension>();
     for(Gui::ViewProviderExtension* ext : vector)
         if(ext->extensionGetElementPicked(pp,subname))
             return true;
 
+    auto childRoot = getChildRoot();
+    int idx;
+    if(!childRoot || 
+       (idx=pcModeSwitch->whichChild.getValue())<0 ||
+       pcModeSwitch->getChild(idx)!=childRoot)
+    {
+        return ViewProvider::getElementPicked(pp,subname);
+    }
+
     SoPath* path = pp->getPath();
-    auto idx = path->findNode(childRoot);
+    idx = path->findNode(childRoot);
     if(idx<0 || idx+1>=path->getLength())
         return false;
     auto vp = getDocument()->getViewProvider(path->getNode(idx+1));
