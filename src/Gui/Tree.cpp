@@ -78,7 +78,7 @@ const int TreeWidget::ObjectType = 1001;
 
 /* TRANSLATOR Gui::TreeWidget */
 TreeWidget::TreeWidget(const char *name, QWidget* parent)
-    : QTreeWidget(parent), SelectionObserver(false), contextItem(0)
+    : QTreeWidget(parent), SelectionObserver(false,false), contextItem(0)
     , editingItem(0), currentDocItem(0),fromOutside(false)
     ,statusUpdateDelay(0),myName(name)
 {
@@ -689,21 +689,32 @@ void TreeWidget::dragMoveEvent(QDragMoveEvent *event)
                 return;
             }
 
-            auto obj = item->object()->getObject();
-            if(item->mySub.size()) {
-                auto subObj = obj->getSubObject(item->mySub.c_str());
-                if(subObj) 
-                    obj = subObj;
-                else
-                    TREE_WARN("invalid trailing subname " << item->mySub);
-            }
-
             std::ostringstream str;
             auto owner = item->getRelativeParent(str,targetItemObj);
-            str << item->mySub;
+            auto subname = str.str();
 
-            // let the view provider decide to accept the object or ignore it
-            if (!vp->canDropObjectEx(obj,owner,str.str().c_str())) {
+            auto obj = item->object()->getObject();
+            if(item->mySubs.empty())
+                item->mySubs.insert("");
+            bool canDrop = false;
+            for(auto &sub : item->mySubs) {
+                auto sobj = obj;
+                if(sub.find('.')!=std::string::npos) {
+                    sobj = obj->getSubObject(sub.c_str());
+                    if(!sobj) {
+                        TREE_ERR("invalid trailing subname " << sub << " of object " <<
+                                obj->getNameInDocument());
+                        continue;
+                    }
+                }
+                // let the view provider decide to accept the object or ignore it
+                if (!vp->canDropObjectEx(sobj,owner,(subname+sub).c_str())) {
+                    event->ignore();
+                    return;
+                }
+                canDrop = true;
+            }
+            if(!canDrop) {
                 event->ignore();
                 return;
             }
@@ -794,18 +805,9 @@ void TreeWidget::dropEvent(QDropEvent *event)
                 auto item = static_cast<DocumentObjectItem*>(*it);
                 Gui::ViewProviderDocumentObject* vpc = item->object();
                 App::DocumentObject* obj = vpc->getObject();
-                if(item->mySub.size()) {
-                    auto subObj = obj->getSubObject(item->mySub.c_str());
-                    if(subObj) 
-                        obj = subObj;
-                    else
-                        TREE_WARN("invalid trailing subname " << item->mySub);
-                }
                 std::ostringstream str;
                 auto owner = item->getRelativeParent(str,targetItemObj);
-                str << item->mySub;
-                std::string subname = str.str();
-
+                auto subname = str.str();
                 if(!dropOnly && vp->canDragAndDropObject(obj)) {
                     // does this have a parent object
                     QTreeWidgetItem* parent = (*it)->parent();
@@ -816,9 +818,17 @@ void TreeWidget::dropEvent(QDropEvent *event)
                         subname.clear();
                     }
                 }
-
-                // now add the object to the target object
-                vp->dropObjectEx(obj,owner,subname.c_str());
+                if(item->mySubs.empty())
+                    item->mySubs.insert("");
+                for(auto &sub : item->mySubs) {
+                    auto sobj = obj;
+                    if(sub.find('.')!=std::string::npos) {
+                        sobj = obj->getSubObject(sub.c_str());
+                        if(!sobj) continue;
+                    }
+                    // now add the object to the target object
+                    vp->dropObjectEx(sobj,owner,(subname+sub).c_str());
+                }
             }
         } catch (const Base::Exception& e) {
             QMessageBox::critical(getMainWindow(), QObject::tr("Drag & drop failed"),
@@ -1943,7 +1953,7 @@ void DocumentItem::updateItemSelection(DocumentObjectItem *item) {
     bool selected = item->isSelected();
     if((selected && item->selected) || (!selected && !item->selected)) 
         return;
-    item->mySub.clear();
+    item->mySubs.clear();
     item->selected = selected;
 
     auto obj = item->object()->getObject();
@@ -2005,7 +2015,7 @@ void DocumentItem::findSelection(bool sync, DocumentObjectItem *item, const char
 
     if(!subname || *subname==0) {
         item->selected+=2;
-        item->mySub.clear();
+        item->mySubs.clear();
         return;
     }
 
@@ -2018,7 +2028,7 @@ void DocumentItem::findSelection(bool sync, DocumentObjectItem *item, const char
         nextsub = dot+1;
     else {
         item->selected+=2;
-        item->mySub = subname;
+        item->mySubs.insert(subname);
         return;
     }
 
@@ -2027,11 +2037,11 @@ void DocumentItem::findSelection(bool sync, DocumentObjectItem *item, const char
     if(!subObj) {
         TREE_WARN("sub object not found " << item->getName() << '.' << name.c_str());
         item->selected += 2;
-        item->mySub = name;
+        item->mySubs.insert(name);
         return;
     }
 
-    item->mySub.clear();
+    item->mySubs.clear();
 
     if(!item->populated && sync) {
         //force populate the item
@@ -2068,7 +2078,7 @@ void DocumentItem::findSelection(bool sync, DocumentObjectItem *item, const char
         // Select the current object instead.
         TREE_TRACE("element " << subname << " not found");
         item->selected+=2;
-        item->mySub = subname;
+        item->mySubs.insert(subname);
     }
 }
 
