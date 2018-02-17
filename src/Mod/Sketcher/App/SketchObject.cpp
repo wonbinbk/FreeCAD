@@ -63,6 +63,7 @@
 
 #include <boost/bind.hpp>
 #include <boost/algorithm/string/predicate.hpp>
+#include <boost/uuid/uuid_io.hpp>
 
 #include <App/Document.h>
 #include <App/FeaturePythonPyImp.h>
@@ -90,38 +91,12 @@ namespace Part {
 using namespace Sketcher;
 using namespace Base;
 
+FC_LOG_LEVEL_INIT("Sketcher",true,true);
+
 const int GeoEnum::RtPnt  = -1;
 const int GeoEnum::HAxis  = -1;
 const int GeoEnum::VAxis  = -2;
 const int GeoEnum::RefExt = -3;
-
-namespace Sketcher {
-const std::string &editPrefix() {
-    static std::string prefix("_");
-    return prefix;
-}
-
-std::vector<std::string> checkSubNames(const std::vector<std::string> &subnames) {
-    const auto &prefix = editPrefix();
-    std::vector<std::string> ret;
-    ret.reserve(subnames.size());
-    for(const auto &subname : subnames) {
-        if(boost::starts_with(subname,prefix))
-            ret.push_back(subname.substr(prefix.size()));
-        else
-            ret.push_back(subname);
-    }
-    return ret;
-}
-
-const char *checkSubName(const char *subname) {
-    if(!subname) return 0;
-    const auto &prefix = editPrefix();
-    if(boost::starts_with(subname,prefix))
-        return subname + prefix.size();
-    return subname;
-}
-}
 
 PROPERTY_SOURCE(Sketcher::SketchObject, Part::Part2DObject)
 
@@ -132,6 +107,7 @@ SketchObject::SketchObject()
     ADD_PROPERTY_TYPE(Constraints,     (0)  ,"Sketch",(App::PropertyType)(App::Prop_None),"Sketch constraints");
     ADD_PROPERTY_TYPE(ExternalGeometry,(0,0),"Sketch",(App::PropertyType)(App::Prop_None),"Sketch external geometry");
 
+    tagCached = false;
     allowOtherBody = true;
     allowUnaligned = true;
 
@@ -5815,8 +5791,10 @@ void SketchObject::onChanged(const App::Property* prop)
     }
     if (prop == &Geometry || prop == &Constraints) {
         Constraints.checkGeometry(getCompleteGeometry());
+        tagCached = false;
     }
     else if (prop == &ExternalGeometry) {
+        tagCached = false;
         // make sure not to change anything while restoring this object
         if (!isRestoring()) {
             // external geometry was cleared
@@ -6106,7 +6084,8 @@ App::DocumentObject *SketchObject::getSubObject(
     if(!subname || !boost::starts_with(subname,prefix))
         return Part2DObject::getSubObject(subname,pyObj,pmat,transform,depth);
 
-    const char *shapetype = subname+prefix.size();
+    std::string sub = checkSubName(subname);
+    const char *shapetype = sub.c_str();
     const Part::Geometry *geo = 0;
     Base::Vector3d point;
     if (boost::starts_with(shapetype,"Edge")) {
@@ -6157,6 +6136,131 @@ App::DocumentObject *SketchObject::getSubObject(
     }
 
     return const_cast<SketchObject*>(this);
+}
+
+const std::string &SketchObject::editPrefix() {
+    static std::string prefix("_");
+    return prefix;
+}
+
+std::vector<std::string> SketchObject::checkSubNames(const std::vector<std::string> &subnames) const{
+    std::vector<std::string> ret;
+    ret.reserve(subnames.size());
+    for(const auto &subname : subnames) 
+        ret.push_back(checkSubName(subname.c_str()));
+    return ret;
+}
+
+std::string SketchObject::checkSubName(const char *sub) const{
+    const char *subname = sub;
+    if(!subname) return std::string();
+    const auto &prefix = editPrefix();
+    if(!boost::starts_with(subname,prefix))
+        return subname;
+    subname += prefix.size();
+    if(!subname[0]) {
+        FC_ERR("invalid subname " << sub);
+        return std::string();
+    }
+    std::istringstream iss(subname+1);
+    boost::uuids::uuid tag;
+    if(!(iss >> tag))
+        // for root point h/v axis
+        return subname;
+
+    while(1) {
+        auto it = tagMap.find(tag);
+        if(it!=tagMap.end()) {
+            std::ostringstream ss;
+            switch(subname[0]) {
+            case 'c': {
+                const auto &vals = Constraints.getValues();
+                if(it->second>=0 && 
+                   it->second<(int)vals.size() &&
+                   vals[it->second]->getTag() == tag)
+                {
+                    ss << "Constraint" << it->second+1;
+                    return ss.str();
+                }
+                break;
+            } case 'e': 
+              case 'v': {
+                auto geo = getGeometry(it->second);
+                if(geo && geo->getTag()==tag) {
+                    if(subname[0]=='e') {
+                        if(it->second>=0)
+                            ss << "Edge" << it->second+1;
+                        else
+                            ss << "ExternalEdge" << (-it->second-3)+1;
+                    }else{
+                        char sep;
+                        int posId = none;
+                        if(!(iss >> sep >> posId) || sep!='_') {
+                            FC_ERR("invalid subname " << sub);
+                            break;
+                        }
+                        int idx = getVertexIndexGeoPos(it->second,static_cast<PointPos>(posId));
+                        if(idx < 0)
+                            break;
+                        ss << "Vertex" << idx+1;
+                    }
+                    return ss.str();
+                }
+                break;
+            } default:
+                FC_ERR("invalid subname " << sub);
+                return sub;
+            }
+        }
+        if(tagCached) {
+            FC_ERR("cannot find subname " << sub);
+            return sub;
+        }
+        tagCached = true;
+        tagMap.clear();
+        int i=0;
+        for(auto v : Constraints.getValues())
+            tagMap[v->getTag()] = i++;
+        i = 0;
+        for(auto v : getInternalGeometry())
+            tagMap[v->getTag()] = i++;
+        i = -3;
+        for(auto v : getExternalGeometry())
+            tagMap[v->getTag()] = i--;
+    }
+}
+
+std::string SketchObject::convertSubName(const char *shapetype) const{
+    std::ostringstream ss;
+    if (boost::starts_with(shapetype,"Edge")) {
+        auto geo = getGeometry(std::atoi(&shapetype[4]) - 1);
+        if (!geo) return shapetype;
+        ss << editPrefix() << 'e' << boost::uuids::to_string(geo->getTag());
+    } else if (boost::starts_with(shapetype,"ExternalEdge")) {
+        int GeoId = std::atoi(&shapetype[12]) - 1;
+        GeoId = -GeoId - 3;
+        auto geo = getGeometry(GeoId);
+        if(!geo) return shapetype;
+        ss << editPrefix() << 'e' << boost::uuids::to_string(geo->getTag());
+    } else if (boost::starts_with(shapetype,"Vertex")) {
+        int VtId = std::atoi(&shapetype[6]) - 1;
+        int GeoId;
+        PointPos PosId;
+        getGeoVertexIndex(VtId,GeoId,PosId);
+        if (PosId==none) return shapetype;
+        auto geo = getGeometry(GeoId);
+        if(!geo) return shapetype;
+        ss << editPrefix() << 'v' << boost::uuids::to_string(geo->getTag()) << '_' << PosId;
+    }
+    else if (boost::starts_with(shapetype,"Constraint")) {
+        int ConstrId = PropertyConstraintList::getIndexFromConstraintName(shapetype);
+        const std::vector< Constraint * > &vals = this->Constraints.getValues();
+        if (ConstrId < 0 || ConstrId >= int(vals.size()))
+            return shapetype;
+        ss << editPrefix() << 'c' << boost::uuids::to_string(vals[ConstrId]->getTag());
+    }else
+        ss << editPrefix() << shapetype;
+    return ss.str();
 }
 
 

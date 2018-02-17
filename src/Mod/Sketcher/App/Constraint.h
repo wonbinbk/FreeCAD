@@ -87,6 +87,9 @@ public:
     virtual Constraint *clone(void) const; // does copy the tag, it will be treated as a rename by the expression engine.
     virtual Constraint *copy(void) const; // does not copy the tag, but generates a new one
 
+    /// returns the tag of the geometry object
+    boost::uuids::uuid getTag() const { return tag; }
+
     static const int GeoUndef;
 
     // from base class

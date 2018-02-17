@@ -123,7 +123,8 @@ void CmdSketcherToggleConstruction::activated(int iMsg)
         }
 
         // get the needed lists and objects
-        const std::vector<std::string> &SubNames = checkSubNames(selection[0].getSubNames());
+        Sketcher::SketchObject* Obj = static_cast<Sketcher::SketchObject*>(selection[0].getObject());
+        const std::vector<std::string> &SubNames = Obj->checkSubNames(selection[0].getSubNames());
         if (SubNames.empty()) {
             QMessageBox::warning(Gui::getMainWindow(), QObject::tr("Wrong selection"),
                 QObject::tr("Select edge(s) from the sketch."));

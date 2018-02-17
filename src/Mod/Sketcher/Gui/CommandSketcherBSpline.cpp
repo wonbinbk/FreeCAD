@@ -368,8 +368,8 @@ void CmdSketcherConvertToNURB::activated(int iMsg)
     }
 
     // get the needed lists and objects
-    const std::vector<std::string> &SubNames = checkSubNames(selection[0].getSubNames());
     Sketcher::SketchObject* Obj = static_cast<Sketcher::SketchObject*>(selection[0].getObject());
+    const std::vector<std::string> &SubNames = Obj->checkSubNames(selection[0].getSubNames());
 
     bool nurbsized = false;
     
@@ -446,8 +446,8 @@ void CmdSketcherIncreaseDegree::activated(int iMsg)
     }
 
     // get the needed lists and objects
-    const std::vector<std::string> &SubNames = checkSubNames(selection[0].getSubNames());
     Sketcher::SketchObject* Obj = static_cast<Sketcher::SketchObject*>(selection[0].getObject());
+    const std::vector<std::string> &SubNames = Obj->checkSubNames(selection[0].getSubNames());
 
     openCommand("Increase degree");
 
@@ -514,7 +514,8 @@ void CmdSketcherIncreaseKnotMultiplicity::activated(int iMsg)
     }
     
     // get the needed lists and objects
-    const std::vector<std::string> &SubNames = checkSubNames(selection[0].getSubNames());
+    Sketcher::SketchObject* Obj = static_cast<Sketcher::SketchObject*>(selection[0].getObject());
+    const std::vector<std::string> &SubNames = Obj->checkSubNames(selection[0].getSubNames());
     
     if(SubNames.size()>1) {
         // Check that only one object is selected, as we need only one object to get the new GeoId after multiplicity change
@@ -522,8 +523,6 @@ void CmdSketcherIncreaseKnotMultiplicity::activated(int iMsg)
                              QObject::tr("The selection comprises more than one item. Please select just one knot."));
         return;
     }
-
-    Sketcher::SketchObject* Obj = static_cast<Sketcher::SketchObject*>(selection[0].getObject());
 
     openCommand("Increase knot multiplicity");
 
@@ -672,7 +671,8 @@ void CmdSketcherDecreaseKnotMultiplicity::activated(int iMsg)
     }
     
     // get the needed lists and objects
-    const std::vector<std::string> &SubNames = checkSubNames(selection[0].getSubNames());
+    Sketcher::SketchObject* Obj = static_cast<Sketcher::SketchObject*>(selection[0].getObject());
+    const std::vector<std::string> &SubNames = Obj->checkSubNames(selection[0].getSubNames());
     
     if(SubNames.size()>1) {
         // Check that only one object is selected, as we need only one object to get the new GeoId after multiplicity change
@@ -680,8 +680,6 @@ void CmdSketcherDecreaseKnotMultiplicity::activated(int iMsg)
                              QObject::tr("The selection comprises more than one item. Please select just one knot."));
         return;
     }
-    
-    Sketcher::SketchObject* Obj = static_cast<Sketcher::SketchObject*>(selection[0].getObject());
     
     openCommand("Decrease knot multiplicity");
     

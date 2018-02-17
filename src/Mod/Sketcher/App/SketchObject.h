@@ -353,7 +353,15 @@ public:
     virtual DocumentObject *getSubObject(const char *subname, PyObject **pyObj=0, 
             Base::Matrix4D *mat=0, bool transform=true, int depth=0) const override;
 
+    std::vector<std::string> checkSubNames(const std::vector<std::string> &) const;
+    std::string checkSubName(const char *) const;
+    std::string convertSubName(const char *) const;
+    std::string convertSubName(const std::string &subname) const 
+        { return convertSubName(subname.c_str()); }
+
 protected:
+    static const std::string &editPrefix();
+
     /// get called by the container when a property has changed
     virtual void onChanged(const App::Property* /*prop*/);
     virtual void onDocumentRestored();
@@ -403,13 +411,12 @@ private:
     boost::signals::scoped_connection constraintsRemovedConn;
 
     bool AutoLockTangencyAndPerpty(Constraint* cstr, bool bForce = false, bool bLock = true);
+
+    mutable std::map<boost::uuids::uuid,int> tagMap;
+    mutable bool tagCached;
 };
 
 typedef App::FeaturePythonT<SketchObject> SketchObjectPython;
-
-const std::string &editPrefix();
-std::vector<std::string> checkSubNames(const std::vector<std::string> &);
-const char *checkSubName(const char *);
 
 } //namespace Sketcher
 

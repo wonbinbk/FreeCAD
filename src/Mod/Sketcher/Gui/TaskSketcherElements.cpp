@@ -207,9 +207,11 @@ void ElementView::deleteSelectedItems()
     doc->openTransaction("Delete");
     std::vector<Gui::SelectionObject> sel = Gui::Selection().getSelectionEx(doc->getName());
     for (std::vector<Gui::SelectionObject>::iterator ft = sel.begin(); ft != sel.end(); ++ft) {
-        Gui::ViewProvider* vp = Gui::Application::Instance->getViewProvider(ft->getObject());
-        if (vp) {
-            vp->onDelete(Sketcher::checkSubNames(ft->getSubNames()));
+        auto sketch = dynamic_cast<Sketcher::SketchObject*>(ft->getObject());
+        if(sketch) {
+            Gui::ViewProvider* vp = Gui::Application::Instance->getViewProvider(ft->getObject());
+            if (vp)
+                vp->onDelete(sketch->checkSubNames(ft->getSubNames()));
         }
     }
     doc->commitTransaction();
@@ -333,8 +335,9 @@ void TaskSketcherElements::onSelectionChanged(const Gui::SelectionChanges& msg)
         if (strcmp(msg.pDocName,sketchView->getSketchObject()->getDocument()->getName())==0 &&
             strcmp(msg.pObjectName,sketchView->getSketchObject()->getNameInDocument())== 0) {
             if (msg.pSubName) {
-                QString expr = QString::fromLatin1(Sketcher::checkSubName(msg.pSubName));
-                std::string shapetype(Sketcher::checkSubName(msg.pSubName));
+                auto sketch = sketchView->getSketchObject();
+                QString expr = QString::fromLatin1(sketch->checkSubName(msg.pSubName).c_str());
+                std::string shapetype(sketch->checkSubName(msg.pSubName).c_str());
                 // if-else edge vertex
                 if (shapetype.size() > 4 && shapetype.substr(0,4) == "Edge") {
                     QRegExp rx(QString::fromLatin1("^Edge(\\d+)$"));

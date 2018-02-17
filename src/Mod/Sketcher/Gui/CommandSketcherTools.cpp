@@ -119,14 +119,13 @@ void CmdSketcherCloseShape::activated(int iMsg)
     }
 
     // get the needed lists and objects
-    const std::vector<std::string> &SubNames = checkSubNames(selection[0].getSubNames());
+    Sketcher::SketchObject* Obj = static_cast<Sketcher::SketchObject*>(selection[0].getObject());
+    const std::vector<std::string> &SubNames = Obj->checkSubNames(selection[0].getSubNames());
     if (SubNames.size() < 2) {
         QMessageBox::warning(Gui::getMainWindow(), QObject::tr("Wrong selection"),
             QObject::tr("Select at least two edges from the sketch."));
         return;
     }
-    
-    Sketcher::SketchObject* Obj = static_cast<Sketcher::SketchObject*>(selection[0].getObject());
 
     int GeoIdFirst=-1;
     int GeoIdLast=-1;
@@ -224,13 +223,13 @@ void CmdSketcherConnect::activated(int iMsg)
     }
 
     // get the needed lists and objects
-    const std::vector<std::string> &SubNames = checkSubNames(selection[0].getSubNames());
+    Sketcher::SketchObject* Obj = static_cast<Sketcher::SketchObject*>(selection[0].getObject());
+    const std::vector<std::string> &SubNames = Obj->checkSubNames(selection[0].getSubNames());
     if (SubNames.size() < 2) {
         QMessageBox::warning(Gui::getMainWindow(), QObject::tr("Wrong selection"),
             QObject::tr("Select at least two edges from the sketch."));
         return;
     }
-    Sketcher::SketchObject* Obj = static_cast<Sketcher::SketchObject*>(selection[0].getObject());
 
     // undo command open
     openCommand("add coincident constraint");
@@ -306,8 +305,8 @@ void CmdSketcherSelectConstraints::activated(int iMsg)
     }
 
     // get the needed lists and objects
-    const std::vector<std::string> &SubNames = checkSubNames(selection[0].getSubNames());
     Sketcher::SketchObject* Obj = static_cast<Sketcher::SketchObject*>(selection[0].getObject());
+    const std::vector<std::string> &SubNames = Obj->checkSubNames(selection[0].getSubNames());
     const std::vector< Sketcher::Constraint * > &vals = Obj->Constraints.getValues();
     
     std::string doc_name = Obj->getDocument()->getName();
@@ -605,7 +604,7 @@ void CmdSketcherSelectElementsAssociatedWithConstraints::activated(int iMsg)
 
     Sketcher::SketchObject* Obj= vp->getSketchObject();
 
-    const std::vector<std::string> &SubNames = checkSubNames(selection[0].getSubNames());
+    const std::vector<std::string> &SubNames = Obj->checkSubNames(selection[0].getSubNames());
     const std::vector< Sketcher::Constraint * > &vals = Obj->Constraints.getValues();
 
     getSelection().clearSelection();
@@ -730,8 +729,8 @@ void CmdSketcherRestoreInternalAlignmentGeometry::activated(int iMsg)
     }
 
     // get the needed lists and objects
-    const std::vector<std::string> &SubNames = checkSubNames(selection[0].getSubNames());
     Sketcher::SketchObject* Obj = static_cast<Sketcher::SketchObject*>(selection[0].getObject());
+    const std::vector<std::string> &SubNames = Obj->checkSubNames(selection[0].getSubNames());
 
     std::string doc_name = Obj->getDocument()->getName();
     std::string obj_name = Obj->getNameInDocument();
@@ -822,14 +821,13 @@ void CmdSketcherSymmetry::activated(int iMsg)
     }
 
     // get the needed lists and objects
-    const std::vector<std::string> &SubNames = checkSubNames(selection[0].getSubNames());
+    Sketcher::SketchObject* Obj = static_cast<Sketcher::SketchObject*>(selection[0].getObject());
+    const std::vector<std::string> &SubNames = Obj->checkSubNames(selection[0].getSubNames());
     if (SubNames.empty()) {
         QMessageBox::warning(Gui::getMainWindow(), QObject::tr("Wrong selection"),
             QObject::tr("Select elements from a single sketch."));
         return;
     }
-
-    Sketcher::SketchObject* Obj = static_cast<Sketcher::SketchObject*>(selection[0].getObject());
 
     getSelection().clearSelection();
 
@@ -1156,8 +1154,8 @@ void SketcherCopy::activate(bool clone)
     }
 
     // get the needed lists and objects
-    const std::vector<std::string> &SubNames = checkSubNames(selection[0].getSubNames());
     Sketcher::SketchObject* Obj = static_cast<Sketcher::SketchObject*>(selection[0].getObject());
+    const std::vector<std::string> &SubNames = Obj->checkSubNames(selection[0].getSubNames());
 
     getSelection().clearSelection();
 
@@ -1611,15 +1609,14 @@ void CmdSketcherRectangularArray::activated(int iMsg)
     }
     
     // get the needed lists and objects
-    const std::vector<std::string> &SubNames = checkSubNames(selection[0].getSubNames());
+    Sketcher::SketchObject* Obj = static_cast<Sketcher::SketchObject*>(selection[0].getObject());
+    const std::vector<std::string> &SubNames = Obj->checkSubNames(selection[0].getSubNames());
     if (SubNames.empty()) {
         QMessageBox::warning(Gui::getMainWindow(), QObject::tr("Wrong selection"),
             QObject::tr("Select elements from a single sketch."));
         return;
     }
 
-    Sketcher::SketchObject* Obj = static_cast<Sketcher::SketchObject*>(selection[0].getObject());
-    
     getSelection().clearSelection();
 
     int LastGeoId = 0;

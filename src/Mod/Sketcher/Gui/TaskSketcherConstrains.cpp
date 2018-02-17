@@ -504,9 +504,11 @@ void ConstraintView::deleteSelectedItems()
     doc->openTransaction("Delete");
     std::vector<Gui::SelectionObject> sel = Gui::Selection().getSelectionEx(doc->getName());
     for (std::vector<Gui::SelectionObject>::iterator ft = sel.begin(); ft != sel.end(); ++ft) {
-        Gui::ViewProvider* vp = Gui::Application::Instance->getViewProvider(ft->getObject());
-        if (vp) {
-            vp->onDelete(Sketcher::checkSubNames(ft->getSubNames()));
+        auto sketch = dynamic_cast<Sketcher::SketchObject*>(ft->getObject());
+        if(sketch) {
+            Gui::ViewProvider* vp = Gui::Application::Instance->getViewProvider(sketch);
+            if (vp) 
+                vp->onDelete(sketch->checkSubNames(ft->getSubNames()));
         }
     }
     doc->commitTransaction();
@@ -629,7 +631,8 @@ void TaskSketcherConstrains::onSelectionChanged(const Gui::SelectionChanges& msg
             strcmp(msg.pObjectName,sketchView->getSketchObject()->getNameInDocument())== 0) {
             if (msg.pSubName) {
                 QRegExp rx(QString::fromLatin1("^Constraint(\\d+)$"));
-                QString expr = QString::fromLatin1(Sketcher::checkSubName(msg.pSubName));
+                QString expr = QString::fromLatin1(
+                        sketchView->getSketchObject()->checkSubName(msg.pSubName).c_str());
                 int pos = expr.indexOf(rx);
                 if (pos > -1) {
                     bool ok;

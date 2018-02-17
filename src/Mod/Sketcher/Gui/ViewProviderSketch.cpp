@@ -664,10 +664,11 @@ bool ViewProviderSketch::mouseButtonPressed(int Button, bool pressed, const SbVe
                     if (pp) {
                         //Base::Console().Log("Select Point:%d\n",this->DragPoint);
                         // Do selection
-                        std::ostringstream ss(editPrefix,std::ios_base::ate);
+                        std::stringstream ss;
                         ss << "Vertex" << edit->PreselectPoint + 1;
 
-#define SEL_PARAMS editDocName.c_str(),editObjName.c_str(),ss.str().c_str()
+#define SEL_PARAMS editDocName.c_str(),editObjName.c_str(),\
+                   (editSubName+getSketchObject()->convertSubName(ss.str())).c_str()
                         if (Gui::Selection().isSelected(SEL_PARAMS) ) {
                              Gui::Selection().rmvSelection(SEL_PARAMS);
                         } else {
@@ -685,7 +686,7 @@ bool ViewProviderSketch::mouseButtonPressed(int Button, bool pressed, const SbVe
                 case STATUS_SELECT_Edge:
                     if (pp) {
                         //Base::Console().Log("Select Point:%d\n",this->DragPoint);
-                        std::ostringstream ss(editPrefix,std::ios_base::ate);
+                        std::stringstream ss;
                         if (edit->PreselectCurve >= 0)
                             ss << "Edge" << edit->PreselectCurve + 1;
                         else // external geometry
@@ -710,7 +711,7 @@ bool ViewProviderSketch::mouseButtonPressed(int Button, bool pressed, const SbVe
                 case STATUS_SELECT_Cross:
                     if (pp) {
                         //Base::Console().Log("Select Point:%d\n",this->DragPoint);
-                        std::ostringstream ss(editPrefix,std::ios_base::ate);
+                        std::stringstream ss;
                         switch(edit->PreselectCross){
                             case 0: ss << "RootPoint" ; break;
                             case 1: ss << "H_Axis"    ; break;
@@ -736,7 +737,7 @@ bool ViewProviderSketch::mouseButtonPressed(int Button, bool pressed, const SbVe
                 case STATUS_SELECT_Constraint:
                     if (pp) {
                         for(std::set<int>::iterator it = edit->PreselectConstraintSet.begin(); it != edit->PreselectConstraintSet.end(); ++it) {
-                            std::ostringstream ss(editPrefix,std::ios_base::ate);
+                            std::stringstream ss;
                             ss << Sketcher::PropertyConstraintList::getConstraintName(*it);
 
                             // If the constraint already selected remove
@@ -917,9 +918,11 @@ bool ViewProviderSketch::mouseButtonPressed(int Button, bool pressed, const SbVe
                          */
                         // only one sketch with its subelements are allowed to be selected
                         if (selection.size() == 1) {
-                            // get the needed lists and objects
-                            const std::vector<std::string> &SubNames = checkSubNames(selection[0].getSubNames());
+                            auto Obj = dynamic_cast<Sketcher::SketchObject*>(selection[0].getObject());
+                            if (!Obj) return false;
 
+                            // get the needed lists and objects
+                            const std::vector<std::string> &SubNames = Obj->checkSubNames(selection[0].getSubNames());
                             // Two Objects are selected
                             if (SubNames.size() == 2) {
                                 // go through the selected subelements
@@ -1463,7 +1466,7 @@ void ViewProviderSketch::onSelectionChanged(const Gui::SelectionChanges& msg)
             if (strcmp(msg.pDocName,getSketchObject()->getDocument()->getName())==0
                 && strcmp(msg.pObjectName,getSketchObject()->getNameInDocument())== 0) {
                 if (msg.pSubName) {
-                    std::string shapetype(checkSubName(msg.pSubName));
+                    std::string shapetype(getSketchObject()->checkSubName(msg.pSubName));
                     if (shapetype.size() > 4 && shapetype.substr(0,4) == "Edge") {
                         int GeoId = std::atoi(&shapetype[4]) - 1;
                         edit->SelCurvSet.insert(GeoId);
@@ -1508,7 +1511,7 @@ void ViewProviderSketch::onSelectionChanged(const Gui::SelectionChanges& msg)
                 if (strcmp(msg.pDocName,getSketchObject()->getDocument()->getName())==0
                     && strcmp(msg.pObjectName,getSketchObject()->getNameInDocument())== 0) {
                     if (msg.pSubName) {
-                        std::string shapetype(checkSubName(msg.pSubName));
+                        std::string shapetype(getSketchObject()->checkSubName(msg.pSubName));
                         if (shapetype.size() > 4 && shapetype.substr(0,4) == "Edge") {
                             int GeoId = std::atoi(&shapetype[4]) - 1;
                             edit->SelCurvSet.erase(GeoId);
@@ -1567,7 +1570,7 @@ void ViewProviderSketch::onSelectionChanged(const Gui::SelectionChanges& msg)
             if (strcmp(msg.pDocName,getSketchObject()->getDocument()->getName())==0
                && strcmp(msg.pObjectName,getSketchObject()->getNameInDocument())== 0) {
                 if (msg.pSubName) {
-                    std::string shapetype(checkSubName(msg.pSubName));
+                    std::string shapetype(getSketchObject()->checkSubName(msg.pSubName));
                     if (shapetype.size() > 4 && shapetype.substr(0,4) == "Edge") {
                         int GeoId = std::atoi(&shapetype[4]) - 1;
                         resetPreselectPoint();
@@ -1726,7 +1729,7 @@ bool ViewProviderSketch::detectPreselection(const SoPickedPoint *Point,
         }
 
         if (PtIndex != -1 && PtIndex != edit->PreselectPoint) { // if a new point is hit
-            std::ostringstream ss(editPrefix,std::ios_base::ate);
+            std::stringstream ss;
             ss << "Vertex" << PtIndex + 1;
             bool accepted =
             Gui::Selection().setPreselect(SEL_PARAMS
@@ -1744,7 +1747,7 @@ bool ViewProviderSketch::detectPreselection(const SoPickedPoint *Point,
                 return true;
             }
         } else if (GeoIndex != -1 && GeoIndex != edit->PreselectCurve) {  // if a new curve is hit
-            std::ostringstream ss(editPrefix,std::ios_base::ate);
+            std::stringstream ss;
             if (GeoIndex >= 0)
                 ss << "Edge" << GeoIndex + 1;
             else // external geometry
@@ -1765,7 +1768,7 @@ bool ViewProviderSketch::detectPreselection(const SoPickedPoint *Point,
                 return true;
             }
         } else if (CrossIndex != -1 && CrossIndex != edit->PreselectCross) {  // if a cross line is hit
-            std::ostringstream ss(editPrefix,std::ios_base::ate);
+            std::stringstream ss;
             switch(CrossIndex){
                 case 0: ss << "RootPoint" ; break;
                 case 1: ss << "H_Axis"    ; break;
@@ -1792,7 +1795,7 @@ bool ViewProviderSketch::detectPreselection(const SoPickedPoint *Point,
         } else if (constrIndices.empty() == false && constrIndices != edit->PreselectConstraintSet) { // if a constraint is hit
             bool accepted = true;
             for(std::set<int>::iterator it = constrIndices.begin(); it != constrIndices.end(); ++it) {
-                std::ostringstream ss(editPrefix,std::ios_base::ate);
+                std::stringstream ss;
                 ss << Sketcher::PropertyConstraintList::getConstraintName(*it);
 
                 accepted &=
@@ -1948,7 +1951,7 @@ void ViewProviderSketch::doBoxSelection(const SbVec2s &startPos, const SbVec2s &
             VertexId += 1;
 
             if (polygon.Contains(Base::Vector2d(pnt0.x, pnt0.y))) {
-                std::ostringstream ss(editPrefix,std::ios_base::ate);
+                std::stringstream ss;
                 ss << "Vertex" << VertexId + 1;
                 Gui::Selection().addSelection(SEL_PARAMS);
             }
@@ -1965,19 +1968,19 @@ void ViewProviderSketch::doBoxSelection(const SbVec2s &startPos, const SbVec2s &
             bool pnt1Inside = polygon.Contains(Base::Vector2d(pnt1.x, pnt1.y));
             bool pnt2Inside = polygon.Contains(Base::Vector2d(pnt2.x, pnt2.y));
             if (pnt1Inside) {
-                std::ostringstream ss(editPrefix,std::ios_base::ate);
+                std::stringstream ss;
                 ss << "Vertex" << VertexId;
                 Gui::Selection().addSelection(SEL_PARAMS);
             }
 
             if (pnt2Inside) {
-                std::ostringstream ss(editPrefix,std::ios_base::ate);
+                std::stringstream ss;
                 ss << "Vertex" << VertexId + 1;
                 Gui::Selection().addSelection(SEL_PARAMS);
             }
 
             if ((pnt1Inside && pnt2Inside) && !touchMode) {
-                std::ostringstream ss(editPrefix,std::ios_base::ate);
+                std::stringstream ss;
                 ss << "Edge" << GeoId + 1;
                 Gui::Selection().addSelection(SEL_PARAMS);
             }
@@ -1989,7 +1992,7 @@ void ViewProviderSketch::doBoxSelection(const SbVec2s &startPos, const SbVec2s &
                     std::list<Base::Polygon2d> resultList;
                     polygon.Intersect(lineAsPolygon, resultList);
                     if (!resultList.empty()) {
-                        std::ostringstream ss(editPrefix,std::ios_base::ate);
+                        std::stringstream ss;
                         ss << "Edge" << GeoId + 1;
                         Gui::Selection().addSelection(SEL_PARAMS);
                     }
@@ -2007,7 +2010,7 @@ void ViewProviderSketch::doBoxSelection(const SbVec2s &startPos, const SbVec2s &
 
             if (polygon.Contains(Base::Vector2d(pnt0.x, pnt0.y)) || touchMode) {
                 if (polygon.Contains(Base::Vector2d(pnt0.x, pnt0.y))) {
-                    std::ostringstream ss(editPrefix,std::ios_base::ate);
+                    std::stringstream ss;
                     ss << "Vertex" << VertexId + 1;
                     Gui::Selection().addSelection(SEL_PARAMS);
                 }
@@ -2041,7 +2044,7 @@ void ViewProviderSketch::doBoxSelection(const SbVec2s &startPos, const SbVec2s &
                 }
 
                 if (bpolyInside) {
-                    std::ostringstream ss(editPrefix,std::ios_base::ate);
+                    std::stringstream ss;
                     ss << "Edge" << GeoId + 1;
                     Gui::Selection().addSelection(SEL_PARAMS);
                 }
@@ -2057,7 +2060,7 @@ void ViewProviderSketch::doBoxSelection(const SbVec2s &startPos, const SbVec2s &
 
             if (polygon.Contains(Base::Vector2d(pnt0.x, pnt0.y)) || touchMode) {
                 if (polygon.Contains(Base::Vector2d(pnt0.x, pnt0.y))) {
-                    std::ostringstream ss(editPrefix,std::ios_base::ate);
+                    std::stringstream ss;
                     ss << "Vertex" << VertexId + 1;
                     Gui::Selection().addSelection(SEL_PARAMS);
                 }
@@ -2092,7 +2095,7 @@ void ViewProviderSketch::doBoxSelection(const SbVec2s &startPos, const SbVec2s &
                 }
 
                 if (bpolyInside) {
-                    std::ostringstream ss(editPrefix,std::ios_base::ate);
+                    std::stringstream ss;
                     ss << "Edge" << GeoId + 1;
                     Gui::Selection().addSelection(SEL_PARAMS);
                 }
@@ -2154,26 +2157,26 @@ void ViewProviderSketch::doBoxSelection(const SbVec2s &startPos, const SbVec2s &
                 }
 
                 if (bpolyInside) {
-                    std::ostringstream ss(editPrefix,std::ios_base::ate);
+                    std::stringstream ss;
                     ss << "Edge" << GeoId + 1;
                     Gui::Selection().addSelection(SEL_PARAMS);
                 }
             }
 
             if (pnt0Inside) {
-                std::ostringstream ss(editPrefix,std::ios_base::ate);
+                std::stringstream ss;
                 ss << "Vertex" << VertexId - 1;
                 Gui::Selection().addSelection(SEL_PARAMS);
             }
 
             if (pnt1Inside) {
-                std::ostringstream ss(editPrefix,std::ios_base::ate);
+                std::stringstream ss;
                 ss << "Vertex" << VertexId;
                 Gui::Selection().addSelection(SEL_PARAMS);
             }
 
             if (polygon.Contains(Base::Vector2d(pnt2.x, pnt2.y))) {
-                std::ostringstream ss(editPrefix,std::ios_base::ate);
+                std::stringstream ss;
                 ss << "Vertex" << VertexId + 1;
                 Gui::Selection().addSelection(SEL_PARAMS);
             }
@@ -2236,25 +2239,25 @@ void ViewProviderSketch::doBoxSelection(const SbVec2s &startPos, const SbVec2s &
                 }
 
                 if (bpolyInside) {
-                    std::ostringstream ss(editPrefix,std::ios_base::ate);
+                    std::stringstream ss;
                     ss << "Edge" << GeoId + 1;
                     Gui::Selection().addSelection(SEL_PARAMS);
                 }
             }
             if (pnt0Inside) {
-                std::ostringstream ss(editPrefix,std::ios_base::ate);
+                std::stringstream ss;
                 ss << "Vertex" << VertexId - 1;
                 Gui::Selection().addSelection(SEL_PARAMS);
             }
 
             if (pnt1Inside) {
-                std::ostringstream ss(editPrefix,std::ios_base::ate);
+                std::stringstream ss;
                 ss << "Vertex" << VertexId;
                 Gui::Selection().addSelection(SEL_PARAMS);
             }
 
             if (polygon.Contains(Base::Vector2d(pnt2.x, pnt2.y))) {
-                std::ostringstream ss(editPrefix,std::ios_base::ate);
+                std::stringstream ss;
                 ss << "Vertex" << VertexId + 1;
                 Gui::Selection().addSelection(SEL_PARAMS);
             }
@@ -2320,24 +2323,24 @@ void ViewProviderSketch::doBoxSelection(const SbVec2s &startPos, const SbVec2s &
                 }
 
                 if (bpolyInside) {
-                    std::ostringstream ss(editPrefix,std::ios_base::ate);
+                    std::stringstream ss;
                     ss << "Edge" << GeoId + 1;
                     Gui::Selection().addSelection(SEL_PARAMS);
                 }
                 if (pnt0Inside) {
-                    std::ostringstream ss(editPrefix,std::ios_base::ate);
+                    std::stringstream ss;
                     ss << "Vertex" << VertexId - 1;
                     Gui::Selection().addSelection(SEL_PARAMS);
                 }
 
                 if (pnt1Inside) {
-                    std::ostringstream ss(editPrefix,std::ios_base::ate);
+                    std::stringstream ss;
                     ss << "Vertex" << VertexId;
                     Gui::Selection().addSelection(SEL_PARAMS);
                 }
 
                 if (polygon.Contains(Base::Vector2d(pnt2.x, pnt2.y))) {
-                    std::ostringstream ss(editPrefix,std::ios_base::ate);
+                    std::stringstream ss;
                     ss << "Vertex" << VertexId + 1;
                     Gui::Selection().addSelection(SEL_PARAMS);
                 }
@@ -2406,24 +2409,24 @@ void ViewProviderSketch::doBoxSelection(const SbVec2s &startPos, const SbVec2s &
                 }
 
                 if (bpolyInside) {
-                    std::ostringstream ss(editPrefix,std::ios_base::ate);
+                    std::stringstream ss;
                     ss << "Edge" << GeoId + 1;
                     Gui::Selection().addSelection(SEL_PARAMS);
                 }
                 if (pnt0Inside) {
-                    std::ostringstream ss(editPrefix,std::ios_base::ate);
+                    std::stringstream ss;
                     ss << "Vertex" << VertexId - 1;
                     Gui::Selection().addSelection(SEL_PARAMS);
                 }
 
                 if (pnt1Inside) {
-                    std::ostringstream ss(editPrefix,std::ios_base::ate);
+                    std::stringstream ss;
                     ss << "Vertex" << VertexId;
                     Gui::Selection().addSelection(SEL_PARAMS);
                 }
 
                 if (polygon.Contains(Base::Vector2d(pnt2.x, pnt2.y))) {
-                    std::ostringstream ss(editPrefix,std::ios_base::ate);
+                    std::stringstream ss;
                     ss << "Vertex" << VertexId + 1;
                     Gui::Selection().addSelection(SEL_PARAMS);
                 }
@@ -2442,13 +2445,13 @@ void ViewProviderSketch::doBoxSelection(const SbVec2s &startPos, const SbVec2s &
             bool pnt1Inside = polygon.Contains(Base::Vector2d(pnt1.x, pnt1.y));
             bool pnt2Inside = polygon.Contains(Base::Vector2d(pnt2.x, pnt2.y));
             if (pnt1Inside || (touchMode && pnt2Inside)) {
-                std::ostringstream ss(editPrefix,std::ios_base::ate);
+                std::stringstream ss;
                 ss << "Vertex" << VertexId;
                 Gui::Selection().addSelection(SEL_PARAMS);
             }
             
             if (pnt2Inside || (touchMode && pnt1Inside)) {
-                std::ostringstream ss(editPrefix,std::ios_base::ate);
+                std::stringstream ss;
                 ss << "Vertex" << VertexId + 1;
                 Gui::Selection().addSelection(SEL_PARAMS);
             }
@@ -2459,7 +2462,7 @@ void ViewProviderSketch::doBoxSelection(const SbVec2s &startPos, const SbVec2s &
             // where it is indeed comprised in the box.
             // The implementation of the touch mode is also far from a desirable "touch" as it only recognizes touched points not the curve itself
             if ((pnt1Inside && pnt2Inside) || (touchMode && (pnt1Inside || pnt2Inside))) {
-                std::ostringstream ss(editPrefix,std::ios_base::ate);
+                std::stringstream ss;
                 ss << "Edge" << GeoId + 1;
                 Gui::Selection().addSelection(SEL_PARAMS);
             }
@@ -2468,7 +2471,7 @@ void ViewProviderSketch::doBoxSelection(const SbVec2s &startPos, const SbVec2s &
 
     pnt0 = proj(Plm.getPosition());
     if (polygon.Contains(Base::Vector2d(pnt0.x, pnt0.y))) {
-        std::ostringstream ss(editPrefix,std::ios_base::ate);
+        std::stringstream ss;
         ss << "RootPoint";
         Gui::Selection().addSelection(SEL_PARAMS);
     }
@@ -5780,7 +5783,6 @@ void ViewProviderSketch::setEditViewer(Gui::View3DInventorViewer* viewer, int Mo
         editSubName.clear();
     else
         editSubName.resize(dot-editSubName.c_str()+1);
-    editPrefix = editSubName + Sketcher::editPrefix();
 
     Base::Placement plm = getEditingPlacement();
     Base::Rotation tmp(plm.getRotation());
@@ -5965,7 +5967,7 @@ Sketcher::SketchObject *ViewProviderSketch::getSketchObject(void) const
 bool ViewProviderSketch::onDelete(const std::vector<std::string> &subList)
 {
     if (edit) {
-        std::vector<std::string> SubNames = subList;
+        std::vector<std::string> SubNames = getSketchObject()->checkSubNames(subList);
 
         Gui::Selection().clearSelection();
         resetPreselectPoint();
