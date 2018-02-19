@@ -5304,6 +5304,7 @@ bool ViewProviderSketch::setEdit(int ModNum)
                         "  tv.show([ref[0] for ref in ActiveSketch.Support if not ref[0].isDerivedFrom(\"PartDesign::Plane\")])\n"
                         "if ActiveSketch.ViewObject.ShowLinks:\n"
                         "  tv.show([ref[0] for ref in ActiveSketch.ExternalGeometry])\n"
+                        "tv.hide(ActiveSketch.Exports)\n"
                         "tv.hide(ActiveSketch)\n"
                         "ActiveSketch.ViewObject.TempoVis = tv\n"
                         "del(tv)\n"
@@ -6100,3 +6101,39 @@ void ViewProviderSketch::showRestoreInformationLayer() {
     visibleInformationChanged = true ;
     draw(false,false);
 }
+
+std::vector<App::DocumentObject*> ViewProviderSketch::claimChildren(void) const {
+    return getSketchObject()->Exports.getValues();
+}
+
+void ViewProviderSketch::selectElement(const char *element) const {
+    if(!edit || !element) return;
+    std::ostringstream ss;
+    ss << element;
+    Gui::Selection().addSelection(SEL_PARAMS);
+}
+
+// ---------------------------------------------------------
+
+PROPERTY_SOURCE(SketcherGui::ViewProviderSketchExport, PartGui::ViewProvider2DObject)
+
+ViewProviderSketchExport::ViewProviderSketchExport() {
+    sPixmap = "Sketcher_SketchExport";
+}
+
+bool ViewProviderSketchExport::doubleClicked(void)
+{
+    auto obj = dynamic_cast<SketchExport*>(getObject());
+    if(!obj) return false;
+    auto base = dynamic_cast<SketchObject*>(obj->getBase());
+    if(!base) return false;
+    auto vp = dynamic_cast<ViewProviderSketch*>(Gui::Application::Instance->getViewProvider(base));
+    if(!vp->doubleClicked()) return false;
+    for(auto &ref : obj->getRefs())
+        vp->selectElement(ref.c_str());
+    std::string name(obj->getNameInDocument());
+    name += '.';
+    vp->selectElement(name.c_str());
+    return true;
+}
+

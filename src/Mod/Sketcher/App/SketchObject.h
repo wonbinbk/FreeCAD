@@ -58,6 +58,7 @@ public:
     Part    ::PropertyGeometryList   Geometry;
     Sketcher::PropertyConstraintList Constraints;
     App     ::PropertyLinkSubList    ExternalGeometry;
+    App     ::PropertyLinkList       Exports;
     /** @name methods override Feature */
     //@{
     /// recalculate the Feature (if no recompute is needed see also solve() and solverNeedsUpdate boolean)
@@ -417,6 +418,30 @@ private:
 };
 
 typedef App::FeaturePythonT<SketchObject> SketchObjectPython;
+
+// ---------------------------------------------------------
+
+class SketcherExport SketchExport: public Part::Part2DObject {
+    PROPERTY_HEADER(Sketcher::SketchObject);
+
+public:
+    SketchExport();
+    ~SketchExport();
+
+    App::PropertyStringList Refs;
+    App::PropertyString Base;
+
+    App::DocumentObjectExecReturn *execute(void);
+    virtual void onChanged(const App::Property* /*prop*/);
+    const char* getViewProviderName(void) const {
+        return "SketcherGui::ViewProviderSketchExport";
+    }
+
+    void update();
+
+    App::DocumentObject *getBase() const;
+    std::set<std::string> getRefs() const;
+};
 
 } //namespace Sketcher
 

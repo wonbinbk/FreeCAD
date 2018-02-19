@@ -58,6 +58,7 @@
 # include <Standard_Version.hxx>
 # include <cmath>
 # include <vector>
+# include <BRepBuilderAPI_MakeWire.hxx>
 //# include <QtGlobal>
 #endif
 
@@ -82,6 +83,7 @@
 
 namespace Part {
     PartExport Py::Object shape2pyshape(const TopoDS_Shape &shape);
+    PartExport std::list<TopoDS_Edge> sort_Edges(double tol3d, std::list<TopoDS_Edge>& edges);
 }
 
 #include "SketchObject.h"
@@ -106,6 +108,7 @@ SketchObject::SketchObject()
     ADD_PROPERTY_TYPE(Geometry,        (0)  ,"Sketch",(App::PropertyType)(App::Prop_None),"Sketch geometry");
     ADD_PROPERTY_TYPE(Constraints,     (0)  ,"Sketch",(App::PropertyType)(App::Prop_None),"Sketch constraints");
     ADD_PROPERTY_TYPE(ExternalGeometry,(0,0),"Sketch",(App::PropertyType)(App::Prop_None),"Sketch external geometry");
+    ADD_PROPERTY_TYPE(Exports,         (0)  ,"Sketch",(App::PropertyType)(App::Prop_Hidden),"Sketch export geometry");
 
     tagCached = false;
     allowOtherBody = true;
@@ -195,6 +198,11 @@ App::DocumentObjectExecReturn *SketchObject::execute(void)
     // this is not necessary for sketch representation in edit mode, unless we want to trigger an update of 
     // the objects that depend on this sketch (like pads)
     Shape.setValue(solvedSketch.toShape()); 
+
+    for(auto obj : Exports.getValues()) {
+        auto exp = dynamic_cast<SketchExport*>(obj);
+        if(exp) exp->update();
+    }
 
     return App::DocumentObject::StdReturn;
 }
@@ -6258,8 +6266,12 @@ std::string SketchObject::convertSubName(const char *shapetype) const{
         if (ConstrId < 0 || ConstrId >= int(vals.size()))
             return shapetype;
         ss << editPrefix() << 'c' << boost::uuids::to_string(vals[ConstrId]->getTag());
-    }else
+    }else if(strcmp(shapetype,"RootPoint")==0 ||
+             strcmp(shapetype,"H_Axis")==0 ||
+             strcmp(shapetype,"V_Axis")==0)
         ss << editPrefix() << shapetype;
+    else
+        return shapetype;
     return ss.str();
 }
 
@@ -6283,4 +6295,94 @@ template<> PyObject* Sketcher::SketchObjectPython::getPyObject(void) {
 
 // explicit template instantiation
 template class SketcherExport FeaturePythonT<Sketcher::SketchObject>;
+}
+
+// ---------------------------------------------------------
+
+PROPERTY_SOURCE(Sketcher::SketchExport, Part::Part2DObject)
+
+SketchExport::SketchExport() {
+    ADD_PROPERTY_TYPE(Base,(""),"",App::Prop_Hidden,"Base sketch object name");
+    ADD_PROPERTY_TYPE(Refs,(),"",App::Prop_None,"Sketch geometry references");
+}
+
+SketchExport::~SketchExport()
+{}
+
+App::DocumentObject *SketchExport::getBase() const {
+    return getDocument()->getObject(Base.getValue());
+}
+
+App::DocumentObjectExecReturn *SketchExport::execute(void) {
+    try {
+        App::DocumentObjectExecReturn* rtn = Part2DObject::execute();//to positionBySupport
+        if(rtn!=App::DocumentObject::StdReturn)
+            //error
+            return rtn;
+    }
+    catch (const Base::Exception& e) {
+        return new App::DocumentObjectExecReturn(e.what());
+    }
+
+    auto base = getBase();
+    if(!base) 
+        return new App::DocumentObjectExecReturn("No sketch base");
+    for(const auto &ref : Refs.getValues()) {
+        auto sobj = base->getSubObject(ref.c_str());
+        if(!sobj) {
+            std::string ret("Invalid reference ");
+            return new App::DocumentObjectExecReturn(ret + ref);
+        }
+    }
+    return App::DocumentObject::StdReturn;
+}
+
+void SketchExport::onChanged(const App::Property* prop) {
+    if(!isRestoring() && (prop==&Base || prop==&Refs))
+        update();
+    return Part2DObject::onChanged(prop);
+}
+
+std::set<std::string> SketchExport::getRefs() const {
+    std::set<std::string> refSet;
+    const auto &refs = Refs.getValues();
+    refSet.insert(refs.begin(),refs.end());
+    if(refSet.size()>1)
+        refSet.erase("");
+    return refSet;
+}
+
+void SketchExport::update() {
+    auto base = getBase();
+    if(!base) return;
+    int count = 0;
+    BRep_Builder builder;
+    TopoDS_Compound comp;
+    builder.MakeCompound(comp);
+    std::list<TopoDS_Edge> edges;
+    for(const auto &ref : getRefs()) {
+        auto shape = Part::Feature::getShape(base,ref.c_str(),true);
+        if(shape.IsNull()) continue;
+        TopExp_Explorer exp(shape,TopAbs_EDGE);
+        if(exp.More()) {
+            for(;exp.More();exp.Next())
+                edges.push_back(TopoDS::Edge(exp.Current()));
+        }else{
+            ++count;
+            builder.Add(comp,shape);
+        }
+    }
+    while(edges.size()) {
+        BRepBuilderAPI_MakeWire mkWire;
+        for(auto &edge : Part::sort_Edges(Precision::Confusion(),edges))
+            mkWire.Add(edge);
+        ++count;
+        builder.Add(comp,mkWire.Wire());
+    }
+    if(count) {
+        Part::TopoShape ts(comp);
+        ts.transformShape(Placement.getValue().toMatrix(),false);
+        Shape.setValue(ts.getShape());
+        purgeTouched();
+    }
 }
