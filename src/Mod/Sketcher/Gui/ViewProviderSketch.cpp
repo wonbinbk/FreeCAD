@@ -6121,8 +6121,7 @@ ViewProviderSketchExport::ViewProviderSketchExport() {
     sPixmap = "Sketcher_SketchExport";
 }
 
-bool ViewProviderSketchExport::doubleClicked(void)
-{
+bool ViewProviderSketchExport::doubleClicked(void) {
     auto obj = dynamic_cast<SketchExport*>(getObject());
     if(!obj) return false;
     auto base = dynamic_cast<SketchObject*>(obj->getBase());
@@ -6135,5 +6134,18 @@ bool ViewProviderSketchExport::doubleClicked(void)
     name += '.';
     vp->selectElement(name.c_str());
     return true;
+}
+
+SoDetail* ViewProviderSketchExport::getDetail(const char* subelement) const {
+    auto obj = dynamic_cast<SketchExport*>(getObject());
+    if(obj) subelement = obj->getElementName(subelement);
+    return inherited::getDetail(subelement);
+}
+
+std::string ViewProviderSketchExport::getElement(const SoDetail* detail) const {
+    auto element = inherited::getElement(detail);
+    auto obj = dynamic_cast<SketchExport*>(getObject());
+    if(obj) return obj->getElementName(element.c_str());
+    return element;
 }
 

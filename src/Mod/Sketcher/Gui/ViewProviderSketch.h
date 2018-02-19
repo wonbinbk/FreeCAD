@@ -433,8 +433,12 @@ class SketcherGuiExport ViewProviderSketchExport: public PartGui::ViewProvider2D
     PROPERTY_HEADER(SketcherGui::ViewProviderSketchSketch);
 
 public:
+    typedef PartGui::ViewProvider2DObject inherited;
+
     ViewProviderSketchExport();
-    virtual bool doubleClicked(void);
+    virtual bool doubleClicked(void) override;
+    virtual std::string getElement(const SoDetail* detail) const override;
+    virtual SoDetail* getDetail(const char* subelement) const override;
 };
 
 } // namespace PartGui

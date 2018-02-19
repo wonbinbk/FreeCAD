@@ -356,12 +356,16 @@ public:
 
     std::vector<std::string> checkSubNames(const std::vector<std::string> &) const;
     std::string checkSubName(const char *) const;
+    bool geoIdFromShapeType(const char *shapetype, int &geoId, PointPos &posId) const;
     std::string convertSubName(const char *) const;
     std::string convertSubName(const std::string &subname) const 
         { return convertSubName(subname.c_str()); }
+    std::vector<std::pair<Base::Vector3d,std::string> > getPointRefs(const char *subname);
+
+
+    static const std::string &editPrefix();
 
 protected:
-    static const std::string &editPrefix();
 
     /// get called by the container when a property has changed
     virtual void onChanged(const App::Property* /*prop*/);
@@ -441,6 +445,13 @@ public:
 
     App::DocumentObject *getBase() const;
     std::set<std::string> getRefs() const;
+    const char *getElementName(const char *element) const;
+
+    virtual DocumentObject *getSubObject(const char *subname, PyObject **pyObj=0, 
+            Base::Matrix4D *mat=0, bool transform=true, int depth=0) const override;
+
+private:
+    std::map<std::string,std::string> elementMap;
 };
 
 } //namespace Sketcher
