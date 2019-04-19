@@ -163,7 +163,7 @@ public:
     };
     ExpressionPtr eval(int options=0) const;
 
-    App::any getValueAsAny(int options=0) const;
+    App::any getValueAsAny(int options=0, int *jumpCode=0) const;
 
     bool isSame(const Expression &other) const;
 
@@ -208,8 +208,6 @@ public:
     }
 
     virtual int priority() const;
-
-    virtual int jump() const {return 0;}
 
     void getIdentifiers(std::set<App::ObjectIdentifier> &) const;
     std::set<App::ObjectIdentifier> getIdentifiers() const;
@@ -271,8 +269,7 @@ protected:
                                          const ObjectIdentifier &, ExpressionVisitor &) {return false;}
     virtual void _moveCells(const CellAddress &, int, int, ExpressionVisitor &) {}
     virtual void _offsetCells(int, int, ExpressionVisitor &) {}
-    virtual App::any _getValueAsAny() const = 0;
-    virtual ExpressionPtr _eval() const {return 0;}
+    virtual App::any _getValueAsAny(int *jumpCode=0) const = 0;
     virtual void _visit(ExpressionVisitor &) {}
 
     void swapComponents(Expression &other) {components.swap(other.components);}
@@ -286,95 +283,6 @@ protected:
 
 public:
     std::string comment;
-};
-
-#define EXPR_TYPESYSTEM_HEADER() \
-    TYPESYSTEM_HEADER();\
-public:\
-    void operator delete(void *p)
-        
-/**
-  * Part of an expressions that contains a unit.
-  *
-  */
-
-class  AppExport UnitExpression : public Expression {
-    EXPR_TYPESYSTEM_HEADER();
-public:
-    static ExpressionPtr create(const App::DocumentObject *owner, 
-            const Base::Quantity &quantity, std::string &&unitStr);
-
-    static ExpressionPtr create(const App::DocumentObject *owner, 
-            const Base::Quantity &quantity, const char *unitStr);
-
-    virtual ExpressionPtr simplify() const;
-
-    void setUnit(const Base::Quantity &_quantity);
-
-    double getValue() const { return quantity.getValue(); }
-
-    const Base::Unit & getUnit() const { return quantity.getUnit(); }
-
-    const Base::Quantity & getQuantity() const { return quantity; }
-
-    const std::string getUnitString() const { return unitStr; }
-
-    double getScaler() const { return quantity.getValue(); }
-
-protected:
-    UnitExpression(const App::DocumentObject *_owner):Expression(_owner) {}
-
-    virtual void _toString(std::ostream &ss, bool persistent, int indent) const;
-    virtual ExpressionPtr _copy() const;
-    virtual ExpressionPtr _eval() const;
-    virtual App::any _getValueAsAny() const;
-
-protected:
-    Base::Quantity quantity;
-    std::string unitStr; /**< The unit string from the original parsed string */
-};
-
-/**
-  * Class implementing a number with an optional unit
-  */
-
-class AppExport NumberExpression : public UnitExpression {
-    EXPR_TYPESYSTEM_HEADER();
-public:
-    static ExpressionPtr create(const App::DocumentObject *_owner, const Base::Quantity & quantity);
-    static ExpressionPtr create(const App::DocumentObject *_owner, double fvalue);
-
-    void negate();
-
-protected:
-    NumberExpression(const App::DocumentObject *_owner):UnitExpression(_owner) {}
-
-    virtual void _toString(std::ostream &ss, bool persistent, int indent) const;
-    virtual ExpressionPtr _copy() const;
-};
-
-class AppExport ConstantExpression : public NumberExpression {
-    EXPR_TYPESYSTEM_HEADER();
-public:
-    static ExpressionPtr create(const App::DocumentObject *owner, 
-            std::string &&name, const Base::Quantity &_quantity);
-
-    static ExpressionPtr create(const App::DocumentObject *owner, 
-            const char *name, const Base::Quantity &_quantity);
-
-    std::string getName() const { return name; }
-
-    virtual ExpressionPtr simplify() const;
-
-protected:
-    ConstantExpression(const App::DocumentObject *_owner):NumberExpression(_owner){}
-
-    virtual ExpressionPtr _eval() const;
-    virtual App::any _getValueAsAny() const;
-    virtual void _toString(std::ostream &ss, bool persistent, int indent) const;
-    virtual ExpressionPtr _copy() const;
-
-    std::string name; /**< Constant's name */
 };
 
 } // end of namespace App

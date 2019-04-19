@@ -623,7 +623,7 @@ void PropertyPlacement::setPathValue(const ObjectIdentifier &path, const App::an
         double avalue;
 
         if (value.type() == typeid(Base::Quantity))
-            avalue = App::any_cast<Base::Quantity>(value).getValue();
+            avalue = App::any_cast<const Base::Quantity&>(value).getValue();
         else if (value.type() == typeid(double))
             avalue = App::any_cast<double>(value);
         else if (value.type() == typeid(int))

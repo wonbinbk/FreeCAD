@@ -44,6 +44,113 @@ AppExport bool isAnyEqual(const App::any &v1, const App::any &v2);
 
 ////////////////////////////////////////////////////////////////////////////////////
 
+struct AppExport PyOrAny {
+    PyOrAny()
+    {}
+
+    PyOrAny(const Py::Object &o)
+        :o(o)
+    {}
+
+    PyOrAny(const App::any &a)
+        :a(a)
+    {}
+
+    PyOrAny(App::any &&a)
+        :a(std::move(a))
+    {}
+
+    PyOrAny(const PyOrAny &other)
+        :o(other.o)
+        ,a(other.a)
+    {}
+
+    PyOrAny(PyOrAny &&other)
+        :o(std::move(other.o))
+        ,a(std::move(other.a))
+    {}
+
+    bool hasPy() const {
+        return !o.isNone();
+    }
+
+    bool hasAny() const {
+        return !a.empty();
+    }
+
+    Py::Object &toPy() const{
+        if(o.isNone() && !a.empty())
+            o = pyObjectFromAny(a);
+        return o;
+    }
+
+    void clearPy() {
+        o = Py::Object();
+    }
+
+    operator Py::Object&() {
+        return toPy();
+    }
+
+    operator Py::Object () const{
+        return toPy();
+    }
+
+    App::any &toAny() const {
+        if(a.empty() && !o.isNone())
+            a = pyObjectToAny(o);
+        return a;
+    }
+
+    operator App::any&() {
+        return toAny();
+    }
+
+    operator App::any () const{
+        return toAny();
+    }
+
+    void clearAny() {
+        a = App::any();
+    }
+
+    inline PyOrAny &operator=(const PyOrAny &other) {
+        o = other.o;
+        a = other.a;
+        return *this;
+    }
+
+    inline PyOrAny &operator=(PyOrAny &&other) {
+        o = std::move(other.o);
+        a = std::move(other.a);
+        return *this;
+    }
+
+    inline PyOrAny &operator=(const Py::Object &other) {
+        o = other;
+        a = App::any();
+        return *this;
+    }
+
+    inline PyOrAny &operator=(const App::any &other) {
+        o = Py::Object();
+        a = other;
+        return *this;
+    }
+
+    inline PyOrAny &operator=(App::any &&other) {
+        o = Py::Object();
+        a = std::move(other);
+        return *this;
+    }
+
+private:
+    mutable Py::Object o;
+    mutable App::any a;
+};
+
+////////////////////////////////////////////////////////////////////////////////////
+
 struct AppExport Expression::Component {
     ObjectIdentifier::Component comp;
     ExpressionPtr e1;
@@ -74,16 +181,16 @@ struct AppExport Expression::Component {
 ////////////////////////////////////////////////////////////////////////////////////
 
 struct AppExport VarInfo {
-    Py::Object prefix;
-    Py::Object *lhs;
-    Py::Object rhs;
+    PyOrAny prefix;
+    PyOrAny *lhs;
+    PyOrAny rhs;
     Expression::ComponentPtr component;
 
     VarInfo()
         :lhs(&prefix)
     {}
 
-    VarInfo(Py::Object &v)
+    VarInfo(PyOrAny &v)
         :lhs(&v),rhs(v)
     {}
 
@@ -104,6 +211,94 @@ struct AppExport VarInfo {
         component = std::move(other.component);
         return *this;
     }
+};
+
+#define EXPR_TYPESYSTEM_HEADER() \
+    TYPESYSTEM_HEADER();\
+public:\
+    void operator delete(void *p)
+        
+/**
+  * Part of an expressions that contains a unit.
+  *
+  */
+
+class  AppExport UnitExpression : public Expression {
+    EXPR_TYPESYSTEM_HEADER();
+public:
+    static ExpressionPtr create(const App::DocumentObject *owner, 
+            const Base::Quantity &quantity, std::string &&unitStr);
+
+    static ExpressionPtr create(const App::DocumentObject *owner, 
+            const Base::Quantity &quantity, const char *unitStr);
+
+    virtual ExpressionPtr simplify() const;
+
+    void setUnit(const Base::Quantity &_quantity);
+
+    double getValue() const { return quantity.getValue(); }
+
+    const Base::Unit & getUnit() const { return quantity.getUnit(); }
+
+    const Base::Quantity & getQuantity() const { return quantity; }
+
+    const std::string getUnitString() const { return unitStr; }
+
+    double getScaler() const { return quantity.getValue(); }
+
+protected:
+    UnitExpression(const App::DocumentObject *_owner):Expression(_owner) {}
+
+    virtual void _toString(std::ostream &ss, bool persistent, int indent) const;
+    virtual ExpressionPtr _copy() const;
+    virtual App::any _getValueAsAny(int *jumpCode=0) const;
+
+protected:
+    Base::Quantity quantity;
+    std::string unitStr; /**< The unit string from the original parsed string */
+    mutable App::any cache;
+};
+
+/**
+  * Class implementing a number with an optional unit
+  */
+
+class AppExport NumberExpression : public UnitExpression {
+    EXPR_TYPESYSTEM_HEADER();
+public:
+    static ExpressionPtr create(const App::DocumentObject *_owner, const Base::Quantity & quantity);
+    static ExpressionPtr create(const App::DocumentObject *_owner, double fvalue);
+
+    void negate();
+
+protected:
+    NumberExpression(const App::DocumentObject *_owner):UnitExpression(_owner) {}
+
+    virtual void _toString(std::ostream &ss, bool persistent, int indent) const;
+    virtual ExpressionPtr _copy() const;
+};
+
+class AppExport ConstantExpression : public NumberExpression {
+    EXPR_TYPESYSTEM_HEADER();
+public:
+    static ExpressionPtr create(const App::DocumentObject *owner, 
+            std::string &&name, const Base::Quantity &_quantity);
+
+    static ExpressionPtr create(const App::DocumentObject *owner, 
+            const char *name, const Base::Quantity &_quantity);
+
+    std::string getName() const { return name; }
+
+    virtual ExpressionPtr simplify() const;
+
+protected:
+    ConstantExpression(const App::DocumentObject *_owner):NumberExpression(_owner){}
+
+    virtual App::any _getValueAsAny(int *jumpCode=0) const;
+    virtual void _toString(std::ostream &ss, bool persistent, int indent) const;
+    virtual ExpressionPtr _copy() const;
+
+    std::string name; /**< Constant's name */
 };
 
 /**
@@ -148,7 +343,7 @@ protected:
                                          const ObjectIdentifier &, ExpressionVisitor &);
     virtual void _moveCells(const CellAddress &, int, int, ExpressionVisitor &);
     virtual void _offsetCells(int, int, ExpressionVisitor &);
-    virtual App::any _getValueAsAny() const;
+    virtual App::any _getValueAsAny(int *jumpCode=0) const;
 
 protected:
     ObjectIdentifier var; /**< Variable name  */
@@ -233,7 +428,7 @@ protected:
     virtual bool _isIndexable() const { return true; }
     virtual ExpressionPtr _copy() const;
     virtual void _toString(std::ostream &ss, bool persistent, int indent) const;
-    virtual App::any _getValueAsAny() const;
+    virtual App::any _getValueAsAny(int *jumpCode=0) const;
 
 protected:
     ExpressionString str;
@@ -246,6 +441,8 @@ class AppExport PyObjectExpression : public Expression {
 
 public:
     static ExpressionPtr create(const App::DocumentObject *owner, PyObject *pyobj=0);
+    static ExpressionPtr create(const App::DocumentObject *owner, Py::Object pyobj);
+    static ExpressionPtr create(const App::DocumentObject *owner, const PyOrAny &value);
     virtual ~PyObjectExpression();
 
     Py::Object getPyObject() const;
@@ -256,12 +453,12 @@ public:
 protected:
     PyObjectExpression(const App::DocumentObject *_owner):Expression(_owner) {}
 
-    virtual App::any _getValueAsAny() const;
+    virtual App::any _getValueAsAny(int *jumpCode=0) const;
     virtual void _toString(std::ostream &,bool, int) const;
     virtual ExpressionPtr _copy() const;
 
 protected:
-    PyObject *pyObj = 0;
+    PyOrAny value;
 };
 
 /**
@@ -311,15 +508,10 @@ public:
 protected:
     OperatorExpression(const App::DocumentObject *_owner):UnitExpression(_owner){}
 
-    ExpressionPtr _calc(const Expression *l, const Expression *r) const;
-    ExpressionPtr _calc(const Expression *l) const;
-    ExpressionPtr _calc(const App::any &l) const;
-
     virtual void _visit(ExpressionVisitor & v);
     virtual void _toString(std::ostream &ss, bool persistent, int indent) const;
     virtual ExpressionPtr _copy() const;
-    virtual ExpressionPtr _eval() const;
-    virtual App::any _getValueAsAny() const;
+    virtual App::any _getValueAsAny(int *jumpCode=0) const;
 
     virtual bool isCommutative() const;
 
@@ -344,8 +536,8 @@ public:
 
     virtual bool isTouched() const;
 
-    static App::any apply(const Expression *owner, int catchAll, const ExpressionList &left, 
-            const Expression *right, int op=0, bool needReturn=false);
+    static void apply(const Expression *owner, int catchAll, const ExpressionList &left, 
+            const Expression *right, int op=0, App::any *res=0);
 
 protected:
     AssignmentExpression(const App::DocumentObject *_owner) :Expression(_owner) {}
@@ -353,7 +545,7 @@ protected:
     virtual void _visit(ExpressionVisitor & v);
     virtual void _toString(std::ostream &ss, bool persistent, int indent) const;
     virtual ExpressionPtr _copy() const;
-    virtual App::any _getValueAsAny() const;
+    virtual App::any _getValueAsAny(int *jumpCode=0) const;
 
     static void assign(const Expression *owner, const Expression *left, PyObject *right);
 
@@ -385,8 +577,7 @@ protected:
     virtual void _visit(ExpressionVisitor & v);
     virtual void _toString(std::ostream &ss, bool persistent, int indent) const;
     virtual ExpressionPtr _copy() const;
-    virtual ExpressionPtr _eval() const;
-    virtual App::any _getValueAsAny() const;
+    virtual App::any _getValueAsAny(int *jumpCode=0) const;
 
     ExpressionPtr condition;  /**< Condition */
     ExpressionPtr trueExpr;  /**< Expression if abs(condition) is > 0.5 */
@@ -410,8 +601,7 @@ public:
 
     int type() const {return f;}
 
-    static ExpressionPtr evaluate(const Expression *owner, int type, const ExpressionList &args);
-    static App::any evalToAny(const Expression *owner, int type, const ExpressionList &args);
+    static App::any evaluate(const Expression *owner, int type, const ExpressionList &args);
 
 protected:
     FunctionExpression(const App::DocumentObject *_owner):UnitExpression(_owner){}
@@ -419,9 +609,8 @@ protected:
     virtual void _visit(ExpressionVisitor & v);
     virtual void _toString(std::ostream &ss, bool persistent, int indent) const;
     virtual ExpressionPtr _copy() const;
-    virtual ExpressionPtr _eval() const;
-    virtual App::any _getValueAsAny() const;
-    static ExpressionPtr evalAggregate(const Expression *owner, int type, const ExpressionList &args);
+    virtual App::any _getValueAsAny(int *jumpCode=0) const;
+    static App::any evalAggregate(const Expression *owner, int type, const ExpressionList &args);
 
     int f;        /**< Function to execute */
     ExpressionList args; /** Arguments to function*/
@@ -458,8 +647,7 @@ protected:
 
     virtual void _visit(ExpressionVisitor & v);
     virtual bool _isIndexable() const { return true; }
-    virtual ExpressionPtr _eval() const;
-    virtual App::any _getValueAsAny() const;
+    virtual App::any _getValueAsAny(int *jumpCode=0) const;
     virtual void _toString(std::ostream &ss, bool persistent, int indent) const;
     virtual ExpressionPtr _copy() const;
 
@@ -491,7 +679,7 @@ protected:
                                          const ObjectIdentifier &, ExpressionVisitor &);
     virtual void _moveCells(const CellAddress &, int, int, ExpressionVisitor &);
     virtual void _offsetCells(int, int, ExpressionVisitor &);
-    virtual App::any _getValueAsAny() const;
+    virtual App::any _getValueAsAny(int *jumpCode=0) const;
 
 protected:
     std::string begin;
@@ -520,7 +708,7 @@ protected:
 
     virtual void _visit(ExpressionVisitor & v);
     virtual bool _isIndexable() const {return true;}
-    virtual App::any _getValueAsAny() const;
+    virtual App::any _getValueAsAny(int *jumpCode=0) const;
     virtual void _toString(std::ostream &, bool, int) const;
     virtual ExpressionPtr _copy() const;
 
@@ -582,7 +770,7 @@ protected:
 
     virtual void _visit(ExpressionVisitor & v);
     virtual bool _isIndexable() const {return true;}
-    virtual App::any _getValueAsAny() const;
+    virtual App::any _getValueAsAny(int *jumpCode=0) const;
     virtual void _toString(std::ostream &, bool, int) const;
     virtual ExpressionPtr _copy() const;
 
@@ -609,7 +797,7 @@ public:
 protected:
     TupleExpression(const App::DocumentObject *_owner):ListExpression(_owner) {}
 
-    virtual App::any _getValueAsAny() const;
+    virtual App::any _getValueAsAny(int *jumpCode=0) const;
     virtual ExpressionPtr _copy() const;
     virtual void _toString(std::ostream &, bool, int) const;
 };
@@ -637,7 +825,7 @@ protected:
 
     virtual void _visit(ExpressionVisitor & v);
     virtual bool _isIndexable() const {return true;}
-    virtual App::any _getValueAsAny() const;
+    virtual App::any _getValueAsAny(int *jumpCode=0) const;
     virtual void _toString(std::ostream &, bool, int) const;
     virtual ExpressionPtr _copy() const;
 
@@ -670,7 +858,7 @@ protected:
 
     virtual void _visit(ExpressionVisitor & v);
     virtual bool _isIndexable() const {return true;}
-    virtual App::any _getValueAsAny() const;
+    virtual App::any _getValueAsAny(int *jumpCode=0) const;
     virtual void _toString(std::ostream &, bool, int) const;
     virtual ExpressionPtr _copy() const;
 
@@ -686,8 +874,6 @@ class AppExport BaseStatement : public Expression {
 public:
 protected:
     BaseStatement(const App::DocumentObject *owner):Expression(owner){}
-
-    virtual App::any _getValueAsAny() const;
 };
 
 /////////////////////////////////////////////////////////////////
@@ -705,7 +891,7 @@ protected:
 
     virtual void _toString(std::ostream &ss, bool persistent, int indent) const;
     virtual ExpressionPtr _copy() const;
-    virtual App::any _getValueAsAny() const;
+    virtual App::any _getValueAsAny(int *jumpCode=0) const;
 
 protected:
     int type;
@@ -721,8 +907,6 @@ public:
                     int type, ExpressionPtr &&expr = ExpressionPtr());
 
     virtual bool isTouched() const;
-    virtual int jump() const;
-    virtual ExpressionPtr simplify() const;
 
 protected:
     JumpStatement(const App::DocumentObject *_owner) :BaseStatement(_owner) {}
@@ -730,8 +914,7 @@ protected:
     virtual void _visit(ExpressionVisitor & v);
     virtual void _toString(std::ostream &ss, bool persistent, int indent) const;
     virtual ExpressionPtr _copy() const;
-    virtual ExpressionPtr _eval() const;
-    virtual App::any _getValueAsAny() const;
+    virtual App::any _getValueAsAny(int *jumpCode=0) const;
 
 protected:
     ExpressionPtr expr;
@@ -759,7 +942,7 @@ protected:
     virtual void _visit(ExpressionVisitor & v);
     virtual void _toString(std::ostream &ss, bool persistent, int indent) const;
     virtual ExpressionPtr _copy() const;
-    virtual ExpressionPtr _eval() const;
+    virtual App::any _getValueAsAny(int *jumpCode=0) const;
 
 protected:
     ExpressionList conditions;
@@ -786,7 +969,7 @@ protected:
     virtual void _visit(ExpressionVisitor & v);
     virtual void _toString(std::ostream &ss, bool persistent, int indent) const;
     virtual ExpressionPtr _copy() const;
-    virtual ExpressionPtr _eval() const;
+    virtual App::any _getValueAsAny(int *jumpCode=0) const;
 
 protected:
     ExpressionPtr condition;
@@ -814,7 +997,7 @@ protected:
     virtual void _visit(ExpressionVisitor & v);
     virtual void _toString(std::ostream &ss, bool persistent, int indent) const;
     virtual ExpressionPtr _copy() const;
-    virtual ExpressionPtr _eval() const;
+    virtual App::any _getValueAsAny(int *jumpCode=0) const;
 
 protected:
     ExpressionList targets;
@@ -858,7 +1041,7 @@ protected:
     virtual void _visit(ExpressionVisitor & v);
     virtual void _toString(std::ostream &ss, bool persistent, int indent) const;
     virtual ExpressionPtr _copy() const;
-    virtual ExpressionPtr _eval() const;
+    virtual App::any _getValueAsAny(int *jumpCode=0) const;
 
 protected:
     ExpressionList exprs;
@@ -896,7 +1079,7 @@ protected:
     virtual void _visit(ExpressionVisitor & v);
     virtual void _toString(std::ostream &ss, bool persistent, int indent) const;
     virtual ExpressionPtr _copy() const;
-    virtual App::any _getValueAsAny() const;
+    virtual App::any _getValueAsAny(int *jumpCode=0) const;
 
 protected:
     StringList names;
@@ -922,7 +1105,7 @@ protected:
 
     virtual void _toString(std::ostream &ss, bool persistent, int indent) const;
     virtual ExpressionPtr _copy() const;
-    virtual App::any _getValueAsAny() const;
+    virtual App::any _getValueAsAny(int *jumpCode=0) const;
 
 protected:
     std::string name;
@@ -945,7 +1128,7 @@ protected:
     virtual void _visit(ExpressionVisitor & v);
     virtual void _toString(std::ostream &ss, bool persistent, int indent) const;
     virtual ExpressionPtr _copy() const;
-    virtual App::any _getValueAsAny() const;
+    virtual App::any _getValueAsAny(int *jumpCode=0) const;
 
 protected:
     ExpressionList targets;
@@ -964,7 +1147,7 @@ protected:
 
     virtual void _toString(std::ostream &ss, bool persistent, int indent) const;
     virtual ExpressionPtr _copy() const;
-    virtual App::any _getValueAsAny() const;
+    virtual App::any _getValueAsAny(int *jumpCode=0) const;
 
 protected:
     StringList names;
@@ -990,9 +1173,9 @@ protected:
 
     virtual void _toString(std::ostream &ss, bool persistent, int indent) const;
     virtual ExpressionPtr _copy() const;
-    virtual ExpressionPtr _eval() const;
+    virtual App::any _getValueAsAny(int *jumpCode=0) const;
 
-    ExpressionPtr findException(Base::Exception &e, PyObject *pyobj) const;
+    bool findException(App::any &res, int *jumpCode, Base::Exception &e, PyObject *pyobj) const;
 
 protected:
     ExpressionPtr body;
@@ -1019,7 +1202,7 @@ protected:
 
     virtual void _toString(std::ostream &ss, bool persistent, int indent) const;
     virtual ExpressionPtr _copy() const;
-    virtual App::any _getValueAsAny() const;
+    virtual App::any _getValueAsAny(int *jumpCode=0) const;
 
 protected:
     StringList modules;
@@ -1042,7 +1225,7 @@ protected:
 
     virtual void _toString(std::ostream &ss, bool persistent, int indent) const;
     virtual ExpressionPtr _copy() const;
-    virtual App::any _getValueAsAny() const;
+    virtual App::any _getValueAsAny(int *jumpCode=0) const;
 
 protected:
     std::string module;

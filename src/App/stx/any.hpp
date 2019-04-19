@@ -57,7 +57,11 @@
 #endif // defined(__hasinclude)
 
 
-#ifndef STX_HAVE_STD_ANY
+// Always use this implementation since we've change internal storage to
+// acommandate for Base::Quantity
+//
+// #ifndef STX_HAVE_STD_ANY
+#if 1
 
 #include <new>
 #include <stdexcept>
@@ -209,7 +213,7 @@ public:
 
 private: // Storage and Virtual Method Table
 
-    typedef std::aligned_storage<2 * sizeof(void*), std::alignment_of<void*>::value>::type stack_storage_t;
+    typedef std::aligned_storage<4 * sizeof(void*), std::alignment_of<void*>::value>::type stack_storage_t;
     union storage_union
     {
 
@@ -360,6 +364,8 @@ protected:
 #endif
     }
 
+public:
+
     /// Casts (with no type_info checks) the storage pointer as const T*.
     template<typename T>
     const T* cast() const BOOST_NOEXCEPT
@@ -376,6 +382,16 @@ protected:
         return requires_allocation<typename std::decay<T>::type>::value?
             reinterpret_cast<T*>(storage.dynamic) :
             reinterpret_cast<T*>(&storage.stack);
+    }
+
+    bool is_typed_fast(const std::type_info& t) const
+    {
+        return is_same_fast(this->type(), t);
+    }
+
+    static bool is_same_fast(const std::type_info& a, const std::type_info& b)
+    {
+        return &a == &b;
     }
 
 private:
