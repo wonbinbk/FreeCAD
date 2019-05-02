@@ -96,8 +96,12 @@ public:
     ValueT canDragObjects() const;
     /// Check whether the object can be removed from the view provider by drag and drop
     ValueT canDragObject(App::DocumentObject*) const;
+    /// Check whether the object can be removed from the view provider by drag and drop
+    ValueT canDragObjectTo(App::DocumentObject*,App::DocumentObject*,App::DocumentObject*,const char*) const;
     /// Starts to drag the object
     ValueT dragObject(App::DocumentObject*);
+    /// Starts to drag the object
+    ValueT dragObjectTo(App::DocumentObject*,App::DocumentObject*,App::DocumentObject*,const char*);
     /// Returns true if the view provider generally accepts dropping of objects
     ValueT canDropObjects() const;
     /// Check whether the object can be dropped to the view provider by drag and drop
@@ -151,7 +155,9 @@ private:
     FC_PY_ELEMENT(canRemoveChildrenFromRoot) \
     FC_PY_ELEMENT(canDragObjects) \
     FC_PY_ELEMENT(canDragObject) \
+    FC_PY_ELEMENT(canDragObjectTo) \
     FC_PY_ELEMENT(dragObject) \
+    FC_PY_ELEMENT(dragObjectTo) \
     FC_PY_ELEMENT(canDropObjects) \
     FC_PY_ELEMENT(canDropObject) \
     FC_PY_ELEMENT(dropObject) \
@@ -315,6 +321,18 @@ public:
             return ViewProviderT::canDragObject(obj);
         }
     }
+    /// Check whether the object can be removed from the view provider by drag and drop
+    virtual bool canDragObjectTo(App::DocumentObject* obj, App::DocumentObject *target,
+            App::DocumentObject *owner, const char *subname) const {
+        switch (imp->canDragObjectTo(obj,target,owner,subname)) {
+        case ViewProviderPythonFeatureImp::Accepted:
+            return true;
+        case ViewProviderPythonFeatureImp::Rejected:
+            return false;
+        default:
+            return ViewProviderT::canDragObjectTo(obj,target,owner,subname);
+        }
+    }
     /// Starts to drag the object
     virtual void dragObject(App::DocumentObject* obj) {
         switch (imp->dragObject(obj)) {
@@ -323,6 +341,17 @@ public:
             return;
         default:
             return ViewProviderT::dragObject(obj);
+        }
+    }
+    /// Starts to drag the object
+    virtual void dragObjectTo(App::DocumentObject* obj, App::DocumentObject *target,
+            App::DocumentObject *owner, const char *subname) {
+        switch (imp->dragObjectTo(obj,target,owner,subname)) {
+        case ViewProviderPythonFeatureImp::Accepted:
+        case ViewProviderPythonFeatureImp::Rejected:
+            return;
+        default:
+            return ViewProviderT::dragObjectTo(obj,target,owner,subname);
         }
     }
     /// Returns true if the view provider generally accepts dropping of objects

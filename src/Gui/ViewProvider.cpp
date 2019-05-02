@@ -627,6 +627,15 @@ bool ViewProvider::canDragObject(App::DocumentObject* obj) const
     return false;
 }
 
+bool ViewProvider::canDragObjectTo(App::DocumentObject* obj, App::DocumentObject *target,
+        App::DocumentObject *owner, const char *subname) const
+{
+    (void)target;
+    (void)owner;
+    (void)subname;
+    return canDragObject(obj);
+}
+
 bool ViewProvider::canDragObjects() const
 {
     auto vector = getExtensionsDerivedFromType<Gui::ViewProviderExtension>();
@@ -649,6 +658,15 @@ void ViewProvider::dragObject(App::DocumentObject* obj)
     }
 
     throw Base::RuntimeError("ViewProvider::dragObject: no extension for dragging given object available.");
+}
+
+void ViewProvider::dragObjectTo(App::DocumentObject* obj, App::DocumentObject *target,
+        App::DocumentObject *owner, const char *subname)
+{
+    (void)target;
+    (void)owner;
+    (void)subname;
+    return dragObject(obj);
 }
 
 bool ViewProvider::canDropObject(App::DocumentObject* obj) const

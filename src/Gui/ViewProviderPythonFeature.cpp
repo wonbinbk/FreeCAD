@@ -1009,6 +1009,34 @@ ViewProviderPythonFeatureImp::canDragObject(App::DocumentObject* obj) const
 }
 
 ViewProviderPythonFeatureImp::ValueT
+ViewProviderPythonFeatureImp::canDragObjectTo(App::DocumentObject* obj,
+        App::DocumentObject *target, App::DocumentObject *owner, const char *subname) const
+{
+    if(py_canDragObjectTo.isNone())
+        return NotImplemented;
+
+    Base::PyGILStateLocker lock;
+    try {
+        Py::Tuple args(4);
+        args.setItem(0, Py::Object(obj->getPyObject(), true));
+        args.setItem(1, Py::Object(target->getPyObject(), true));
+        if(owner)
+            args.setItem(2, Py::Object(owner->getPyObject(), true));
+        else
+            args.setItem(2, Py::Object());
+        args.setItem(3, Py::String(subname?subname:""));
+        Py::Boolean ok(Base::pyCall(py_canDragObjectTo.ptr(),args.ptr()));
+        return static_cast<bool>(ok) ? Accepted : Rejected;
+    }
+    catch (Py::Exception&) {
+        Base::PyException e; // extract the Python error text
+        e.ReportException();
+    }
+
+    return Rejected;
+}
+
+ViewProviderPythonFeatureImp::ValueT
 ViewProviderPythonFeatureImp::dragObject(App::DocumentObject* obj)
 {
     if(py_dragObject.isNone())
@@ -1030,6 +1058,35 @@ ViewProviderPythonFeatureImp::dragObject(App::DocumentObject* obj)
             Base::pyCall(py_dragObject.ptr(),args.ptr());
             return Accepted;
         }
+    }
+    catch (Py::Exception&) {
+        Base::PyException e; // extract the Python error text
+        e.ReportException();
+    }
+
+    return Rejected;
+}
+
+ViewProviderPythonFeatureImp::ValueT
+ViewProviderPythonFeatureImp::dragObjectTo(App::DocumentObject* obj,
+        App::DocumentObject *target, App::DocumentObject *owner, const char *subname)
+{
+    if(py_dragObjectTo.isNone())
+        return NotImplemented;
+
+    // Run the onChanged method of the proxy object.
+    Base::PyGILStateLocker lock;
+    try {
+        Py::Tuple args(4);
+        args.setItem(0, Py::Object(obj->getPyObject(), true));
+        args.setItem(1, Py::Object(target->getPyObject(), true));
+        if(owner)
+            args.setItem(2, Py::Object(owner->getPyObject(), true));
+        else
+            args.setItem(2, Py::Object());
+        args.setItem(3, Py::String(subname?subname:""));
+        Base::pyCall(py_dragObjectTo.ptr(),args.ptr());
+        return Accepted;
     }
     catch (Py::Exception&) {
         Base::PyException e; // extract the Python error text

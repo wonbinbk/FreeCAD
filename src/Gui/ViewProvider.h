@@ -238,8 +238,46 @@ public:
     virtual bool canDragObjects() const;
     /** Check whether the object can be removed from the view provider by drag and drop */
     virtual bool canDragObject(App::DocumentObject*) const;
+    /** Query object dragging with full quanlified name 
+     *
+     * Tree view now calls this function instead of canDragObject(). The default
+     * implementation calls the old canDragObject().
+     *
+     * @param obj: the object being dragged
+     *
+     * @param target: the dropping target object
+     *
+     * @param owner: the (grand)parent object of the dropping target. Maybe
+     * null. This may not be the top parent object, as tree view will try to
+     * find a parent of the dropping object realtive to this object to avoid
+     * cyclic dependency
+     *
+     * @param subname: subname reference to the dropping object
+     */
+    virtual bool canDragObjectTo(App::DocumentObject *obj, App::DocumentObject *target,
+            App::DocumentObject *owner, const char *subname) const;
     /** Remove a child from the view provider by drag and drop */
     virtual void dragObject(App::DocumentObject*);
+    /** Drag an object out
+     * 
+     * @param obj: the object being dragged
+     *
+     * @param target: the dropping target object
+     *
+     * @param owner: the (grand)parent object of the dropping target. Maybe
+     * null. This may not be the top parent object, as tree view will try to
+     * find a parent of the dropping object realtive to this object to avoid
+     * cyclic dependency
+     *
+     * @param subname: subname reference to the dropping object
+     *
+     * Tree view now calls this function instead of dragObject() to perform
+     * dragging. The default implementation of this function still calls
+     * dragObject() to maintain backward compatibilty. This function allows the
+     * object to have different behavior depending on dropping target.
+     */
+    virtual void dragObjectTo(App::DocumentObject *obj, App::DocumentObject *target,
+            App::DocumentObject *owner, const char *subname);
     /** Check whether objects can be added to the view provider by drag and drop or drop only */
     virtual bool canDropObjects() const;
     /** Check whether the object can be dropped to the view provider by drag and drop or drop only*/

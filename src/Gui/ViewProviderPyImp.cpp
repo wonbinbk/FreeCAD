@@ -158,18 +158,24 @@ PyObject*  ViewProviderPy::isVisible(PyObject *args)
 PyObject*  ViewProviderPy::canDragObject(PyObject *args)
 {
     PyObject *obj = Py_None;
-    if (!PyArg_ParseTuple(args, "|O", &obj))
+    PyObject *target = Py_None;
+    PyObject *owner = Py_None;
+    const char *subname = 0;
+    if (!PyArg_ParseTuple(args, "|O!O!O!s", &obj))
         return NULL;
     PY_TRY {
         bool ret;
         if(obj == Py_None)
             ret = getViewProviderPtr()->canDragObjects();
-        else if(!PyObject_TypeCheck(obj,&App::DocumentObjectPy::Type)) {
-            PyErr_SetString(PyExc_TypeError, "exepcting a type of DocumentObject");
-            return 0;
-        }else
+        else if(target == Py_None)
             ret = getViewProviderPtr()->canDragObject(
                     static_cast<App::DocumentObjectPy*>(obj)->getDocumentObjectPtr());
+        else
+            ret = getViewProviderPtr()->canDragObjectTo(
+                    static_cast<App::DocumentObjectPy*>(obj)->getDocumentObjectPtr(),
+                    static_cast<App::DocumentObjectPy*>(target)->getDocumentObjectPtr(),
+                    owner!=Py_None?static_cast<App::DocumentObjectPy*>(owner)->getDocumentObjectPtr():nullptr,
+                    subname);
         return Py::new_reference_to(Py::Boolean(ret));
     } PY_CATCH;
 }
@@ -261,11 +267,24 @@ PyObject*  ViewProviderPy::dropObject(PyObject *args)
 PyObject*  ViewProviderPy::dragObject(PyObject *args)
 {
     PyObject *obj;
-    if (!PyArg_ParseTuple(args, "O!", &App::DocumentObjectPy::Type,&obj))
+    PyObject *target = Py_None;
+    PyObject *owner = Py_None;
+    const char *subname = 0;
+    if (!PyArg_ParseTuple(args, "O!|O!O!s", &App::DocumentObjectPy::Type,&obj,
+                &App::DocumentObjectPy::Type,&target,
+                &App::DocumentObjectPy::Type,&owner,
+                &subname))
         return NULL;
     PY_TRY {
-        getViewProviderPtr()->dragObject(
-                static_cast<App::DocumentObjectPy*>(obj)->getDocumentObjectPtr());
+        if(target == Py_None)
+            getViewProviderPtr()->dragObject(
+                    static_cast<App::DocumentObjectPy*>(obj)->getDocumentObjectPtr());
+        else
+            getViewProviderPtr()->dragObjectTo(
+                    static_cast<App::DocumentObjectPy*>(obj)->getDocumentObjectPtr(),
+                    static_cast<App::DocumentObjectPy*>(target)->getDocumentObjectPtr(),
+                    owner!=Py_None? static_cast<App::DocumentObjectPy*>(owner)->getDocumentObjectPtr():nullptr,
+                    subname);
         Py_Return;
     } PY_CATCH;
 }

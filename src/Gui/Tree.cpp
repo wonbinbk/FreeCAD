@@ -1335,6 +1335,9 @@ struct ItemInfo {
     std::string topDoc;
     std::string topObj;
     std::string topSubname;
+    std::string dropOwnerDoc;
+    std::string dropOwner;
+    std::string dropSubname;
     std::vector<std::string> subs;
     bool dragging = false;
 };
@@ -1396,6 +1399,10 @@ void TreeWidget::dropEvent(QDropEvent *event)
             return; // no group like object
         }
 
+        App::DocumentObject *targetObj = targetItemObj->object()->getObject();
+        std::string target = targetObj->getNameInDocument();
+        App::Document *targetDoc = targetObj->getDocument();
+
         std::ostringstream targetSubname;
         App::DocumentObject *targetParent = 0;
         targetItemObj->getSubName(targetSubname,targetParent);
@@ -1425,7 +1432,7 @@ void TreeWidget::dropEvent(QDropEvent *event)
             App::DocumentObject* obj = vpc->getObject();
             std::ostringstream str;
             App::DocumentObject *topParent=0;
-            auto owner = item->getRelativeParent(str,targetItemObj,&topParent,&info.topSubname);
+            App::DocumentObject *owner = item->getRelativeParent(str,targetItemObj,&topParent,&info.topSubname);
             if(syncPlacement && topParent) {
                 info.topDoc = topParent->getDocument()->getName();
                 info.topObj = topParent->getNameInDocument();
@@ -1445,14 +1452,38 @@ void TreeWidget::dropEvent(QDropEvent *event)
                item->myOwner == targetItemObj->myOwner && 
                vp->canDragAndDropObject(item->object()->getObject()))
             {
+                str.str("");
+                App::DocumentObject *dropOwner = targetItemObj->getRelativeParent(str,item);
+                info.dropSubname = str.str() + vp->getDropPrefix();
+                if(!dropOwner && info.dropSubname.size())
+                    dropOwner = targetObj;
+                App::DocumentObject *target = targetObj;
+                if(dropOwner) {
+                    target = dropOwner->getSubObject(info.dropSubname.c_str());
+                    if(!target) {
+                        TREE_ERR("'" << item->object()->getObject()->getFullName() 
+                                << "' failed to find drop target '" 
+                                << dropOwner->getFullName() << '.'
+                                << info.dropSubname);
+                        continue;
+                    }
+                    info.dropOwnerDoc = dropOwner->getDocument()->getName();
+                    info.dropOwner = dropOwner->getNameInDocument();
+                }
+
                 auto parentItem = item->getParentItem();
                 if(parentItem &&
                    (!parentItem->object()->canDragObjects() || 
-                    !parentItem->object()->canDragObject(item->object()->getObject())))
+                    !parentItem->object()->canDragObjectTo(
+                        item->object()->getObject(),target,dropOwner,info.dropSubname.c_str())))
                 {
-                    TREE_ERR("'" << item->object()->getObject()->getFullName() << 
-                           "' cannot be dragged out of '" << 
-                           parentItem->object()->getObject()->getFullName() << "'");
+                    TREE_ERR("'" << item->object()->getObject()->getFullName() 
+                            << "' cannot be dragged from '" 
+                            << parentItem->object()->getObject()->getFullName() 
+                            << "' into '" << (dropOwner?
+                                (dropOwner->getFullName()+"."+info.dropSubname)
+                                 :target->getFullName()) 
+                            << "'");
                     return;
                 }
                 info.dragging = true;
@@ -1461,6 +1492,7 @@ void TreeWidget::dropEvent(QDropEvent *event)
                     info.parent = vpp->getObject()->getNameInDocument();
                     info.parentDoc = vpp->getObject()->getDocument()->getName();
                 }
+            
             }
         }
 
@@ -1468,19 +1500,13 @@ void TreeWidget::dropEvent(QDropEvent *event)
         Gui::Document* gui = vp->getDocument();
         gui->openCommand("Drop object");
         try {
-            auto targetObj = targetItemObj->object()->getObject();
-            std::string target = targetObj->getNameInDocument();
-            auto targetDoc = targetObj->getDocument();
             for (auto &info : infos) {
                 auto &subname = info.subname;
                 targetObj = targetDoc->getObject(target.c_str());
-                vp = dynamic_cast<ViewProviderDocumentObject*>(
-                        Application::Instance->getViewProvider(targetObj));
-                if(!vp) {
+                if(!targetObj) {
                     FC_ERR("Cannot find drop traget object " << target);
                     break;
                 }
-
                 auto doc = App::GetApplication().getDocument(info.doc.c_str());
                 if(!doc) {
                     FC_WARN("Cannot find document " << info.doc);
@@ -1542,24 +1568,56 @@ void TreeWidget::dropEvent(QDropEvent *event)
                     }
                 }
 
+                std::string dropTargetDoc;
+                std::string dropTarget;
+
                 auto manager = Application::Instance->macroManager();
                 std::ostringstream ss;
                 if(vpp) {
+                    App::DocumentObject *target = targetObj;
+                    App::DocumentObject *dropOwner = 0;
+                    if(info.dropOwner.size()) {
+                        target = 0;
+                        auto doc = App::GetApplication().getDocument(info.dropOwnerDoc.c_str());
+                        if(doc) {
+                            dropOwner = doc->getObject(info.dropOwner.c_str());
+                            if(dropOwner)
+                                target = dropOwner->getSubObject(info.dropSubname.c_str());
+                        }
+                        if(!target) {
+                            TREE_ERR("Cannot find drop target "
+                                    << info.dropOwnerDoc << '#' << info.dropOwner << '.'
+                                    << info.dropSubname);
+                            return;
+                        }
+                    }
                     auto lines = manager->getLines();
                     ss << Command::getObjectCmd(vpp->getObject())
-                        << ".ViewObject.dragObject(" << Command::getObjectCmd(obj) << ')';
-                    vpp->dragObject(obj);
+                        << ".ViewObject.dragObject(" << Command::getObjectCmd(obj) << ','
+                        << Command::getObjectCmd(target);
+                    if(dropOwner)
+                        ss << Command::getObjectCmd(dropOwner) << ',' << info.dropSubname;
+                    ss << ')';
                     if(manager->getLines() == lines)
                         manager->addLine(MacroManager::Gui,ss.str().c_str());
                     owner = 0;
                     subname.clear();
                     ss.str("");
 
+                    vpp->dragObjectTo(obj,target,dropOwner,info.dropSubname.c_str());
+
                     obj = doc->getObject(info.obj.c_str());
                     if(!obj || !obj->getNameInDocument()) {
-                        FC_WARN("Dropping object deleted: " << info.doc << '@' << info.obj);
+                        FC_WARN("Dropping object deleted: " << info.doc << '#' << info.obj);
                         continue;
                     }
+                }
+
+                auto vp = Base::freecad_dynamic_cast<ViewProviderDocumentObject>(
+                        Application::Instance->getViewProvider(targetObj));
+                if(!vp) {
+                    FC_ERR("Cannot find drop traget object " << targetDoc->getName() << '#' << target);
+                    break;
                 }
 
                 if(info.dragging) {
@@ -1577,7 +1635,7 @@ void TreeWidget::dropEvent(QDropEvent *event)
                 }
 
                 ss.str("");
-                ss << Command::getObjectCmd(vp->getObject())
+                ss << Command::getObjectCmd(targetObj)
                     << ".ViewObject.dropObject(" << Command::getObjectCmd(obj);
                 if(owner) {
                     ss << "," << Command::getObjectCmd(owner)
