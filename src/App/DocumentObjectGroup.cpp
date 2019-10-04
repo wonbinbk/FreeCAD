@@ -38,7 +38,9 @@ PROPERTY_SOURCE_WITH_EXTENSIONS(App::DocumentObjectGroup, App::DocumentObject)
 DocumentObjectGroup::DocumentObjectGroup(void): DocumentObject(), GroupExtension() {
 
     GroupExtension::initExtension(this);
-    _GroupTouched.setStatus(App::Property::Output,true);
+
+    ExportMode.setStatus(Property::Hidden,false);
+    ExportMode.setValue(EXPORT_BY_VISIBILITY);
 }
 
 DocumentObjectGroup::~DocumentObjectGroup() {
