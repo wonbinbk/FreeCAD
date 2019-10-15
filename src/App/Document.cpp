@@ -161,6 +161,17 @@ namespace App {
 
 static bool _IsRestoring;
 static bool _IsRelabeling;
+
+/// Mark the status of an object in a partial loaded document
+enum PartialStatus{
+    /// object is created but not restored
+    PS_NO_RESTORE,
+    /// object is created and restored
+    PS_RESTORE,
+    /// object is created and restored, but some dependency object is not restored
+    PS_PARTIAL_DEPS,
+};
+
 // Pimpl class
 struct DocumentP
 {
@@ -169,7 +180,7 @@ struct DocumentP
     std::unordered_set<App::DocumentObject*> touchedObjs;
     std::unordered_map<std::string,DocumentObject*> objectMap;
     std::unordered_map<long,DocumentObject*> objectIdMap;
-    std::unordered_map<std::string, bool> partialLoadObjects;
+    std::unordered_map<std::string, PartialStatus> partialLoadObjects;
     long lastObjectId;
     DocumentObject* activeObject;
     Transaction *activeUndoTransaction;
@@ -1906,12 +1917,12 @@ struct DepInfo {
 };
 
 static void _loadDeps(const std::string &name, 
-        std::unordered_map<std::string,bool> &objs, 
+        std::unordered_map<std::string,PartialStatus> &objs, 
         const std::unordered_map<std::string,DepInfo> &deps) 
 {
     auto it = deps.find(name);
     if(it == deps.end()) {
-        objs.emplace(name,true);
+        objs.emplace(name,PS_RESTORE);
         return;
     }
     if(it->second.canLoadPartial) {
@@ -1920,17 +1931,17 @@ static void _loadDeps(const std::string &name,
             // restored, i.e. exists as if newly created object, and therefore no
             // need to load dependency of the children
             for(auto &dep : it->second.deps)
-                objs.emplace(dep,false);
-            objs.emplace(name,true);
+                objs.emplace(dep,PS_NO_RESTORE);
+            objs.emplace(name,PS_RESTORE);
         }else
-            objs.emplace(name,false);
+            objs.emplace(name,PS_RESTORE);
         return;
     }
-    objs[name] = true;
+    objs[name] = PS_RESTORE;
     // If cannot load partial, then recurse to load all children dependency
     for(auto &dep : it->second.deps) {
-        auto it = objs.find(dep);
-        if(it!=objs.end() && it->second)
+        auto iter = objs.find(dep);
+        if(iter!=objs.end() && iter->second!=PS_NO_RESTORE)
             continue;
         _loadDeps(dep,objs,deps);
     }
@@ -1949,6 +1960,17 @@ Document::readObjects(Base::XMLReader& reader)
     reader.readElement("Objects");
     int Cnt = reader.getAttributeAsInteger("Count");
 
+    // d->partialLoadObjects is initiated in restore(), which is called by
+    // Application::openDocumentPrivate(). These are the objects inside this
+    // document that are linked other documents. We are going to check the 
+    // dependency of these objects and determin how to restore them.
+    //
+    // If FC_ATTR_DEPENDENCIES ("Dependencies") attribute is present, then the
+    // "Objects" element here will first have "Count" of OBJECT_DEPS
+    // ("ObjectDeps") elements, followed by another "Count" of the usual
+    // "Object" Element. Each "ObjectDeps" element stores a list of depending
+    // object name of one object.
+
     if(!reader.hasAttribute(FC_ATTR_DEPENDENCIES))
         d->partialLoadObjects.clear();
     else if(d->partialLoadObjects.size()) {
@@ -1956,11 +1978,16 @@ Document::readObjects(Base::XMLReader& reader)
         for (int i=0 ;i<Cnt ;i++) {
             reader.readElement(FC_ELEMENT_OBJECT_DEPS);
             int dcount = reader.getAttributeAsInteger(FC_ATTR_DEP_COUNT);
-            if(!dcount)
+            if(!dcount) {
+                // this object has no dependency, consider it as fully loaded
                 continue;
+            }
             auto &info = deps[reader.getAttribute(FC_ATTR_DEP_OBJ_NAME)];
-            if(reader.hasAttribute(FC_ATTR_DEP_ALLOW_PARTIAL))
+            if(reader.hasAttribute(FC_ATTR_DEP_ALLOW_PARTIAL)) {
+                // ALLOW_PARTIAL is the return value from this object's
+                // canLoadPartial() during last document save.
                 info.canLoadPartial = reader.getAttributeAsInteger(FC_ATTR_DEP_ALLOW_PARTIAL);
+            }
             for(int j=0;j<dcount;++j) {
                 reader.readElement(FC_ELEMENT_OBJECT_DEP);
                 const char *name = reader.getAttribute(FC_ATTR_DEP_OBJ_NAME);
@@ -1969,12 +1996,18 @@ Document::readObjects(Base::XMLReader& reader)
             }
             reader.readEndElement(FC_ELEMENT_OBJECT_DEPS);
         }
+
         std::vector<std::string> objs;
         objs.reserve(d->partialLoadObjects.size());
         for(auto &v : d->partialLoadObjects)
             objs.push_back(v.first.c_str());
+
+        // Dependency information full loaded. Now traverse the graph and find
+        // out which objects needs to be loaded.
+
         for(auto &name : objs)
             _loadDeps(name,d->partialLoadObjects,deps);
+
         if(Cnt > (int)d->partialLoadObjects.size())
             setStatus(Document::PartialDoc,true);
         else {
@@ -1987,6 +2020,32 @@ Document::readObjects(Base::XMLReader& reader)
             if(!testStatus(Document::PartialDoc))
                 d->partialLoadObjects.clear();
         }
+
+        if(testStatus(Document::PartialDoc)) {
+            // Now all need objects are in d->partialLoadObjects, which is a
+            // map from object name to PartialStatus, PS_RESTORE: means only
+            // create the object but do not restore it.  PS_NO_RESTORE: means
+            // create and  restore. We shall now further distinguish objects
+            // that has some of its dependency not restored, and mark it as
+            // PS_PARTIAL_DEPS. These object will later have a status flag
+            // App::PartialDeps.
+            for(auto &v : d->partialLoadObjects) {
+                if(v.second == PS_NO_RESTORE)
+                    continue;
+                auto it = deps.find(v.first);
+                if(it == deps.end())
+                    continue;
+                for(auto &dep : it->second.deps) {
+                    auto iter = d->partialLoadObjects.find(dep);
+                    if(iter!=d->partialLoadObjects.end()) {
+                        if(iter->second == PS_NO_RESTORE) {
+                            v.second = PS_PARTIAL_DEPS;
+                            break;
+                        }
+                    }
+                }
+            }
+        }
     }
 
     long lastId = 0;
@@ -1996,12 +2055,12 @@ Document::readObjects(Base::XMLReader& reader)
         std::string name = reader.getAttribute("name");
         std::string viewType = reader.hasAttribute("ViewType")?reader.getAttribute("ViewType"):"";
 
-        bool partial = false;
+        PartialStatus partial_status = PS_RESTORE;
         if(d->partialLoadObjects.size()) {
             auto it = d->partialLoadObjects.find(name);
             if(it == d->partialLoadObjects.end())
                 continue;
-            partial = !it->second;
+            partial_status = it->second;
         }
 
         if(!testStatus(Status::Importing) && reader.hasAttribute("id")) {
@@ -2031,8 +2090,14 @@ Document::readObjects(Base::XMLReader& reader)
             // otherwise we may cause a dependency to itself
             // Example: Object 'Cut001' references object 'Cut' and removing the
             // digits we make an object 'Cut' referencing itself.
-            App::DocumentObject* obj = addObject(type.c_str(), obj_name, /*isNew=*/ false, viewType.c_str(), partial);
+            App::DocumentObject* obj = addObject(type.c_str(), obj_name, /*isNew=*/ false, viewType.c_str());
             if (obj) {
+
+                if(partial_status == PS_NO_RESTORE)
+                    obj->setStatus(ObjectStatus::PartialObject,true);
+                else if(partial_status == PS_PARTIAL_DEPS)
+                    obj->setStatus(ObjectStatus::PartialDeps, true);
+
                 if(lastId < obj->_Id)
                     lastId = obj->_Id;
                 objs.push_back(obj);
@@ -2434,7 +2499,7 @@ void Document::restore (const char *filename,
 
     d->partialLoadObjects.clear();
     for(auto &name : objNames)
-        d->partialLoadObjects.emplace(name,true);
+        d->partialLoadObjects.emplace(name,PS_RESTORE);
     try {
         Document::Restore(reader);
     }
@@ -3486,7 +3551,7 @@ bool Document::recomputeFeature(DocumentObject* Feat, bool recursive)
 }
 
 DocumentObject * Document::addObject(const char* sType, const char* pObjectName, 
-                                     bool isNew, const char* viewType, bool isPartial)
+                                     bool isNew, const char* viewType)
 {
     Base::BaseClass* base = static_cast<Base::BaseClass*>(Base::Type::createInstanceByName(sType,true));
 
@@ -3544,8 +3609,6 @@ DocumentObject * Document::addObject(const char* sType, const char* pObjectName,
 
     // mark the object as new (i.e. set status bit 2) and send the signal
     pcObject->setStatus(ObjectStatus::New, true);
-
-    pcObject->setStatus(ObjectStatus::PartialObject, isPartial);
 
     if (!viewType || viewType[0] == '\0')
         viewType = pcObject->getViewProviderNameOverride();

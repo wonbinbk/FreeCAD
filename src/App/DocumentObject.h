@@ -55,7 +55,7 @@ enum ObjectStatus {
     Destroy = 7,
     Enforce = 8,
     Recompute2 = 9, // set when the object is being recomputed in the second pass
-    PartialObject = 10,
+    PartialObject = 10, // object of a partial loaded document, the object is created, but not restored
     PendingRecompute = 11, // set by Document, indicating the object is in recomputation queue
     PendingRemove = 12, // set by Document, indicating the object is in pending for remove after recompute
     ObjImporting = 13, // Mark the object as importing
@@ -63,6 +63,9 @@ enum ObjectStatus {
     GeoExcluded = 15, // mark as a member but not claimed by GeoFeatureGroup
     Expand = 16, // indicate the object's tree item expansion status
     NoAutoExpand = 17, // disable tree item auto expand on selection for this object
+
+    // object of a partial loaded document, the object is created and restored, but some of its dependency is not restored.
+    PartialDeps = 18, 
 };
 
 /** Return object for feature execution

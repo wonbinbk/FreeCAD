@@ -239,10 +239,9 @@ public:
      * @param pObjectName if nonNULL use that name otherwise generate a new unique name based on the \a sType
      * @param isNew       if false don't call the \c DocumentObject::setupObject() callback (default is true)
      * @param viewType    override object's view provider name
-     * @param isPartial   indicate if this object is meant to be partially loaded
      */
     DocumentObject *addObject(const char* sType, const char* pObjectName=0, 
-            bool isNew=true, const char *viewType=0, bool isPartial=false);
+            bool isNew=true, const char *viewType=0);
     /** Add an array of features of the given types and names.
      * Unicode names are set through the Label property.
      * @param sType       The type of created object
