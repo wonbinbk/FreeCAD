@@ -35,11 +35,13 @@
 #include <list>
 #include <unordered_set>
 #include <unordered_map>
+#include <functional>
 
 class SoFullPath;
 class SoPickedPoint;
 class SoDetail;
-
+class SoPickedPointList;
+class SoRayPickAction;
 
 namespace Gui {
 
@@ -86,6 +88,9 @@ public:
     //virtual void GLRenderInPath(SoGLRenderAction * action);
     //static  void turnOffCurrentHighlight(SoGLRenderAction * action);
 
+    void setupGroupOnTop(SoPath *, const std::vector<SoGroup*> &);
+    void clearGroupOnTop();
+
     static bool hasHighlight();
 
     friend class View3DInventorViewer;
@@ -101,27 +106,30 @@ private:
     //SbBool isHighlighted(SoAction *action);
     //SbBool preRender(SoGLRenderAction *act, GLint &oldDepthFunc);
     static int getPriority(const SoPickedPoint* p);
+    SoPickedPoint* getPickedPoint(SoHandleEventAction*) const;
 
-    struct PickedInfo {
-        const SoPickedPoint *pp;
-        ViewProviderDocumentObject *vpd;
-        std::string element;
-        PickedInfo():pp(0),vpd(0)
-        {}
-    };
-
+    class PickedInfo;
     bool setHighlight(const PickedInfo &);
     bool setHighlight(SoFullPath *path, const SoDetail *det, 
             ViewProviderDocumentObject *vpd, const char *element, float x, float y, float z);
     bool setSelection(const std::vector<PickedInfo> &, bool ctrlDown=false);
 
     std::vector<PickedInfo> getPickedList(SoHandleEventAction* action, bool singlePick) const;
+    void getPickedList(std::vector<PickedInfo> &, const SoPickedPointList &, bool singlePick, bool copy,
+            std::set<std::pair<ViewProvider*, std::string> > &filter) const;
 
     Gui::Document       *pcDocument;
 
     static SoFullPath * currenthighlight;
     SoFullPath * detailPath;
 
+    struct GroupInfo {
+        SoRayPickAction *action;
+        SoPath *path;
+        SoGroup *group;
+    };
+    std::vector<GroupInfo> groupOnTop;
+    
     SbBool setPreSelection;
 
     // -1 = not handled, 0 = not selected, 1 = selected
@@ -129,6 +137,47 @@ private:
     SoColorPacker colorpacker;
 };
 
+
+/** Helper class for change and restore OpenGL depth func
+ *
+ * Although Coin3D has SoDepthBuffer and SoDepthBufferElement for this purpose,
+ * we cannot rely on it, because Coin3D implementation does not account for
+ * user code direct change of OpenGL state. And there are user code change
+ * glDepthFunc directly.
+ */
+struct GuiExport FCDepthFunc {
+    /** Constructor
+     * @param f: the depth function to change to
+     */
+    FCDepthFunc(int32_t f);
+
+    /** Constructure that does nothing
+     *
+     * This allows you to delay depth function setting by calling set()
+     */
+    FCDepthFunc();
+
+    /** Destructor
+     * Restore the depth function if changed
+     */
+    ~FCDepthFunc();
+
+    /** Change depth function
+     * @param f: the depth function to change to
+     */
+    void set(int32_t f);
+
+    /// Stores the depth function before changing
+    int32_t func;
+
+    /// Indicate whether the depth function is changed and will be restored
+    bool changed;
+
+    /// Whether to restore depth test
+    bool dtest;
+};
+
+/// For rendering a given path on top
 class GuiExport SoFCPathAnnotation : public SoSeparator {
     typedef SoSeparator inherited;
 
@@ -140,14 +189,17 @@ public:
 
     void setPath(SoPath *);
     SoPath *getPath() {return path;}
-    void setDetail(SoDetail *d);
-    SoDetail *getDetail() {return det;}
+    void setDetail(bool det);
+    bool hasDetail() {return det;}
 
     virtual void GLRenderBelowPath(SoGLRenderAction * action);
     virtual void GLRender(SoGLRenderAction * action);
     virtual void GLRenderInPath(SoGLRenderAction * action);
 
     virtual void getBoundingBox(SoGetBoundingBoxAction * action);
+    void doPick(SoPath *path, SoRayPickAction *action);
+
+    virtual void doAction(SoAction *action);
 
 protected:
     virtual ~SoFCPathAnnotation();
@@ -155,9 +207,75 @@ protected:
 protected:
     SoPath *path;
     SoTempPath *tmpPath;
-    SoDetail *det;
+    bool det;
 };
 
+
+/// Switch node that support global visibility override
+class GuiExport SoFCSwitch : public SoSwitch {
+    typedef SoSwitch inherited;
+    SO_NODE_HEADER(Gui::SoFCSwitch);
+
+public:
+    /// Stores the child index used in switching override mode
+    SoSFInt32 defaultChild;
+
+    enum OverrideSwitch {
+        /// No switch override
+        OverrideNone,
+        /// Override this and following SoFCSwitch node to its \c defaultChild if visible
+        OverrideDefault,
+        /** If OverrideDefault is on by some parent SoFCSwitch node, then
+         * override any (grand)child SoFCSwitch nodes even if it is invisible
+         */
+        OverrideVisible,
+        /// Reset override mode after this node
+        OverrideReset,
+    };
+    SoSFEnum overrideSwitch;
+
+    static void initClass(void);
+    static void finish(void);
+
+    SoFCSwitch();
+
+    virtual void doAction(SoAction *action);
+    virtual void getBoundingBox(SoGetBoundingBoxAction * action);
+    virtual void search(SoSearchAction * action);
+    virtual void callback(SoCallbackAction *action);
+    virtual void pick(SoPickAction *action);
+    virtual void handleEvent(SoHandleEventAction *action);
+
+    /// Enables switching override for the give action
+    static void switchDefault(SoAction *action, bool enable=true);
+
+    enum TraverseStateFlag {
+        /// Normal traverse
+        TraverseNormal          =0,
+        /// One or more parent SoFCSwitch nodes have been overridden
+        TraverseOverride        =1,
+        /// One or more parent SoFCSwitch are supposed to be invisible, but got overridden
+        TraverseInvisible       =2,
+        /// The immediate parent SoFCSwitch node has been switch to its \c defaultChild
+        TraverseAlternative     =4,
+    };
+    typedef std::bitset<32> TraverseState;
+    static bool testTraverseState(TraverseStateFlag flag);
+
+    /** Register a callback when handling GetBoundingBoxAction in switch override mode
+     *
+     * It is useful for some view provider that delays visual update until visible
+     */
+    template<class F>
+    void setBBoxCallback(F f) {
+        cb = f;
+    }
+private:
+    std::function<void(void)> cb;
+};
+
+
+/// Separator node that tracks render caching setting
 class GuiExport SoFCSeparator : public SoSeparator {
     typedef SoSeparator inherited;
 
@@ -324,11 +442,13 @@ public:
 
     static bool renderBBox(SoGLRenderAction *action, SoNode *node, SbColor color);
 
+    static void setupSelectionLineRendering(SoState *state, SoNode *node, const uint32_t &color);
+
 protected:
     virtual ~SoFCSelectionRoot();
 
     void renderPrivate(SoGLRenderAction *, bool inPath);
-    bool _renderPrivate(SoGLRenderAction *, bool inPath);
+    bool _renderPrivate(SoGLRenderAction *, bool inPath, bool &pushed);
 
     class Stack : public std::vector<SoFCSelectionRoot*> {
     public:
