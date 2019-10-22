@@ -411,6 +411,9 @@ void SubShapeBinder::update() {
     if(errMsg.size()) 
         FC_THROWM(Base::RuntimeError, errMsg);
 
+    if(shapes.size()==1 && !Relative.getValue())
+        shapes.back().setPlacement(Base::Placement());
+
     if(shapes.size()==_Cache.size()) {
         bool hit = true;
         for(size_t i=0;i<shapes.size();++i) {
