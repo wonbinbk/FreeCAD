@@ -56,6 +56,8 @@
 #include "ViewProviderDatumLine.h"
 #include "ViewProviderDatumPlane.h"
 #include "ViewProviderBoolean.h"
+#include "ViewProviderSplit.h"
+#include "ViewProviderSolid.h"
 #include "ViewProviderPrimitive.h"
 #include "ViewProviderDatumCS.h"
 #include "ViewProviderThickness.h"
@@ -152,6 +154,8 @@ PyMOD_INIT_FUNC(PartDesignGui)
     PartDesignGui::ViewProviderShapeBinder   ::init();
     PartDesignGui::ViewProviderSubShapeBinder::init();
     PartDesignGui::ViewProviderBoolean       ::init();
+    PartDesignGui::ViewProviderSplit         ::init();
+    PartDesignGui::ViewProviderSolid         ::init();
     PartDesignGui::ViewProviderAddSub        ::init();
     PartDesignGui::ViewProviderPrimitive     ::init();
     PartDesignGui::ViewProviderPipe          ::init();
