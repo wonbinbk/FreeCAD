@@ -42,6 +42,8 @@ class SoPickedPoint;
 class SoDetail;
 class SoPickedPointList;
 class SoRayPickAction;
+class SbViewportRegion;
+class SbVec2s;
 
 namespace Gui {
 
@@ -115,8 +117,18 @@ private:
     bool setSelection(const std::vector<PickedInfo> &, bool ctrlDown=false);
 
     std::vector<PickedInfo> getPickedList(SoHandleEventAction* action, bool singlePick) const;
-    void getPickedList(std::vector<PickedInfo> &, const SoPickedPointList &, bool singlePick, bool copy,
+
+    static void postProcessPickedList(std::vector<PickedInfo> &, bool singlePick);
+
+    void getPickedInfo(std::vector<PickedInfo> &, const SoPickedPointList &, bool singlePick, bool copy,
             std::set<std::pair<ViewProvider*, std::string> > &filter) const;
+
+    void getPickedInfoOnTop(std::vector<PickedInfo> &,const SbViewportRegion &viewport,
+            const SbVec2s &pos, bool singlePick,
+            std::set<std::pair<ViewProvider*, std::string> > &filter) const;
+
+    std::vector<App::SubObjectT> getPickedSelections(
+            const SbViewportRegion &viewport, const SbVec2s pos, SoNode *scene) const;
 
     Gui::Document       *pcDocument;
 

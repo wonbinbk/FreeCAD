@@ -26,6 +26,7 @@
 #define GUI_DOCKWND_SELECTIONVIEW_H
 
 
+#include <QMenu>
 #include "DockWindow.h"
 #include "Selection.h"
 
@@ -36,6 +37,7 @@ class QLabel;
 
 namespace App {
 class DocumentObject;
+class SubObjectT;
 }
 
 namespace Gui {
@@ -113,6 +115,20 @@ private:
 };
 
 } // namespace DockWnd
+
+class GuiExport SelectionMenu : public QMenu {
+    Q_OBJECT
+public:
+    SelectionMenu(QWidget *parent=0);
+    void doPick(const std::vector<App::SubObjectT> &sels);
+
+public Q_SLOTS:
+    void onHover(QAction *);
+
+private:
+    const std::vector<App::SubObjectT> *pSelList;
+};
+
 } // namespace Gui
 
 #endif // GUI_DOCKWND_SELECTIONVIEW_H

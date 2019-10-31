@@ -38,6 +38,7 @@
 #include <Base/Console.h>
 #include <App/Document.h>
 #include <App/GeoFeature.h>
+#include <App/DocumentObserver.h>
 #include "SelectionView.h"
 #include "Command.h"
 #include "Application.h"
@@ -49,7 +50,6 @@ FC_LOG_LEVEL_INIT("Selection",true,true,true)
 
 using namespace Gui;
 using namespace Gui::DockWnd;
-
 
 /* TRANSLATOR Gui::DockWnd::SelectionView */
 
@@ -400,16 +400,7 @@ void SelectionView::preselect(QListWidgetItem* item)
         char *end = std::strchr(objname,' ');
         if(end) *end = 0;
     }
-    QString cmd = QString::fromLatin1("Gui.Selection.setPreselection("
-        "App.getDocument('%1').getObject('%2'),'%3',tp=2)")
-        .arg(QString::fromLatin1(docname))
-        .arg(QString::fromLatin1(objname))
-        .arg(QString::fromLatin1(subname));
-    try {
-        Gui::Command::runCommand(Gui::Command::Gui,cmd.toLatin1());
-    }catch(Base::Exception &e) {
-        e.ReportException();
-    }
+    Gui::Selection().setPreselect(docname,objname,subname,0,0,0,2);
 }
 
 void SelectionView::zoom(void)
@@ -626,5 +617,56 @@ void SelectionView::onEnablePickList() {
 }
 
 /// @endcond
+
+////////////////////////////////////////////////////////////////////////
+
+SelectionMenu::SelectionMenu(QWidget *parent)
+    :QMenu(parent),pSelList(0)
+{}
+
+void SelectionMenu::doPick(const std::vector<App::SubObjectT> &sels) {
+    clear();
+    pSelList = &sels;
+    int i=-1;
+    std::ostringstream ss;
+    for(auto &sel : sels) {
+        ++i;
+        auto sobj = sel.getSubObject();
+        if(!sobj)
+            continue;
+        ss.str("");
+        ss << sel.getObjectName() << '.' << sel.getSubName();
+        if(sobj->Label.getStrValue() != sobj->getNameInDocument())
+            ss << " (" << sobj->Label.getValue() << ')';
+        QAction *action = addAction(QString::fromUtf8(ss.str().c_str()));
+        action->setData(i);
+    }
+    bool toggle = !Gui::Selection().needPickedList();
+    if(toggle)
+        Gui::Selection().enablePickedList(true);
+
+    connect(this, SIGNAL(hovered(QAction*)), this, SLOT(onHover(QAction*)));
+    QAction* picked = exec();
+    if(picked) {
+        int idx = picked->data().toInt();
+        auto &sel = sels[idx];
+        Gui::Selection().addSelection(sel.getDocumentName().c_str(),
+                sel.getObjectName().c_str(), sel.getSubName().c_str());
+    }
+    pSelList = 0;
+    if(toggle)
+        Gui::Selection().enablePickedList(false);
+}
+
+void SelectionMenu::onHover(QAction *action) {
+    if(!pSelList)
+        return;
+    int idx = action->data().toInt();
+    if(idx<0 || idx>=(int)pSelList->size())
+        return;
+    auto &sel = (*pSelList)[idx];
+    Gui::Selection().setPreselect(sel.getDocumentName().c_str(),
+            sel.getObjectName().c_str(), sel.getSubName().c_str(),0,0,0,2);
+}
 
 #include "moc_SelectionView.cpp"

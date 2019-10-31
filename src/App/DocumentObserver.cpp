@@ -33,6 +33,7 @@
 #include "Document.h"
 #include "DocumentObject.h"
 #include "DocumentObserver.h"
+#include "ComplexGeoData.h"
 
 using namespace App;
 
@@ -77,7 +78,7 @@ Document* DocumentT::getDocument() const
     return GetApplication().getDocument(document.c_str());
 }
 
-std::string DocumentT::getDocumentName() const
+const std::string &DocumentT::getDocumentName() const
 {
     return document;
 }
@@ -151,7 +152,7 @@ Document* DocumentObjectT::getDocument() const
     return GetApplication().getDocument(document.c_str());
 }
 
-std::string DocumentObjectT::getDocumentName() const
+const std::string& DocumentObjectT::getDocumentName() const
 {
     return document;
 }
@@ -181,12 +182,12 @@ DocumentObject* DocumentObjectT::getObject() const
     return obj;
 }
 
-std::string DocumentObjectT::getObjectName() const
+const std::string &DocumentObjectT::getObjectName() const
 {
     return object;
 }
 
-std::string DocumentObjectT::getObjectLabel() const
+const std::string &DocumentObjectT::getObjectLabel() const
 {
     return label;
 }
@@ -208,7 +209,7 @@ std::string DocumentObjectT::getObjectPython() const
     return str.str();
 }
 
-std::string DocumentObjectT::getPropertyName() const {
+const std::string &DocumentObjectT::getPropertyName() const {
     return property;
 }
 
@@ -231,6 +232,40 @@ Property *DocumentObjectT::getProperty() const {
 }
 // -----------------------------------------------------------------------------
 
+SubObjectT::SubObjectT()
+{}
+
+SubObjectT::SubObjectT(const DocumentObject *obj, const char *s)
+    :DocumentObjectT(obj),subname(s?s:"")
+{}
+
+void SubObjectT::setSubName(const char *s) {
+    subname = s?s:"";
+}
+
+const std::string &SubObjectT::getSubName() const {
+    return subname;
+}
+
+const char *SubObjectT::getElementName() const {
+    return Data::ComplexGeoData::findElementName(subname.c_str());
+}
+
+App::DocumentObject *SubObjectT::getSubObject() const {
+    auto obj = getObject();
+    if(obj)
+        return obj->getSubObject(subname.c_str());
+    return 0;
+}
+
+std::vector<App::DocumentObject*> SubObjectT::getSubObjectList() const {
+    auto obj = getObject();
+    if(obj)
+        return obj->getSubObjectList(subname.c_str());
+    return {};
+}
+
+// -----------------------------------------------------------------------------
 DocumentObserver::DocumentObserver() : _document(0)
 {
     this->connectApplicationCreatedDocument = App::GetApplication().signalNewDocument.connect(boost::bind
