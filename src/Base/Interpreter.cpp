@@ -138,13 +138,15 @@ void PyException::raiseException() {
     throw *this;
 }
 
-void PyException::ReportException (void) const
+void PyException::ReportException (const char *msg) const
 {
     if (!_isReported) {
         _isReported = true;
         Base::Console().Error("%s%s: %s\n",
             _stackTrace.c_str(), _errorType.c_str(), what());
     }
+    if(msg)
+        Base::Console().Error("%s\n",msg);
 }
 
 // ---------------------------------------------------------

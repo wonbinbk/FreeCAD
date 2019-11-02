@@ -87,7 +87,7 @@ const char* Exception::what(void) const throw()
     return _sErrMsg.c_str();
 }
 
-void Exception::ReportException (void) const
+void Exception::ReportException (const char *msg) const
 {
     if (!_isReported) {
         const char *msg;
@@ -103,6 +103,8 @@ void Exception::ReportException (void) const
             _FC_ERR(_file.c_str(),_line,msg);
         _isReported = true;
     }
+    if(msg)
+        Base::Console().Error("%s\n",msg);
 }
 
 PyObject * Exception::getPyObject(void)
@@ -300,7 +302,7 @@ const char* FileException::what() const throw()
     return _sErrMsgAndFileName.c_str();
 }
 
-void FileException::ReportException (void) const
+void FileException::ReportException (const char *msg) const
 {
     if (!_isReported) {
         const char *msg;
@@ -316,6 +318,8 @@ void FileException::ReportException (void) const
             _FC_ERR(_file.c_str(),_line,msg);
         _isReported = true;
     }
+    if(msg)
+        Base::Console().Error("%s\n",msg);
 }
 
 PyObject * FileException::getPyObject(void)

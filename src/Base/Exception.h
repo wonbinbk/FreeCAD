@@ -100,7 +100,7 @@ public:
   virtual const char* what(void) const throw();
 
   /// Reports exception. It includes a mechanism to only report an exception once.
-  virtual void ReportException (void) const;
+  virtual void ReportException (const char *msg = 0) const;
 
   inline void setMessage(const char * sMessage);
   inline void setMessage(const std::string& sMessage);
@@ -255,7 +255,7 @@ public:
   /// Description of the exception
   virtual const char* what() const throw() override;
   /// Report generation
-  virtual void ReportException (void) const override;
+  virtual void ReportException (const char *msg = 0) const override;
   /// Get file name for use with translatable message
   std::string getFileName() const;
   /// returns a Python dictionary containing the exception data
@@ -797,6 +797,36 @@ private:
     bool ok;
 };
 #endif
+
+
+/// Helper class to suppress exception inside a boost signal slot
+template<class Tag>
+struct ExceptionSuppressor {
+
+    typedef void result_type;
+
+    template<class InputIterator>
+    void operator()(InputIterator first, InputIterator last) const {
+        while(first != last) {
+            try {
+                *first;
+            } catch (Base::Exception &e) {
+                e.ReportException(Tag::what());
+            } catch (std::exception &e) {
+                Base::RuntimeError(e.what()).ReportException(Tag::what()); 
+            } catch (...) {
+                Base::RuntimeError().ReportException(Tag::what()); 
+            }
+            ++first;
+        }
+    }
+};
+
+#define FC_SIGNAL_NOEXCEPT(_namespace,_signature,_name) \
+    struct _name##_tag {\
+        static const char *what() {return "Exception on " #_namespace "::" #_name;}\
+    };\
+    boost::signals2::signal<_signature, Base::ExceptionSuppressor<_name##_tag> > _name
 
 } //namespace Base
 

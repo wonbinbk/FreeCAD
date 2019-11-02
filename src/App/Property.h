@@ -322,7 +322,7 @@ public:
 
         /** Mark the property as changed
          *
-         * It will mark the property as changed only if it has been marked
+         * It will mark the property as changed only if it has not been marked
          * before, and only then will it call the property's aboutToSetValue().
          */
         void aboutToChange() {

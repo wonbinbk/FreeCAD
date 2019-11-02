@@ -569,11 +569,12 @@ struct DocTiming {
     }
 };
 
+template<class Signal>
 class DocOpenGuard {
 public:
     bool &flag;
-    boost::signals2::signal<void ()> &signal;
-    DocOpenGuard(bool &f, boost::signals2::signal<void ()> &s)
+    Signal &signal;
+    DocOpenGuard(bool &f, Signal &s)
         :flag(f),signal(s)
     {
         flag = true;
@@ -607,7 +608,7 @@ std::vector<Document*> Application::openDocuments(const std::vector<std::string>
     if (errs)
         errs->resize(filenames.size());
 
-    DocOpenGuard guard(_isRestoring, signalFinishOpenDocument);
+    DocOpenGuard<decltype(signalFinishOpenDocument)> guard(_isRestoring, signalFinishOpenDocument);
     _pendingDocs.clear();
     _pendingDocsReopen.clear();
     _pendingDocMap.clear();
