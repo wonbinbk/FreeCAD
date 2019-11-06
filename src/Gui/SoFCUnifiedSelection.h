@@ -502,6 +502,8 @@ protected:
     SoColorPacker shapeColorPacker;
 
     bool doActionPrivate(Stack &stack, SoAction *);
+
+    SoFCSelectionCounter selCounter;
 };
 
 /**
