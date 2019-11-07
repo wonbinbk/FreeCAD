@@ -20,6 +20,14 @@
  *                                                                         *
  ***************************************************************************/
 
+#include <boost/version.hpp>
+#include <boost/config.hpp>
+#if defined(BOOST_MSVC) && (BOOST_VERSION == 105500)
+// for fixing issue https://svn.boost.org/trac/boost/ticket/9332
+#  include "boost_fix/intrusive/detail/memory_util.hpp"
+#  include "boost_fix/container/detail/memory_util.hpp"
+#endif
+
 #include "PreCompiled.h"
 
 #ifndef FC_OS_WIN32
@@ -75,15 +83,43 @@
 # include <Inventor/C/glue/gl.h>
 #endif
 
+#include <Inventor/actions/SoRayPickAction.h>
 #include <Inventor/elements/SoCullElement.h>
 #include <Inventor/caches/SoBoundingBoxCache.h>
 
 #include <boost/algorithm/string/predicate.hpp>
+
+struct Ray;
+class MySbBox3f;
+
+namespace boost { namespace geometry {
+
+// forward declaration before including boost geometry headers, so that this
+// template overloads can be found first.
+
+template <class Geometry>
+inline bool intersects(Geometry const& box, Ray const &ray);
+
+template <>
+inline bool intersects<MySbBox3f>(MySbBox3f const& box, Ray const &ray);
+
+}}
+
+#include <boost/geometry.hpp>
+#include <boost/geometry/index/rtree.hpp>
+#include <boost/geometry/geometries/geometries.hpp>
+#include <boost/geometry/geometries/register/point.hpp>
+#include <boost/geometry/geometries/register/box.hpp>
+
 #include "SoBrepFaceSet.h"
+#include <Base/Console.h>
 #include <Gui/SoFCUnifiedSelection.h>
 #include <Gui/SoFCSelectionAction.h>
 #include <Gui/SoFCInteractiveElement.h>
 #include <Gui/ViewParams.h>
+
+FC_LOG_LEVEL_INIT("SoBrepFaceSet",true,true);
+
 
 using namespace PartGui;
 
@@ -120,10 +156,115 @@ static inline bool makeDistinctColor(uint32_t &res, uint32_t color, uint32_t oth
     return true;
 }
 
+namespace bg = boost::geometry;
+namespace bgi = boost::geometry::index;
+
+class MySbVec3f : public SbVec3f {
+public:
+    float x() const {
+        return (*this)[0];
+    }
+    float y() const {
+        return (*this)[1];
+    }
+    float z() const {
+        return (*this)[2];
+    }
+    void setX(float x) {
+        (*this)[0] = x;
+    }
+    void setY(float x) {
+        (*this)[1] = x;
+    }
+    void setZ(float x) {
+        (*this)[2] = x;
+    }
+};
+
+class MySbBox3f: public SbBox3f {
+public:
+    MySbVec3f &minCorner() {
+        return static_cast<MySbVec3f&>(getMin());
+    }
+    const MySbVec3f &minCorner() const{
+        return static_cast<const MySbVec3f&>(getMin());
+    }
+    MySbVec3f &maxCorner() {
+        return static_cast<MySbVec3f&>(getMax());
+    }
+    const MySbVec3f &maxCorner() const{
+        return static_cast<const MySbVec3f&>(getMax());
+    }
+};
+
+struct Ray {
+    SoRayPickAction *action;
+    Ray(SoRayPickAction *a) :action(a) {}
+};
+
+
+BOOST_GEOMETRY_REGISTER_POINT_3D_GET_SET(
+        MySbVec3f,float,bg::cs::cartesian,x,y,z,setX,setY,setZ)
+
+BOOST_GEOMETRY_REGISTER_BOX(MySbBox3f,MySbVec3f,minCorner(),maxCorner())
+
+namespace boost { namespace geometry {
+
+template <class Geometry>
+inline bool intersects(Geometry const& box, Ray const &ray) {
+    SbBox3f bbox(bg::get<bg::min_corner,0>(box),
+                 bg::get<bg::min_corner,1>(box),
+                 bg::get<bg::min_corner,2>(box),
+                 bg::get<bg::max_corner,0>(box),
+                 bg::get<bg::max_corner,1>(box),
+                 bg::get<bg::max_corner,2>(box));
+    return !bbox.isEmpty() && ray.action->intersect(bbox);
+}
+
+template <>
+inline bool intersects<MySbBox3f>(MySbBox3f const& box, Ray const &ray) {
+    return !box.isEmpty() && ray.action->intersect(box);
+}
+
+}}
+
+////////////////////////////////////////////////////////////////////////////
+
 #define PRIVATE(p) ((p)->pimpl)
 
-class SoBrepFaceSet::VBO {
+class SoBrepFaceSet::Private {
 public:
+    
+    typedef bgi::linear<16> Parameters;
+    
+    struct BoxGetter {
+        typedef const MySbBox3f& result_type;
+        
+        const std::vector<SbBox3f> &boxes;
+        
+        explicit BoxGetter(const std::vector<SbBox3f> &b)
+            :boxes(b)
+        {}
+
+        result_type operator()(int idx) const {
+            return static_cast<result_type>(boxes[idx]);
+        }
+    };
+    
+    struct FaceBounds {
+        std::vector<SbBox3f> boxes;
+        bgi::rtree<int,Parameters,BoxGetter> rtree;
+        FaceBounds()
+            :rtree(Parameters(), BoxGetter(boxes))
+        {}
+    };
+
+    // For sorting and querying bounding boxes per part
+    bgi::rtree<int,Parameters,BoxGetter> rtree;
+
+    // map from part index to rtree for sorting and querying bounding box per face within a part
+    std::map<int, FaceBounds> faces_rtree;
+
     struct Buffer {
         uint32_t myvbo[2];
         std::size_t vertex_array_size;
@@ -136,12 +277,14 @@ public:
     uint32_t indice_array;
     std::map<uint32_t, Buffer> vbomap;
 
-    VBO()
+    Private(const std::vector<SbBox3f> &boxes)
+        :rtree(Parameters(),BoxGetter(boxes))
     {
         SoContextHandler::addContextDestructionCallback(context_destruction_cb, this);
         indice_array = 0;
     }
-    ~VBO()
+
+    ~Private()
     {
         SoContextHandler::removeContextDestructionCallback(context_destruction_cb, this);
 
@@ -149,9 +292,9 @@ public:
         std::map<uint32_t, Buffer>::iterator it;
         for (it = vbomap.begin(); it != vbomap.end(); ++it) {
             void * ptr0 = (void*) ((uintptr_t) it->second.myvbo[0]);
-            SoGLCacheContextElement::scheduleDeleteCallback(it->first, VBO::vbo_delete, ptr0);
+            SoGLCacheContextElement::scheduleDeleteCallback(it->first, Private::vbo_delete, ptr0);
             void * ptr1 = (void*) ((uintptr_t) it->second.myvbo[1]);
-            SoGLCacheContextElement::scheduleDeleteCallback(it->first, VBO::vbo_delete, ptr1);
+            SoGLCacheContextElement::scheduleDeleteCallback(it->first, Private::vbo_delete, ptr1);
         }
     }
 
@@ -200,7 +343,7 @@ public:
 
     static void context_destruction_cb(uint32_t context, void * userdata)
     {
-        VBO * self = static_cast<VBO*>(userdata);
+        Private * self = static_cast<Private*>(userdata);
 
         std::map<uint32_t, Buffer>::iterator it = self->vbomap.find(context);
         if (it != self->vbomap.end()) {
@@ -223,7 +366,7 @@ public:
     }
 };
 
-SbBool SoBrepFaceSet::VBO::vboAvailable = false;
+SbBool SoBrepFaceSet::Private::vboAvailable = false;
 
 void SoBrepFaceSet::initClass()
 {
@@ -238,7 +381,7 @@ SoBrepFaceSet::SoBrepFaceSet()
     selContext = std::make_shared<SelContext>();
     selContext2 = std::make_shared<SelContext>();
 
-    pimpl.reset(new VBO);
+    pimpl.reset(new Private(partBBoxes));
 
     partIndexSensor.attach(&partIndex);
     partIndexSensor.setData(this);
@@ -252,6 +395,8 @@ SoBrepFaceSet::~SoBrepFaceSet()
 }
 
 void SoBrepFaceSet::onPartIndexChange() {
+    PRIVATE(this)->rtree.clear();
+    PRIVATE(this)->faces_rtree.clear();
     partBBoxes.clear();
     indexOffset.resize(partIndex.getNum()+1);
     const int32_t *piptr = partIndex.getValues(0);
@@ -261,6 +406,14 @@ void SoBrepFaceSet::onPartIndexChange() {
         c += piptr[i];
     }
     indexOffset[partIndex.getNum()] = c;
+    partIndexMap.clear();
+    if(partIndex.getNum() > 200) {
+        c = 0;
+        for(int i=0,count=partIndex.getNum();i<count;++i) {
+            partIndexMap[c] = i;
+            c += piptr[i];
+        }
+    }
 }
 
 void SoBrepFaceSet::doAction(SoAction* action)
@@ -958,65 +1111,56 @@ void SoBrepFaceSet::getBoundingBox(SoGetBoundingBoxAction * action) {
     if(ctx2->selectionIndex.empty())
         return;
 
-    auto coords = SoCoordinateElement::getInstance(state);
-    const SbVec3f *coords3d = static_cast<const SoGLCoordinateElement*>(coords)->getArrayPtr3();
-    const int32_t *cindices = this->coordIndex.getValues(0);
-    const int32_t *pindices = this->partIndex.getValues(0);
-    int numparts = this->partIndex.getNum();
+    buildPartBBoxes(state);
 
-    SbBox3f bbox;
+    int numparts = this->partIndex.getNum();
     for(auto id : ctx2->selectionIndex) {
         if (id<0 || id >= numparts)
             break;
-        // coords
-        int length=0;
-        int start=0;
-        length = (int)pindices[id]*4;
-        for (int j=0;j<id;j++)
-            start+=(int)pindices[j];
-        start *= 4;
-
-        auto viptr = &cindices[start];
-        auto viendptr = viptr + length;
-        while (viptr + 2 < viendptr) {
-            bbox.extendBy(coords3d[*viptr++]);
-            bbox.extendBy(coords3d[*viptr++]);
-            bbox.extendBy(coords3d[*viptr++]);
-            ++viptr;
-        }
+        if(!partBBoxes[id].isEmpty())
+            action->extendBy(partBBoxes[id]);
     }
-
-    if(!bbox.isEmpty())
-        action->extendBy(bbox);
 }
 
 void SoBrepFaceSet::buildPartBBoxes(SoState *state) {
     if(partIndex.getNum() != (int)partBBoxes.size()) {
+        PRIVATE(this)->rtree.clear();
+        PRIVATE(this)->faces_rtree.clear();
         partBBoxes.clear();
         partBBoxes.resize(partIndex.getNum());
 
-        auto coords = SoCoordinateElement::getInstance(state);
-        const SbVec3f *coords3d = static_cast<const SoGLCoordinateElement*>(coords)->getArrayPtr3();
-        const int32_t *cindices = coordIndex.getValues(0);
-        const int32_t *pindices = partIndex.getValues(0);
+        const int32_t *pindices = this->partIndex.getValues(0);
+        int numparts = partIndex.getNum();
 
-        for(int id=0,count=partIndex.getNum();id<count;++id) {
+        const int32_t *cindices = coordIndex.getValues(0);
+        int numindices = coordIndex.getNum();
+
+        auto coords = static_cast<const SoGLCoordinateElement*>(SoCoordinateElement::getInstance(state));
+        const SbVec3f *coords3d = coords->getArrayPtr3();
+        int numverts = coords->getNum();
+
+        for(int id=0;id<numparts;++id) {
             auto &bbox = partBBoxes[id];
 
-            // coords
-            int length=0;
-            int start=0;
-            length = (int)pindices[id]*4;
-            for (int j=0;j<id;j++)
-                start+=(int)pindices[j];
-            start *= 4;
+            int length = (int)pindices[id]*4;
+            int start = (int)indexOffset[id]*4;
+
+            if(start+length > numindices)
+                continue;
 
             auto viptr = &cindices[start];
             auto viendptr = viptr + length;
             while (viptr + 2 < viendptr) {
-                bbox.extendBy(coords3d[*viptr++]);
-                bbox.extendBy(coords3d[*viptr++]);
-                bbox.extendBy(coords3d[*viptr++]);
+                int v1 = *viptr++;
+                int v2 = *viptr++;
+                int v3 = *viptr++;
+                if (v1 < 0 || v2 < 0 || v3 < 0 ||
+                        v1 >= numverts || v2 >= numverts || v3 >= numverts) {
+                    break;
+                }
+                bbox.extendBy(coords3d[v1]);
+                bbox.extendBy(coords3d[v2]);
+                bbox.extendBy(coords3d[v3]);
                 ++viptr;
             }
         }
@@ -1098,13 +1242,17 @@ void SoBrepFaceSet::sortParts(SoState *state, SelContextPtr ctx2, const float *t
 
 void SoBrepFaceSet::generatePrimitives(SoAction * action)
 {
-    //TODO
-#if 0
-    inherited::generatePrimitives(action);
-#else
-    //This is highly experimental!!!
+    generatePrimitivesRange(action,0,0,0,coordIndex.getNum());
+}
 
-    if (this->coordIndex.getNum() < 3) return;
+void SoBrepFaceSet::generatePrimitivesRange(SoAction * action, int pstart, int fstart, int vstart, int vend) {
+    if (pstart<0 || pstart>=this->partIndex.getNum() 
+            || vstart<0 || vend > this->coordIndex.getNum() 
+            || vend - vstart < 3)
+    {
+        return;
+    }
+
     SoState * state = action->getState();
 
     if (this->vertexProperty.getValue()) {
@@ -1131,6 +1279,8 @@ void SoBrepFaceSet::generatePrimitives(SoAction * action)
     this->getVertexData(state, coords, normals, cindices,
                         nindices, tindices, mindices, numindices,
                         sendNormals, normalCacheUsed);
+
+    cindices += vstart;
 
     SoTextureCoordinateBundle tb(action, false, false);
     doTextures = tb.needCoordinates();
@@ -1171,30 +1321,54 @@ void SoBrepFaceSet::generatePrimitives(SoAction * action)
         }
         else {
             tbind = PER_VERTEX_INDEXED;
-            if (tindices == NULL) tindices = cindices;
+            if (tindices == NULL)
+                tindices = cindices;
+            else
+                tindices += vstart;
         }
     }
 
-    if (nbind == PER_VERTEX_INDEXED && nindices == NULL) {
-        nindices = cindices;
+    if (nbind == PER_VERTEX_INDEXED) {
+        if(nindices == NULL)
+            nindices = cindices;
+        else
+            nindices += vstart;
+    } else if (nbind == PER_PART_INDEXED) {
+        if(nindices)
+            nindices += pstart;
+        else
+            nbind = NONE;
+    } else if (nbind == PER_FACE) {
+        // TODO: add support for that
     }
-    if (mbind == PER_VERTEX_INDEXED && mindices == NULL) {
-        mindices = cindices;
+            
+    if (mbind == PER_VERTEX_INDEXED) {
+        if(mindices == NULL)
+            mindices = cindices;
+        else
+            mindices += vstart;
+    } else if (mbind == PER_PART_INDEXED) {
+        if(mindices)
+            mindices += pstart;
+        else
+            mbind = NONE;
+    } else if (mbind == PER_FACE) {
+        // TODO: add support for that
     }
 
-    int texidx = 0;
     TriangleShape mode = POLYGON;
     TriangleShape newmode;
     const int32_t *viptr = cindices;
-    const int32_t *viendptr = viptr + numindices;
-    const int32_t *piptr = this->partIndex.getValues(0);
-    int num_partindices = this->partIndex.getNum();
+    const int32_t *viendptr = viptr + (vend-vstart);
+    const int32_t *piptr = this->partIndex.getValues(0) + pstart;
+    int num_partindices = this->partIndex.getNum() - pstart;
     const int32_t *piendptr = piptr + num_partindices;
     int32_t v1, v2, v3, v4, v5 = 0, pi; // v5 init unnecessary, but kills a compiler warning.
 
     SoPrimitiveVertex vertex;
     SoPointDetail pointDetail;
     SoFaceDetail faceDetail;
+    faceDetail.setFaceIndex(fstart);
 
     vertex.setDetail(&pointDetail);
 
@@ -1203,8 +1377,9 @@ void SoBrepFaceSet::generatePrimitives(SoAction * action)
     if (normals) currnormal = normals;
     vertex.setNormal(*currnormal);
 
-    int matnr = 0;
-    int normnr = 0;
+    int texidx = vstart;
+    int matnr = vstart;
+    int normnr = vstart;
     int trinr = 0;
     pi = piptr < piendptr ? *piptr++ : -1;
     while (pi == 0) {
@@ -1328,7 +1503,6 @@ void SoBrepFaceSet::generatePrimitives(SoAction * action)
     if (this->vertexProperty.getValue()) {
         state->pop();
     }
-#endif
 }
 
 #undef DO_VERTEX
@@ -1402,7 +1576,7 @@ void SoBrepFaceSet::renderSelection(SoGLRenderAction *action, SelContextPtr ctx,
         state->pop();
 }
 
-void SoBrepFaceSet::VBO::render(SoGLRenderAction * action,
+void SoBrepFaceSet::Private::render(SoGLRenderAction * action,
                                 bool color_override,
                                 const std::vector<int32_t> &render_indices,
                                 const SoCoordinateElement *coords,
@@ -1460,8 +1634,8 @@ void SoBrepFaceSet::VBO::render(SoGLRenderAction * action,
 #endif
 
     uint32_t contextId = action->getCacheContext();
-    auto res = this->vbomap.insert(std::make_pair(contextId,VBO::Buffer()));
-    VBO::Buffer &buf = res.first->second;
+    auto res = this->vbomap.insert(std::make_pair(contextId,Private::Buffer()));
+    Private::Buffer &buf = res.first->second;
     if (res.second) {
 #ifdef FC_OS_WIN32
         PFNGLGENBUFFERSPROC glGenBuffersARB = (PFNGLGENBUFFERSPROC)cc_glglue_getprocaddress(glue, "glGenBuffersARB");
@@ -2102,6 +2276,28 @@ void SoBrepFaceSet::renderFaces(const SoCoordinateElement *coords,
     glEnd();
 }
 
+int SoBrepFaceSet::getPartFromFace(int index) {
+    const int32_t * indices = this->partIndex.getValues(0);
+    int num = this->partIndex.getNum();
+    if(!indices)
+        return -1;
+    if(num == (int)partIndexMap.size()) {
+        auto it = partIndexMap.upper_bound(index);
+        if(it==partIndexMap.end())
+            return num-1;
+        else
+            return it->second-1;
+    } else {
+        int count = 0;
+        for (int i=0; i<num; i++) {
+            count += indices[i];
+            if (index < count)
+                return i;
+        }
+        return num-1;
+    }
+}
+
 SoDetail * SoBrepFaceSet::createTriangleDetail(SoRayPickAction * action,
                                                const SoPrimitiveVertex * v1,
                                                const SoPrimitiveVertex * v2,
@@ -2109,20 +2305,8 @@ SoDetail * SoBrepFaceSet::createTriangleDetail(SoRayPickAction * action,
                                                SoPickedPoint * pp)
 {
     SoDetail* detail = inherited::createTriangleDetail(action, v1, v2, v3, pp);
-    const int32_t * indices = this->partIndex.getValues(0);
-    int num = this->partIndex.getNum();
-    if (indices) {
-        SoFaceDetail* face_detail = static_cast<SoFaceDetail*>(detail);
-        int index = face_detail->getFaceIndex();
-        int count = 0;
-        for (int i=0; i<num; i++) {
-            count += indices[i];
-            if (index < count) {
-                face_detail->setPartIndex(i);
-                break;
-            }
-        }
-    }
+    SoFaceDetail* face_detail = static_cast<SoFaceDetail*>(detail);
+    face_detail->setPartIndex(getPartFromFace(face_detail->getFaceIndex()));
     return detail;
 }
 
@@ -2194,6 +2378,133 @@ SoBrepFaceSet::findNormalBinding(SoState * const state) const
         break;
     }
     return binding;
+}
+
+void SoBrepFaceSet::rayPick(SoRayPickAction *action) {
+
+    SelContextPtr ctx2 = Gui::SoFCSelectionRoot::getSecondaryActionContext<SelContext>(action,this);
+    if(ctx2 && !ctx2->isSelected())
+        return;
+
+    if (!shouldRayPick(action))
+        return;
+
+    computeObjectSpaceRay(action);
+
+    SoState *state = action->getState();
+
+    if (getBoundingBoxCache() && getBoundingBoxCache()->isValid(state)) {
+        SbBox3f box = getBoundingBoxCache()->getProjectedBox();
+        if(box.isEmpty() || !action->intersect(box,TRUE))
+            return;
+    }
+
+    FC_TIME_INIT(t);
+
+    Binding mbind = this->findMaterialBinding(state);
+    Binding nbind = this->findNormalBinding(state);
+
+    int threshold = Gui::ViewParams::instance()->getSelectionPickThreshold();
+    if(threshold <= 0 
+            || mbind==PER_FACE || mbind==PER_FACE_INDEXED 
+            || nbind==PER_FACE || nbind==PER_FACE_INDEXED ) 
+    {
+        generatePrimitives(action);
+        FC_TIME_TRACE(t,"pick");
+        return;
+    }
+
+    buildPartBBoxes(state);
+
+    int threshold2 = Gui::ViewParams::instance()->getSelectionPickThreshold2();
+    const int32_t *pindices = partIndex.getValues(0);
+    int numparts = partIndex.getNum();
+
+    static thread_local std::vector<int> results;
+    results.clear();
+
+    auto pick = [&](int id) {
+        if(threshold2<=0 || pindices[id] <= threshold2) {
+            this->generatePrimitivesRange(action,id,
+                    this->indexOffset[id], this->indexOffset[id]*4, this->indexOffset[id+1]*4);
+        } else {
+            auto &bounds = PRIVATE(this)->faces_rtree[id];
+            if(bounds.rtree.empty()) {
+                const int32_t *cindices = this->coordIndex.getValues(0);
+                int numindices = this->coordIndex.getNum();
+
+                auto coords = static_cast<const SoGLCoordinateElement*>(SoCoordinateElement::getInstance(state));
+                const SbVec3f *coords3d = coords->getArrayPtr3();
+                int numverts = coords->getNum();
+
+                int length = (int)pindices[id]*4;
+                int start = (int)indexOffset[id]*4;
+                if(start+length > numindices)
+                    return;
+
+                auto viptr = &cindices[start];
+                auto viendptr = viptr + length;
+
+                bounds.boxes.resize(length/4);
+                int i = 0;
+                while (viptr + 2 < viendptr) {
+                    int v1 = *viptr++;
+                    int v2 = *viptr++;
+                    int v3 = *viptr++;
+                    if (v1 < 0 || v2 < 0 || v3 < 0 ||
+                            v1 >= numverts || v2 >= numverts || v3 >= numverts) {
+                        break;
+                    }
+                    auto &box = bounds.boxes[i];
+                    box.extendBy(coords3d[v1]);
+                    box.extendBy(coords3d[v2]);
+                    box.extendBy(coords3d[v3]);
+                    bounds.rtree.insert(i);
+                    ++i;
+                    ++viptr;
+                }
+            }
+            std::size_t offset = results.size();
+            bounds.rtree.query(bgi::intersects(Ray(action)),std::back_inserter(results));
+            for(auto i=offset;i<results.size();++i) {
+                int findex = results[i] + this->indexOffset[id];
+                this->generatePrimitivesRange(action,id,findex,findex*4,(findex+1)*4);
+            }
+            results.resize(offset);
+        }
+    };
+
+    if(ctx2 && !ctx2->isSelectAll()) {
+        for(auto id : ctx2->selectionIndex) {
+            if(id<0 || id>=numparts)
+                continue;
+            auto &box = partBBoxes[id];
+            if(box.isEmpty() || !action->intersect(box,TRUE))
+                continue;
+            pick(id);
+        }
+    } else if(numparts <= threshold) {
+        for(int id=0;id<numparts;++id) {
+            auto &box = partBBoxes[id];
+            if(box.isEmpty() || !action->intersect(box,TRUE))
+                continue;
+            pick(id);
+        }
+        FC_TIME_TRACE(t,"pick new1");
+    } else {
+        auto &rtree = PRIVATE(this)->rtree;
+        if(rtree.empty()) {
+            for(int i=0,count=(int)partBBoxes.size();i<count;++i) {
+                if(!partBBoxes[i].isEmpty())
+                    rtree.insert(i);
+            }
+        }
+        rtree.query(bgi::intersects(Ray(action)),std::back_inserter(results));
+        for(std::size_t i=0;i<results.size();++i)
+            pick(results[i]);
+        FC_TIME_TRACE(t,"pick new2");
+    }
+
 }
 
 #undef PRIVATE

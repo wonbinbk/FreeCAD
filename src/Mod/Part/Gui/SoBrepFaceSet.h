@@ -100,6 +100,7 @@ protected:
         SoPickedPoint * pp);
     virtual void generatePrimitives(SoAction * action);
     virtual void getBoundingBox(SoGetBoundingBoxAction * action);
+    virtual void rayPick(SoRayPickAction *action);
 
 private:
     enum Binding {
@@ -147,9 +148,14 @@ private:
     void sortParts(SoState *state, SelContextPtr ctx2, const float *trans, int numtrans);
     void buildPartBBoxes(SoState *state);
 
+    void generatePrimitivesRange(SoAction * action, int pstart, int fstart, int vstart, int vend);
+
+    int getPartFromFace(int index);
+
 private:
     SelContextPtr selContext;
     SelContextPtr selContext2;
+    std::map<int32_t, int32_t> partIndexMap;
     std::vector<int32_t> indexOffset;
     std::vector<int32_t> matIndex;
     std::vector<uint32_t> packedColors;
@@ -169,9 +175,8 @@ private:
     };
     std::vector<PartDist> sortedParts; // sorted part indices for transparency rendering
 
-    // Define some VBO pointer for the current mesh
-    class VBO;
-    std::unique_ptr<VBO> pimpl;
+    class Private;
+    std::unique_ptr<Private> pimpl;
 };
 
 } // namespace PartGui

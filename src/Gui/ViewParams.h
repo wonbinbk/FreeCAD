@@ -86,6 +86,8 @@ public:
     FC_VIEW_PARAM(ShowHighlightEdgeOnly,bool,Bool,false) \
     FC_VIEW_PARAM(PreSelectionDelay,double,Float,0.1) \
     FC_VIEW_PARAM(HierarchicalSelection,bool,Bool,true) \
+    FC_VIEW_PARAM(SelectionPickThreshold,int,Int,1000) \
+    FC_VIEW_PARAM(SelectionPickThreshold2,int,Int,500) \
 
 #undef FC_VIEW_PARAM
 #define FC_VIEW_PARAM(_name,_ctype,_type,_def) \
