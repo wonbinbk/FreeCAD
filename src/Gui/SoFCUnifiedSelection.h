@@ -23,6 +23,7 @@
 #ifndef GUI_SOFCUNIFIEDSELECTION_H
 #define GUI_SOFCUNIFIEDSELECTION_H
 
+#include <Inventor/lists/SoNodeList.h>
 #include <Inventor/nodes/SoSubNode.h>
 #include <Inventor/nodes/SoSeparator.h>
 #include <Inventor/fields/SoSFBool.h>
@@ -235,7 +236,7 @@ protected:
     std::string subname;
     View3DInventorViewer *viewer;
     SoPath *path;
-    SoTempPath *tmpPath;
+    SoNodeList tmpPath;
     bool det;
 };
 
@@ -248,6 +249,10 @@ class GuiExport SoFCSwitch : public SoSwitch {
 public:
     /// Stores the child index used in switching override mode
     SoSFInt32 defaultChild;
+    /// Stores the child index that will be traversed as long as the whichChild is not -1
+    SoSFInt32 tailChild;
+    /// If greater than zero, then any children change will trigger parent notify
+    SoSFInt32 childNotify;
 
     enum OverrideSwitch {
         /// No switch override
@@ -274,6 +279,7 @@ public:
     virtual void callback(SoCallbackAction *action);
     virtual void pick(SoPickAction *action);
     virtual void handleEvent(SoHandleEventAction *action);
+    virtual void notify(SoNotList * nl);
 
     /// Enables switching override for the give action
     static void switchOverride(SoAction *action, OverrideSwitch o=OverrideDefault);
