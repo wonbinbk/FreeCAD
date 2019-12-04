@@ -61,6 +61,7 @@ namespace PartGui {
 class SoBrepFaceSet;
 class SoBrepEdgeSet;
 class SoBrepPointSet;
+class SoFCCoordinate3;
 
 class PartGuiExport ViewProviderPartExt : public Gui::ViewProviderGeometryObject
 {
@@ -178,6 +179,8 @@ protected:
 
     bool VisualTouched;
     bool NormalsFromUV;
+
+    friend class SoFCCoordinate3;
 
 private:
     // settings stuff

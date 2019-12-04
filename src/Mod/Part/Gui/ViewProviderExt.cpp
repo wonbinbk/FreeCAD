@@ -221,6 +221,25 @@ void ViewProviderPartExt::getNormals(const TopoDS_Face&  theFace,
     }
 }
 
+
+namespace PartGui {
+
+// Private class used by ViewProviderExt to update its visual nodes up on
+// receiving SoGetBoundingBoxAction
+class SoFCCoordinate3: public SoCoordinate3
+{
+public:
+    virtual void getBoundingBox(SoGetBoundingBoxAction * action) {
+        if (vp && vp->VisualTouched)
+            vp->updateVisual();
+        SoCoordinate3::getBoundingBox(action);
+    }
+
+    ViewProviderPartExt *vp = nullptr;
+};
+
+} // namespace PartGui
+
 //**************************************************************************
 // Construction/Destruction
 
@@ -281,7 +300,8 @@ ViewProviderPartExt::ViewProviderPartExt()
     ADD_PROPERTY(DrawStyle,((long int)0));
     DrawStyle.setEnums(DrawStyleEnums);
 
-    coords = new SoCoordinate3();
+    coords = new SoFCCoordinate3();
+    static_cast<SoFCCoordinate3*>(coords)->vp = this;
     coords->ref();
     faceset = new SoBrepFaceSet();
     faceset->ref();
@@ -294,6 +314,10 @@ ViewProviderPartExt::ViewProviderPartExt()
     lineset->ref();
     nodeset = new SoBrepPointSet();
     nodeset->ref();
+
+    faceset->setSiblings({lineset,nodeset});
+    lineset->setSiblings({faceset,nodeset});
+    nodeset->setSiblings({faceset,lineset});
 
     pcFaceBind = new SoMaterialBinding();
     pcFaceBind->ref();
@@ -327,7 +351,6 @@ ViewProviderPartExt::ViewProviderPartExt()
     DrawStyle.touch();
 
     sPixmap = "Tree_Part";
-    loadParameter();
 }
 
 ViewProviderPartExt::~ViewProviderPartExt()
@@ -340,6 +363,7 @@ ViewProviderPartExt::~ViewProviderPartExt()
     pcLineStyle->unref();
     pcPointStyle->unref();
     pShapeHints->unref();
+    static_cast<SoFCCoordinate3*>(coords)->vp = nullptr;
     coords->unref();
     faceset->unref();
     norm->unref();
@@ -504,6 +528,10 @@ void ViewProviderPartExt::attach(App::DocumentObject *pcFeat)
         pcPointsRoot->boundingBoxCaching =
         wireframe->boundingBoxCaching = SoSeparator::OFF;
 
+    // enable two-side rendering
+    pShapeHints->vertexOrdering = SoShapeHints::COUNTERCLOCKWISE;
+    pShapeHints->shapeType = SoShapeHints::UNKNOWN_SHAPE_TYPE;
+
     // Avoid any Z-buffer artifacts, so that the lines always appear on top of the faces
     // The correct order is Edges, Polygon offset, Faces.
     SoPolygonOffset* offset = new SoPolygonOffset();
@@ -516,10 +544,10 @@ void ViewProviderPartExt::attach(App::DocumentObject *pcFeat)
     wireframe->addChild(lineset);
 
     // normal viewing with edges and points
-    pcNormalRoot->addChild(pcPointsRoot);
-    pcNormalRoot->addChild(wireframe);
     pcNormalRoot->addChild(offset);
     pcNormalRoot->addChild(pcFlatRoot);
+    pcNormalRoot->addChild(wireframe);
+    pcNormalRoot->addChild(pcPointsRoot);
 
     // just faces with no edges or points
     pcFlatRoot->addChild(pShapeHints);
@@ -1016,7 +1044,7 @@ void ViewProviderPartExt::updateVisual()
 
     // time measurement and book keeping
     Base::TimeInfo start_time;
-    int numTriangles=0,numNodes=0,numNorms=0,numFaces=0,numEdges=0,numLines=0;
+    int numTriangles=0,numNodes=0,numPoints=0,numNorms=0,numFaces=0,numEdges=0,numLines=0;
     std::set<int> faceEdges;
 
     try {
