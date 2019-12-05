@@ -52,6 +52,7 @@
 #include <Gui/SelectionObjectPy.h>
 #include "MainWindow.h"
 #include "Tree.h"
+#include "ViewParams.h"
 #include "ViewProviderDocumentObject.h"
 #include "Macro.h"
 
@@ -1395,7 +1396,7 @@ void SelectionSingleton::setVisible(VisibleState vis) {
                 if(!vis)
                     updateSelection(false,sel.DocName.c_str(),sel.FeatName.c_str(), sel.SubName.c_str());
                 parent->setElementVisible(elementName.c_str(),vis?true:false);
-                if(vis)
+                if(vis && ViewParams::instance()->getUpdateSelectionVisual())
                     updateSelection(true,sel.DocName.c_str(),sel.FeatName.c_str(), sel.SubName.c_str());
                 continue;
             }
@@ -1417,7 +1418,8 @@ void SelectionSingleton::setVisible(VisibleState vis) {
 
             if(vis) {
                 vp->show();
-                updateSelection(vis,sel.DocName.c_str(),sel.FeatName.c_str(), sel.SubName.c_str());
+                if(ViewParams::instance()->getUpdateSelectionVisual())
+                    updateSelection(vis,sel.DocName.c_str(),sel.FeatName.c_str(), sel.SubName.c_str());
             } else {
                 updateSelection(vis,sel.DocName.c_str(),sel.FeatName.c_str(), sel.SubName.c_str());
                 vp->hide();
