@@ -454,7 +454,7 @@ public:
     }
 
     enum SelectStyles {
-        Full, Box, PassThrough
+        Full, Box, PassThrough, Unpickable
     };
     SoSFEnum selectionStyle;
 
