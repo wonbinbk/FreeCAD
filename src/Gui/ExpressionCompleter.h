@@ -61,8 +61,9 @@ private:
 class GuiExport ExpressionLineEdit : public QLineEdit {
     Q_OBJECT
 public:
-    ExpressionLineEdit(QWidget *parent = 0, bool noProperty=false);
+    ExpressionLineEdit(QWidget *parent = 0, bool noProperty=false, char checkPrefix=0);
     void setDocumentObject(const App::DocumentObject *currentDocObj);
+    void setPrefix(char prefix);
     bool completerActive() const;
     void hideCompleter();
 Q_SIGNALS:
@@ -76,6 +77,7 @@ private:
     ExpressionCompleter * completer;
     bool block;
     bool noProperty;
+    char checkPrefix;
 };
 
 class GuiExport ExpressionTextEdit : public QPlainTextEdit {

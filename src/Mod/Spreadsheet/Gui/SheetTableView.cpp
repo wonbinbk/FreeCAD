@@ -43,6 +43,7 @@
 #include "SheetTableView.h"
 #include "LineEdit.h"
 #include "PropertiesDialog.h"
+#include "DlgBindSheet.h"
 
 using namespace SpreadsheetGui;
 using namespace Spreadsheet;
@@ -112,6 +113,13 @@ SheetTableView::SheetTableView(QWidget *parent)
     connect(recompute, SIGNAL(triggered()), this, SLOT(onRecompute()));
     contextMenu->addAction(recompute);
 
+    actionBind = new QAction(tr("Bind..."),this);
+    connect(actionBind, SIGNAL(triggered()), this, SLOT(onBind()));
+    contextMenu->addAction(actionBind);
+
+    horizontalHeader()->addAction(actionBind);
+    verticalHeader()->addAction(actionBind);
+
     contextMenu->addSeparator();
     actionCut = contextMenu->addAction(tr("Cut"));
     connect(actionCut,SIGNAL(triggered()), this, SLOT(cutSelection()));
@@ -133,6 +141,15 @@ void SheetTableView::onRecompute() {
     }
     Gui::Command::doCommand(Gui::Command::Doc, "App.ActiveDocument.recompute()");
     Gui::Command::commitCommand();
+}
+
+void SheetTableView::onBind() {
+    auto ranges = selectedRanges();
+    if(ranges.size()==1) {
+        DlgBindSheet dlg(sheet,ranges.front(),this);
+        if(dlg.exec() == QDialog::Accepted)
+            dlg.apply();
+    }
 }
 
 void SheetTableView::cellProperties()
@@ -574,11 +591,13 @@ void SheetTableView::contextMenuEvent(QContextMenuEvent *) {
         actionCopy->setEnabled(false);
         actionDel->setEnabled(false);
         actionPaste->setEnabled(false);
+        actionBind->setEnabled(false);
     }else{
         actionPaste->setEnabled(mimeData && (mimeData->hasText() || mimeData->hasText()));
         actionCut->setEnabled(true);
         actionCopy->setEnabled(true);
         actionDel->setEnabled(true);
+        actionBind->setEnabled(true);
     }
 
     contextMenu->exec(QCursor::pos());

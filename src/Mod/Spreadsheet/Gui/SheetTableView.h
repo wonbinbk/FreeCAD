@@ -78,6 +78,7 @@ protected Q_SLOTS:
     void removeColumns();
     void cellProperties();
     void onRecompute();
+    void onBind();
 
 protected:
     bool edit(const QModelIndex &index, EditTrigger trigger, QEvent *event);
@@ -95,6 +96,7 @@ protected:
     QAction *actionPaste;
     QAction *actionCut;
     QAction *actionDel;
+    QAction *actionBind;
 
     boost::signals2::scoped_connection cellSpanChangedConnection;
 };

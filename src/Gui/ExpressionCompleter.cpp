@@ -520,13 +520,18 @@ void ExpressionCompleter::slotUpdate(const QString & prefix, int pos)
     }
 }
 
-ExpressionLineEdit::ExpressionLineEdit(QWidget *parent, bool noProperty)
+ExpressionLineEdit::ExpressionLineEdit(QWidget *parent, bool noProperty, char checkPrefix)
     : QLineEdit(parent)
     , completer(0)
     , block(true)
     , noProperty(noProperty)
+    , checkPrefix(checkPrefix)
 {
     connect(this, SIGNAL(textChanged(const QString&)), this, SLOT(slotTextChanged(const QString&)));
+}
+
+void ExpressionLineEdit::setPrefix(char prefix) {
+    checkPrefix = prefix;
 }
 
 void ExpressionLineEdit::setDocumentObject(const App::DocumentObject * currentDocObj)
@@ -559,6 +564,8 @@ void ExpressionLineEdit::hideCompleter()
 void ExpressionLineEdit::slotTextChanged(const QString & text)
 {
     if (!block) {
+        if(!checkPrefix || !text.size() || text[0]!=QLatin1Char(checkPrefix))
+            return;
         Q_EMIT textChanged2(text,cursorPosition());
     }
 }
