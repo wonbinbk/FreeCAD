@@ -1794,6 +1794,7 @@ FunctionExpression::FunctionExpression(const DocumentObject *_owner, Function _f
     case FLOOR:
     case MINVERT:
     case HREF:
+    case DBIND:
         if (args.size() != 1)
             EXPR_THROW("Invalid number of arguments: exactly one required.");
         break;
@@ -1829,6 +1830,9 @@ FunctionExpression::FunctionExpression(const DocumentObject *_owner, Function _f
         PARSER_THROW("Unknown function");
         break;
     }
+
+    if(f == DBIND && !args.front()->isDerivedFrom(VariableExpression::getClassTypeId()))
+        EXPR_THROW("dbind() only accepts identifier expression");
 }
 
 FunctionExpression::~FunctionExpression()
@@ -2143,7 +2147,7 @@ Py::Object FunctionExpression::evaluate(const Expression *expr, int f, const std
             PyObjectBase::__PyInit(res.ptr(),tuple.ptr(),dict.ptr());
         }
         return res;
-    } else if (f == HREF) {
+    } else if (f == HREF || f == DBIND) {
         return args[0]->getPyValue();
     }
 
@@ -2479,6 +2483,8 @@ void FunctionExpression::_toString(std::ostream &ss, bool persistent,int) const
         ss << "create("; break;;
     case HREF:
         ss << "href("; break;;
+    case DBIND:
+        ss << "dbind("; break;;
     default:
         assert(0);
     }
@@ -2512,7 +2518,7 @@ void FunctionExpression::_visit(ExpressionVisitor &v)
 {
     std::vector<Expression*>::const_iterator i = args.begin();
 
-    HiddenReference ref(f == HREF);
+    HiddenReference ref(f == HREF || f == DBIND);
     while (i != args.end()) {
         (*i)->visit(v);
         ++i;
@@ -2757,6 +2763,28 @@ void VariableExpression::_offsetCells(int rowOffset, int colOffset, ExpressionVi
 void VariableExpression::setPath(const ObjectIdentifier &path)
 {
      var = path;
+}
+
+void VariableExpression::assign(const ObjectIdentifier &path) const
+{
+    Base::PyGILStateLocker lock;
+
+    Py::Object value = path.getPyValue(true);
+    if(components.empty()) {
+        var.setPyValue(value);
+        return;
+    }
+
+    Py::Object rhs;
+    bool readonly = false;
+    rhs = var.getPyValue(true,0,&readonly);
+    if(readonly)
+        FC_THROWM(Base::RuntimeError,
+                "Cannot set read-only property: " << var.toString());
+    std::size_t count = components.size()-1;
+    for(std::size_t i=0;i<count;++i)
+        rhs = components[i]->get(this,rhs);
+    components.back()->set(this,rhs,value);
 }
 
 //
@@ -3291,6 +3319,7 @@ static void initParser(const App::DocumentObject *owner)
         registered_functions["minvert"] = FunctionExpression::MINVERT;
         registered_functions["create"] = FunctionExpression::CREATE;
         registered_functions["href"] = FunctionExpression::HREF;
+        registered_functions["dbind"] = FunctionExpression::DBIND;
 
         // Aggregates
         registered_functions["sum"] = FunctionExpression::SUM;

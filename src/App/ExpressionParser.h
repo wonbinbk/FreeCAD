@@ -274,6 +274,9 @@ public:
         CREATE, // create new object of a given type
         HREF, // hidden reference that has no dependency check
 
+        // double binding, used by PropertyExpressionEngine to make a property both driving and driven
+        DBIND, 
+
         // Aggregates
         AGGREGATES,
 
@@ -340,6 +343,8 @@ public:
     const App::Property *getProperty() const;
 
     virtual void addComponent(Component* component) override;
+
+    void assign(const ObjectIdentifier &path) const;
 
 protected:
     virtual Expression * _copy() const override;

@@ -170,6 +170,33 @@ void PropertyExpressionEngine::hasSetValue()
         for(auto &e : expressions) {
             auto expr = e.second.expression;
             if(!expr) continue;
+
+            if(isDoubleBinding(*expr)) {
+                auto prop = e.first.getProperty();
+                if(prop) {
+                    ObjectIdentifier path = e.first;
+                    pimpl->conns.push_back(prop->signalChanged.connect(
+                        [this, path](const App::Property &) {
+                            auto it = expressions.find(path);
+                            if(it == expressions.end() || it->second.busy)
+                                return;
+                            auto fexpr = Base::freecad_dynamic_cast<FunctionExpression>(
+                                    it->second.expression.get());
+                            if(fexpr && fexpr->getFunction()==FunctionExpression::DBIND
+                                    && fexpr->getArgs().size()==1) 
+                            {
+                                auto vexpr = Base::freecad_dynamic_cast<VariableExpression>(
+                                                fexpr->getArgs().front());
+                                if(vexpr) {
+                                    Base::StateLocker guard(it->second.busy);
+                                    vexpr->assign(it->first);
+                                }
+                            }
+                        }
+                    ));
+                }
+            }
+
             for(auto &dep : expr->getIdentifiers()) {
                 if(!dep.second)
                     continue;
@@ -1030,3 +1057,10 @@ void PropertyExpressionEngine::onRelabeledDocument(const App::Document &doc)
     for(auto &e : expressions) 
         e.second.expression->visit(v);
 }
+
+bool PropertyExpressionEngine::isDoubleBinding(const App::Expression &expr) {
+    if(expr.isDerivedFrom(FunctionExpression::getClassTypeId()))
+        return static_cast<const FunctionExpression&>(expr).getFunction() == FunctionExpression::DBIND;
+    return false;
+}
+        

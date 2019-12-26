@@ -125,6 +125,8 @@ public:
 
     const boost::any getPathValue(const App::ObjectIdentifier & path) const override;
 
+    static bool isDoubleBinding(const App::Expression &expr);
+
     /// Execute options
     enum ExecuteOption {
         /// Execute all expression
