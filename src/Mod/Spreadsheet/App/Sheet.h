@@ -159,11 +159,17 @@ public:
 
     App::Property *getPropertyByName(const char *name) const;
 
+    App::Property *getDynamicPropertyByName(const char* name) const;
+
     virtual short mustExecute(void) const;
 
     App::DocumentObjectExecReturn *execute(void);
 
     bool getCellAddress(const App::Property *prop, App::CellAddress &address);
+
+    App::CellAddress getCellAddress(const char *name, bool silent=false) const;
+
+    App::Range getRange(const char *name, bool silent=false) const;
 
     std::map<int, int> getColumnWidths() const;
 
@@ -203,8 +209,6 @@ protected:
 
     App::Property *getProperty(const char * addr) const;
 
-    void updateAlias(App::CellAddress key);
-
     void updateProperty(App::CellAddress key);
 
     App::Property *setStringProperty(App::CellAddress key, const std::string & value) ;
@@ -217,10 +221,6 @@ protected:
 
     App::Property *setQuantityProperty(App::CellAddress key, double value, const Base::Unit &unit);
 
-    void aliasRemoved(App::CellAddress address, const std::string &alias);
-
-    void removeAliases();
-
     virtual void onSettingDocument();
 
     /* Properties for used cells */
@@ -228,9 +228,6 @@ protected:
 
     /* Mapping of properties to cell position */
     std::map<const App::Property*, App::CellAddress > propAddress;
-
-    /* Removed (unprocessed) aliases */
-    std::map<App::CellAddress, std::string> removedAliases;
 
     /* Set of cells with errors */
     std::set<App::CellAddress> cellErrors;
