@@ -31,6 +31,7 @@
 #include <QColor>
 #include <QFont>
 #include <Base/Vector3D.h>
+#include <Base/Tools.h>
 #include "Rez.h"
 #include "QGIView.h"
 #include "QGCustomText.h"
@@ -271,9 +272,9 @@ private:
                              { return QRectF(Rez::guiX(r.MinX), -Rez::guiX(r.MaxY),
                                              Rez::guiX(r.Width()), Rez::guiX(r.Height())); }
 
-    static inline double toDeg(double a) { return a*180/M_PI; }
+    static inline double toDeg(double a) { return Base::toDegrees(a); }
     static inline double toQtRad(double a) { return -a; }
-    static inline double toQtDeg(double a) { return -a*180.0/M_PI; }
+    static inline double toQtDeg(double a) { return -Base::toDegrees(a); }
 
     double getDefaultExtensionLineOverhang() const;
     double getDefaultArrowTailLength() const;
