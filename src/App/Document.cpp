@@ -951,6 +951,7 @@ bool Document::undo(int id)
             if(it == mUndoMap.end())
                 return false;
             if(it->second != d->activeUndoTransaction) {
+                TransactionGuard guard;
                 while(mUndoTransactions.size() && mUndoTransactions.back()!=it->second)
                     undo(0);
             }
@@ -964,7 +965,6 @@ bool Document::undo(int id)
         d->activeUndoTransaction = new Transaction(mUndoTransactions.back()->getID());
         d->activeUndoTransaction->Name = mUndoTransactions.back()->Name;
 
-        {
         Base::FlagToggler<bool> flag(d->undoing);
         // applying the undo
         mUndoTransactions.back()->apply(*this,false);
@@ -1002,8 +1002,11 @@ bool Document::redo(int id)
             auto it = mRedoMap.find(id);
             if(it == mRedoMap.end())
                 return false;
-            while(mRedoTransactions.size() && mRedoTransactions.back()!=it->second)
-                redo(0);
+            {
+                TransactionGuard guard;
+                while(mRedoTransactions.size() && mRedoTransactions.back()!=it->second)
+                    redo(0);
+            }
         }
 
         if (d->activeUndoTransaction)
@@ -1016,7 +1019,6 @@ bool Document::redo(int id)
         d->activeUndoTransaction->Name = mRedoTransactions.back()->Name;
 
         // do the redo
-        {
         Base::FlagToggler<bool> flag(d->undoing);
         mRedoTransactions.back()->apply(*this,true);
 
@@ -1061,7 +1063,7 @@ void Document::addOrRemovePropertyOfObject(TransactionalObject* obj, Property *p
 
 bool Document::isPerformingTransaction() const
 {
-    return d->undoing || d->rollback;
+    return d->undoing || d->rollback || Transaction::isApplying();
 }
 
 std::vector<std::string> Document::getAvailableUndoNames() const
@@ -1212,12 +1214,12 @@ void Document::commitTransaction() {
 
 void Document::_commitTransaction(bool notify)
 {
-    if(isPerformingTransaction() || d->committing) {
-        if (FC_LOG_INSTANCE.isEnabled(FC_LOGLEVEL_LOG))
-            FC_WARN("Cannot commit transaction while transacting");
-        return;
-    }
     if (d->activeUndoTransaction) {
+        if(d->undoing || d->rollback || d->committing) {
+            if (FC_LOG_INSTANCE.isEnabled(FC_LOGLEVEL_LOG))
+                FC_WARN("Cannot commit transaction while transacting");
+            return;
+        }
         Base::FlagToggler<> flag(d->committing);
         Application::TransactionSignaller signaller(false,true);
         int id = d->activeUndoTransaction->getID();
@@ -1248,12 +1250,13 @@ void Document::abortTransaction() {
 
 void Document::_abortTransaction()
 {
-    if(isPerformingTransaction() || d->committing) {
-        if (FC_LOG_INSTANCE.isEnabled(FC_LOGLEVEL_LOG))
-            FC_WARN("Cannot abort transaction while transacting");
-    }
-
     if (d->activeUndoTransaction) {
+        if(d->undoing || d->rollback || d->committing) {
+            if (FC_LOG_INSTANCE.isEnabled(FC_LOGLEVEL_LOG))
+                FC_WARN("Cannot abort transaction while transacting");
+            return;
+        }
+
         Base::FlagToggler<bool> flag(d->rollback);
         Application::TransactionSignaller signaller(true,true);
 
