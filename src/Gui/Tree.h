@@ -84,6 +84,7 @@ public:
     void selectLinkedObject(App::DocumentObject *linked); 
     void selectAllLinks(App::DocumentObject *obj); 
     void expandSelectedItems(TreeItemMode mode);
+    static bool setupObjectMenu(QMenu &menu);
 
     bool eventFilter(QObject *, QEvent *ev) override;
 
@@ -130,6 +131,8 @@ public:
     void itemSearch(const QString &text, bool select);
 
 protected:
+    bool _setupObjectMenu(DocumentObjectItem *item, QMenu &menu);
+
     /// Observer message from the Selection
     void onSelectionChanged(const SelectionChanges& msg) override;
     void contextMenuEvent (QContextMenuEvent * e) override;
@@ -218,7 +221,7 @@ private:
     QAction* reloadDocAction;
     QAction* closeDocAction;
     QAction* searchObjectsAction;
-    QTreeWidgetItem *contextItem;
+    static QTreeWidgetItem *contextItem;
     App::DocumentObject *searchObject;
     Gui::Document *searchDoc;
     Gui::Document *searchContextDoc;
