@@ -94,13 +94,6 @@ void ViewProviderGeoFeatureGroupExtension::extensionClaimChildren(
     children.insert(children.end(), objs.begin(), objs.end());
 }
 
-void ViewProviderGeoFeatureGroupExtension::extensionFinishRestoring()
-{
-    // setup GeoExlcuded flag for children
-    extensionClaimChildren();
-    ViewProviderGroupExtension::extensionFinishRestoring();
-}
-
 void ViewProviderGeoFeatureGroupExtension::extensionAttach(App::DocumentObject* pcObject)
 {
     ViewProviderGroupExtension::extensionAttach(pcObject);
@@ -108,11 +101,10 @@ void ViewProviderGeoFeatureGroupExtension::extensionAttach(App::DocumentObject* 
 }
 
 bool ViewProviderGeoFeatureGroupExtension::extensionHandleChildren3D(
-        const std::vector<App::DocumentObject*> &children) 
+        const std::vector<App::DocumentObject*> &) 
 {
-    getExtendedViewProvider();
     if(linkView) {
-        linkView->setChildren(children);
+        linkView->setChildren(getExtendedViewProvider()->claimChildren3D());
         return true;
     }
     return false;
