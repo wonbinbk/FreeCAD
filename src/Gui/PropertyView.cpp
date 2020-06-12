@@ -112,7 +112,7 @@ PropertyView::PropertyView(QWidget *parent)
 
     this->connectPropData =
     App::GetApplication().signalChangedObject.connect(boost::bind
-        (&PropertyView::slotChangePropertyData, this, bp::_1, bp::_2));
+        (&PropertyView::slotChangePropertyData, this, bp::_2));
     this->connectPropView =
     Gui::Application::Instance->signalChangedObject.connect(boost::bind
         (&PropertyView::slotChangePropertyView, this, bp::_1, bp::_2));
@@ -143,6 +143,8 @@ PropertyView::PropertyView(QWidget *parent)
     this->connectDelObject = 
         App::GetApplication().signalDeletedObject.connect(
                 boost::bind(&PropertyView::slotDeletedObject, this, bp::_1));
+    this->connectChangedDocument = App::GetApplication().signalChangedDocument.connect(
+            boost::bind(&PropertyView::slotChangePropertyData, this, bp::_2));
 }
 
 PropertyView::~PropertyView()
@@ -158,6 +160,7 @@ PropertyView::~PropertyView()
     this->connectDelDocument.disconnect();
     this->connectDelObject.disconnect();
     this->connectDelViewObject.disconnect();
+    this->connectChangedDocument.disconnect();
 }
 
 static bool _ShowAll;
@@ -213,7 +216,7 @@ void PropertyView::slotRollback() {
     clearPropertyItemSelection();
 }
 
-void PropertyView::slotChangePropertyData(const App::DocumentObject&, const App::Property& prop)
+void PropertyView::slotChangePropertyData(const App::Property& prop)
 {
     if (propertyEditorData->propOwners.count(prop.getContainer())) {
         propertyEditorData->updateProperty(prop);
