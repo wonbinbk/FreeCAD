@@ -119,7 +119,7 @@ public:
     static TopoShape getTopoShape(const App::DocumentObject *obj,
             const char *subname=0, bool needSubElement=false, Base::Matrix4D *pmat=0, 
             App::DocumentObject **owner=0, bool resolveLink=true, bool transform=true, 
-            bool noElementMap=false);
+            bool noElementMap=false, int depth=0);
 
     static App::DocumentObject *getShapeOwner(const App::DocumentObject *obj, const char *subname=0);
 

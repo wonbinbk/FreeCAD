@@ -35,6 +35,7 @@
 #include <TopTools_IndexedMapOfShape.hxx>
 #include <App/ComplexGeoData.h>
 #include <Base/Exception.h>
+#include <Base/Console.h>
 
 class BRepBuilderAPI_MakeShape;
 class BRepBuilderAPI_Sewing;
@@ -619,6 +620,58 @@ public:
     long isElementGenerated(const char *name, int depth=1) const;
     //@}
 
+
+    template<typename F, class... Args>
+    bool silentCall(bool printError, F&& f, Args&&... args) {
+        try {
+            (this->*f)(std::forward<Args>(args)...);
+            return true;
+        } catch (Standard_Failure &e) {
+            if (!printError)
+                return false;
+            std::ostringstream str;
+            Standard_CString msg = e.GetMessageString();
+#if OCC_VERSION_HEX >= 0x070000
+            // Avoid name mangling
+            str << e.DynamicType()->get_type_name() << " ";
+#else
+            str << typeid(e).name() << " ";
+#endif
+            if (msg) {str << msg;}
+            else     {str << "No OCCT Exception Message";}
+            Base::Console().Error(str.str().c_str());
+        } catch (Base::Exception &e) {
+            if (printError)
+                e.ReportException();
+        }
+        return false;
+    }
+
+    template<typename R, typename F, class... Args>
+    bool silentCallRes(bool printError, R &r, F&& f, Args&&... args) {
+        try {
+            r = (this->*f)(std::forward<Args>(args)...);
+            return true;
+        } catch (Standard_Failure &e) {
+            if (!printError)
+                return false;
+            std::ostringstream str;
+            Standard_CString msg = e.GetMessageString();
+#if OCC_VERSION_HEX >= 0x070000
+            // Avoid name mangling
+            str << e.DynamicType()->get_type_name() << " ";
+#else
+            str << typeid(e).name() << " ";
+#endif
+            if (msg) {str << msg;}
+            else     {str << "No OCCT Exception Message";}
+            Base::Console().Error(str.str().c_str());
+        } catch (Base::Exception &e) {
+            if (printError)
+                e.ReportException();
+        }
+        return false;
+    }
 
     /** @name sub shape cached functions
      *

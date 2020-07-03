@@ -237,6 +237,8 @@ protected:
 class PartExport PropertyShapeCache: public App::Property {
     TYPESYSTEM_HEADER_WITH_OVERRIDE();
 public:
+    PropertyShapeCache();
+
     virtual App::Property *Copy(void) const override;
 
     virtual void Paste(const App::Property &) override;
@@ -257,12 +259,19 @@ public:
     static bool getShape(const App::DocumentObject *obj, TopoShape &shape, const char *subname=0);
     static void setShape(const App::DocumentObject *obj, const TopoShape &shape, const char *subname=0);
 
+    static TopoShape cacheScaledShape(const App::DocumentObject *obj,
+                                      const char *subname,
+                                      const App::DocumentObject *owner,
+                                      const Base::Matrix4D &mat,
+                                      int depth,
+                                      const TopoShape *shape = nullptr);
+
 private:
     void slotChanged(const App::DocumentObject &, const App::Property &prop);
 
 private:
-    std::unordered_map<std::string, TopoShape> cache;
-    boost::signals2::scoped_connection connChanged;
+    class Private;
+    std::unique_ptr<Private> pimpl;
 };
 
 } //namespace Part

@@ -57,6 +57,7 @@
 #include <Base/Exception.h>
 #include <Base/FileInfo.h>
 #include <Base/Stream.h>
+#include <Base/GeometryPyCXX.h>
 #include <App/Application.h>
 #include <App/Document.h>
 #include <App/DocumentObject.h>
@@ -74,6 +75,7 @@
 #include "TopoShapeShellPy.h"
 #include "TopoShapeCompSolidPy.h"
 #include "TopoShapeCompoundPy.h"
+#include "PartFeature.h"
 
 FC_LOG_LEVEL_INIT("PropShape",true,true);
 
@@ -838,14 +840,64 @@ void PropertyFilletEdges::Paste(const Property &from)
 
 // -------------------------------------------------------------------------
 
+struct ScaleInfo
+{
+    Base::Vector3d scale;
+    Base::Rotation orientation;
+
+    Base::Matrix4D toMatrix() const
+    {
+        Base::Matrix4D m;
+        orientation.inverse().getValue(m);
+        m.scale(scale);
+        Base::Matrix4D m2;
+        orientation.getValue(m2);
+        m *= m2;
+        return m;
+    }
+
+    bool operator<(const ScaleInfo &other) const
+    {
+        if (scale.IsEqual(other.scale, 1e-7)
+                && orientation.isSame (other.orientation, 1e-10))
+            return false;
+        for (int i=0; i<3; ++i) {
+            if (scale[i] > other.scale[i])
+                return false;
+            if (scale[i] < other.scale[i])
+                return true;
+        }
+        for (int i=0; i<4; ++i) {
+            if (orientation[i] > other.orientation[i])
+                return false;
+            if (orientation[i] < other.orientation[i])
+                return true;
+        }
+        return false;
+    }
+};
+
+class PropertyShapeCache::Private
+{
+public:
+    std::unordered_map<std::string, TopoShape> cache;
+    std::unordered_map<std::string, std::shared_ptr<TopoShape>> scaleRefs;
+    std::map<ScaleInfo, std::weak_ptr<TopoShape>> scaledShapes;
+    boost::signals2::scoped_connection connChanged;
+};
+
 TYPESYSTEM_SOURCE(Part::PropertyShapeCache, App::Property);
+
+PropertyShapeCache::PropertyShapeCache()
+    :pimpl(new Private)
+{}
 
 App::Property *PropertyShapeCache::Copy(void) const {
     return new PropertyShapeCache();
 }
 
 void PropertyShapeCache::Paste(const App::Property &) {
-    cache.clear();
+    pimpl->cache.clear();
 }
 
 void PropertyShapeCache::Save (Base::Writer &) const
@@ -857,21 +909,39 @@ void PropertyShapeCache::Restore(Base::XMLReader &)
 }
 
 PyObject *PropertyShapeCache::getPyObject() {
-    Py::List res;
-    for(auto &v : cache)
-        res.append(Py::TupleN(Py::String(v.first),shape2pyshape(v.second)));
-    return Py::new_reference_to(res);
+    Py::List shapes;
+    Py::List scaleRefs;
+    Py::List scaledShapes;
+    for(auto &v : pimpl->cache)
+        shapes.append(Py::TupleN(Py::String(v.first),shape2pyshape(v.second)));
+    for(auto &v : pimpl->scaleRefs) {
+        if (v.second)
+            scaleRefs.append(Py::TupleN(Py::String(v.first),shape2pyshape(*v.second)));
+    }
+    for(auto &v : pimpl->scaledShapes) {
+        auto ptr = v.second.lock();
+        Py::TupleN scale(Py::Vector(v.first.scale), Py::Rotation(v.first.orientation));
+        if (ptr)
+            scaledShapes.append(Py::TupleN(scale, shape2pyshape(*ptr)));
+        else
+            scaledShapes.append(Py::TupleN(scale, Py::Object()));
+    }
+    return Py::new_reference_to(Py::TupleN(shapes, scaleRefs, scaledShapes));
 }
 
 void PropertyShapeCache::setPyObject(PyObject *value) {
     if(!value)
         return;
-    if(value == Py_None)
-        cache.clear();
+    if(value == Py_None) {
+        pimpl->cache.clear();
+        pimpl->scaleRefs.clear();
+    }
     App::PropertyStringList prop;
     prop.setPyObject(value);
-    for(const auto &sub : prop.getValues())
-        cache.erase(sub);
+    for(const auto &sub : prop.getValues()) {
+        pimpl->cache.erase(sub);
+        pimpl->scaleRefs.erase(sub);
+    }
 }
 
 #define SHAPE_CACHE_NAME "_Part_ShapeCache"
@@ -890,7 +960,7 @@ PropertyShapeCache *PropertyShapeCache::get(const App::DocumentObject *obj, bool
     if(!prop) 
         FC_ERR("Failed to add shape cache for " << obj->getFullName());
     else
-        prop->connChanged = const_cast<App::DocumentObject*>(obj)->signalEarlyChanged.connect(
+        prop->pimpl->connChanged = const_cast<App::DocumentObject*>(obj)->signalEarlyChanged.connect(
                 boost::bind(&PropertyShapeCache::slotChanged,prop,_1,_2));
     return prop;
 }
@@ -900,8 +970,8 @@ bool PropertyShapeCache::getShape(const App::DocumentObject *obj, TopoShape &sha
     if(!prop)
         return false;
     if(!subname) subname = "";
-    auto it = prop->cache.find(subname);
-    if(it!=prop->cache.end()) {
+    auto it = prop->pimpl->cache.find(subname);
+    if(it!=prop->pimpl->cache.end()) {
         shape = it->second;
         return !shape.isNull();
     }
@@ -915,7 +985,7 @@ void PropertyShapeCache::setShape(
     if(!prop)
         return;
     if(!subname) subname = "";
-    prop->cache[subname] = shape;
+    prop->pimpl->cache[subname] = shape;
 }
 
 void PropertyShapeCache::slotChanged(const App::DocumentObject &, const App::Property &prop) {
@@ -926,7 +996,101 @@ void PropertyShapeCache::slotChanged(const App::DocumentObject &, const App::Pro
             strstr(propName,"Touched")!=0)
     {
         FC_LOG("clear shape cache on changed " << prop.getFullName());
-        cache.clear();
+        pimpl->scaledShapes.clear();
+        pimpl->cache.clear();
+        pimpl->scaleRefs.clear();
     }
 }
 
+TopoShape
+PropertyShapeCache::cacheScaledShape(const App::DocumentObject *obj,
+                                     const char *subname,
+                                     const App::DocumentObject *shapeOwner,
+                                     const Base::Matrix4D &mat,
+                                     int depth,
+                                     const TopoShape *inputShape)
+{
+    TopoShape shape;
+
+    ScaleInfo scale;
+    Base::Vector3d translation;
+    Base::Rotation rotation;
+
+    // Because of Link's scale capability. It is possible to have many links
+    // with different scale pointed to the same object (shapeOwner). We want to
+    // avoid repeated scaling of the same shape.
+    //
+    // We store the scaled shape inside shapeOwner's cache
+    // (Private::scaledShapes) using the following Matrix4D::getTransform() to
+    // extract the scale transformation as the key. The scaled shape is stored
+    // using a std::weak_ptr, and referenced in the link, i.e. obj's cache
+    // (Private::scaleRefs) using std::shared_ptr, so that the scaled shape
+    // stored in shape owner can be released if all references are gone.
+
+    mat.getTransform(translation, rotation, scale.scale, scale.orientation);
+
+    auto prop = PropertyShapeCache::get(obj,true);
+    if (!prop)
+        return shape;
+
+    std::string _subname;
+    const char *subelement;
+    if (!subname) {
+        subname = "";
+        subelement = nullptr;
+    } else {
+        subelement = Data::ComplexGeoData::findElementName(subname);
+        if (*subelement) {
+            _subname = std::string(subname, subelement);
+            subname = _subname.c_str();
+        } else
+            subelement = nullptr;
+    }
+
+    auto &shapePtr = prop->pimpl->scaleRefs[subname];
+    if (!shapePtr) {
+        auto ownerProp = PropertyShapeCache::get(shapeOwner,true);
+        if (!ownerProp)
+            return shape;
+
+        auto &res = ownerProp->pimpl->scaledShapes[scale];
+        shapePtr = res.lock();
+        if (!shapePtr) {
+            if (inputShape)
+                shape = *inputShape;
+            else
+                shape = Feature::getTopoShape(shapeOwner,0,true,0,0,false,false,false,depth+1);
+
+            if (shape.isNull())
+                return shape;
+
+            if (!shape.silentCall(FC_LOG_INSTANCE.isEnabled(FC_LOGLEVEL_LOG),
+                    &TopoShape::transformShape, scale.toMatrix(), false, true))
+                return TopoShape();
+
+            shapePtr.reset(new TopoShape(shape));
+            res = shapePtr;
+        }
+    }
+    shape = *shapePtr;
+    if(shape.isNull())
+        return shape;
+
+    if (subelement) {
+        shape = shape.getSubTopoShape(subelement, true);
+        if (shape.isNull())
+            return shape;
+    }
+
+    Base::Matrix4D m1, m2;
+    m1.move(translation);
+    rotation.getValue(m2);
+    m1 *= m2;
+
+    shape.silentCall(FC_LOG_INSTANCE.isEnabled(FC_LOGLEVEL_LOG),
+            &TopoShape::transformShape, m1, false, false);
+
+    if (obj->getDocument() != shapeOwner->getDocument())
+        shape.reTagElementMap(obj->getID(),obj->getDocument()->getStringHasher());
+    return shape;
+}
