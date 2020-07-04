@@ -506,7 +506,9 @@ static TopoShape _getTopoShape(const App::DocumentObject *obj, const char *subna
     } else {
         Base::PyGILStateLocker lock;
         PyObject *pyobj = 0;
-        obj->getSubObject(subname,&pyobj,0,false,depth);
+        Base::Matrix4D tmp;
+        // maybe use owner->getSubObject() for better speed?
+        obj->getSubObject(subname,&pyobj,&tmp,false,depth);
         if(pyobj && PyObject_TypeCheck(pyobj,&TopoShapePy::Type))
             shape = *static_cast<TopoShapePy*>(pyobj)->getTopoShapePtr();
         Py_XDECREF(pyobj);
@@ -667,7 +669,7 @@ TopoShape Feature::getTopoShape(const App::DocumentObject *obj, const char *subn
         if(pmat)
             topMat = *pmat;
         if(transform)
-            obj->getSubObject(0,0,&topMat,depth);
+            obj->getSubObject(0,0,&topMat,true,depth);
 
         // Apply the top level transformation
         if(!shape.isNull())
