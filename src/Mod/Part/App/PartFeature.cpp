@@ -452,6 +452,9 @@ static TopoShape _getTopoShape(const App::DocumentObject *obj, const char *subna
         }
     }
 
+    if(!needSubElement || (subelement && !subelement[0]))
+        subelement = nullptr;
+
     auto canCache = [&](const App::DocumentObject *o) {
         return !lastLink || 
             (hiddens.empty() && !App::GeoFeatureGroupExtension::isNonGeoGroup(o));
@@ -492,17 +495,12 @@ static TopoShape _getTopoShape(const App::DocumentObject *obj, const char *subna
 
     bool canCacheOwner = canCache(owner);
 
-    if (canCacheOwner && mat.hasScale())
+    if (!subelement && canCacheOwner && mat.hasScale())
         shape = PropertyShapeCache::cacheScaledShape(obj, subname, owner, mat, depth);
-    else if (canCacheOwner && PropertyShapeCache::getShape(owner, shape)) {
-        if(needSubElement && subelement && *subelement) {
-            shape = shape.getSubTopoShape(subelement, true);
-            if (shape.isNull())
-                return shape;
-        }
+    else if (!subelement && canCacheOwner && PropertyShapeCache::getShape(owner, shape)) {
         shape.transformShape(mat,false,false);
-    } else if (linked != owner && canCache(linked) && linkMat.hasScale()) {
-        shape = PropertyShapeCache::cacheScaledShape(obj, subname, linked, mat*linkMat, depth);
+    // } else if (!subelement && linked != owner && canCache(linked) && linkMat.hasScale()) {
+    //     shape = PropertyShapeCache::cacheScaledShape(obj, subname, linked, mat*linkMat, depth);
     } else {
         Base::PyGILStateLocker lock;
         PyObject *pyobj = 0;
@@ -514,8 +512,14 @@ static TopoShape _getTopoShape(const App::DocumentObject *obj, const char *subna
         Py_XDECREF(pyobj);
     }
     if(!shape.isNull()) {
-        if(obj->getDocument() != linked->getDocument() && canCache(obj))
-            PropertyShapeCache::setShape(obj,shape,subname);
+        if (canCache(obj)) {
+            if(obj->getDocument() != linked->getDocument()
+                    || mat.hasScale()
+                    || (linked != owner && linkMat.hasScale()))
+            {
+                PropertyShapeCache::setShape(obj,shape,subname);
+            }
+        }
         if(noElementMap) {
             shape.resetElementMap();
             shape.Tag = 0;
@@ -525,7 +529,7 @@ static TopoShape _getTopoShape(const App::DocumentObject *obj, const char *subna
     }
 
     // nothing can be done if there is sub-element references
-    if(needSubElement && subelement && *subelement)
+    if(subelement)
         return shape;
 
     bool cacheable = true;

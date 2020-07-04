@@ -1076,12 +1076,6 @@ PropertyShapeCache::cacheScaledShape(const App::DocumentObject *obj,
     if(shape.isNull())
         return shape;
 
-    if (subelement) {
-        shape = shape.getSubTopoShape(subelement, true);
-        if (shape.isNull())
-            return shape;
-    }
-
     Base::Matrix4D m1, m2;
     m1.move(translation);
     rotation.getValue(m2);
@@ -1089,6 +1083,12 @@ PropertyShapeCache::cacheScaledShape(const App::DocumentObject *obj,
 
     shape.silentCall(FC_LOG_INSTANCE.isEnabled(FC_LOGLEVEL_LOG),
             &TopoShape::transformShape, m1, false, false);
+
+    if (subelement) {
+        shape = shape.getSubTopoShape(subelement, true);
+        if (shape.isNull())
+            return shape;
+    }
 
     if (obj->getDocument() != shapeOwner->getDocument())
         shape.reTagElementMap(obj->getID(),obj->getDocument()->getStringHasher());
