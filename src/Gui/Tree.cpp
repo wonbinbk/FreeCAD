@@ -2297,7 +2297,7 @@ struct UpdateDisabler {
 
 void TreeWidget::onUpdateStatus(void)
 {
-    if(this->state()==DraggingState || App::GetApplication().isRestoring()) {
+    if(updateBlocked || this->state()==DraggingState || App::GetApplication().isRestoring()) {
         _updateStatus();
         return;
     }
