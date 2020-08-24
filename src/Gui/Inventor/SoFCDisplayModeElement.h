@@ -1,5 +1,5 @@
 /****************************************************************************
- *   Copyright (c) 2019 Zheng, Lei (realthunder) <realthunder.dev@gmail.com>*
+ *   Copyright (c) 2020 Zheng, Lei (realthunder) <realthunder.dev@gmail.com>*
  *                                                                          *
  *   This file is part of the FreeCAD CAx development system.               *
  *                                                                          *
@@ -20,55 +20,45 @@
  *                                                                          *
  ****************************************************************************/
 
-#ifndef GUI_INVENTOR_BASE_H
-#define GUI_INVENTOR_BASE_H
+#ifndef FC_SOFCDISPLAYMODEELEMENT_H
+#define FC_SOFCDISPLAYMODEELEMENT_H
 
-#include <boost/intrusive_ptr.hpp>
+#include <Inventor/elements/SoReplacedElement.h>
 
-class SoGroup;
+class GuiExport SoFCDisplayModeElement: public SoReplacedElement {
+    typedef SoReplacedElement inherited;
 
-// define this only if we actually decide to run coin in multiple thread
-#ifdef FC_COIN_MULTI_THREAD
-#   define FC_COIN_THREAD_LOCAL thread_local
-#else
-#   define FC_COIN_THREAD_LOCAL
-#endif
+    SO_ELEMENT_HEADER(SoFCDisplayModeElement);
 
-namespace Gui {
-
-/** Convenience smart pointer to wrap coin node. 
- *
- * It is basically boost::intrusive plus implicit pointer conversion to save the
- * trouble of typing get() all the time.
- */
-template<class T>
-class CoinPtr: public boost::intrusive_ptr<T> {
 public:
-# if (defined(_MSC_VER) && (_MSC_VER <= 1800))
-    // Too bad, VC2013 does not support constructor inheritance
-    typedef boost::intrusive_ptr<T> inherited;
-    CoinPtr() {}
-    CoinPtr(T *p, bool add_ref=true):inherited(p,add_ref){}
-    template<class Y> CoinPtr(CoinPtr<Y> const &r):inherited(r){}
-#else
-    using boost::intrusive_ptr<T>::intrusive_ptr;
-#endif
-    operator T *() const {
-        return this->get();
-    }
+    static void initClass(void);
+protected:
+    virtual ~SoFCDisplayModeElement();
+
+public:
+    virtual void init(SoState *state);
+
+    static void set(SoState * const state, SoNode * const node,
+            const SbName &mode, SbBool hiddenLine);
+
+    static const SbName &get(SoState * const state);
+    static SbBool showHiddenLines(SoState * const state);
+    static const SbColor *getFaceColor(SoState * const state);
+    static const SbColor *getLineColor(SoState * const state);
+    static float getTransparency(SoState * const state);
+
+    virtual SbBool matches(const SoElement * element) const;
+    virtual SoElement *copyMatchInfo(void) const;
+
+protected:
+    SbName displayMode;
+    SbBool hiddenLines;
+    SbBool hasFaceColor;
+    SbBool hasLineColor;
+    SbColor faceColor;
+    SbColor lineColor;
+    float transp;
 };
 
-/** Helper function to deal with bug in SoNode::removeAllChildren()
- *
- * @sa https://bitbucket.org/Coin3D/coin/pull-requests/119/fix-sochildlist-auditing/diff
- */
-void GuiExport coinRemoveAllChildren(SoGroup *node);
-
-}
-
-#ifndef FC_COIN_UNIQUE_ID_DEFINED
-#define FC_COIN_UNIQUE_ID_DEFINED
-typedef uint64_t SbFCUniqueId;
-#endif //FC_COIN_UNIQUE_ID_DEFINED
-
-#endif //GUI_INVENTOR_BASE_H
+#endif // FC_SOFCDISPLAYMODEELEMENT_H
+// vim: noai:ts=2:sw=2

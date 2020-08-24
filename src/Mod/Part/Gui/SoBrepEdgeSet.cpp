@@ -235,7 +235,7 @@ void SoBrepEdgeSet::glRender(SoGLRenderAction *action, bool inpath)
                 width = 0.0;
         } else if(pass==1) {
             depthGuard.set(GL_LEQUAL);
-            if(!Gui::SoFCSwitch::testTraverseState(Gui::SoFCSwitch::TraverseInvisible)) {
+            if(!SoFCSwitch::testTraverseState(SoFCSwitch::TraverseInvisible)) {
                 // If we are visible, disable transparency to get a solid
                 // outline, or else on top rendering will have some default
                 // transprency, which will give a fainted appearance that is
@@ -271,7 +271,7 @@ void SoBrepEdgeSet::glRender(SoGLRenderAction *action, bool inpath)
             uint32_t color;
             SoColorPacker packer;
             float trans = 0.0;
-            if(!Gui::SoFCDisplayModeElement::showHiddenLines(state)) {
+            if(!SoFCDisplayModeElement::showHiddenLines(state)) {
                 // Work around Coin bug of losing per line/point color when
                 // rendering with transparency type SORTED_OBJECT_SORTED_TRIANGLE_BLEND
                 SoShapeStyleElement::setTransparencyType(state,SoGLRenderAction::SORTED_OBJECT_BLEND);
@@ -280,7 +280,7 @@ void SoBrepEdgeSet::glRender(SoGLRenderAction *action, bool inpath)
                 state->push();
                 SoLazyElement::setTransparency(state,this,1,&trans,&packer);
                 SoLightModelElement::set(state,SoLightModelElement::BASE_COLOR);
-                auto lineColor = Gui::SoFCDisplayModeElement::getLineColor(state);
+                auto lineColor = SoFCDisplayModeElement::getLineColor(state);
                 if(lineColor) {
                     color = lineColor->getPackedValue(0.0);
                     SoMaterialBindingElement::set(state,SoMaterialBindingElement::OVERALL);
@@ -483,7 +483,7 @@ void SoBrepEdgeSet::_renderSelection(SoGLRenderAction *action,
 void SoBrepEdgeSet::doAction(SoAction* action)
 {
     if (Gui::SoFCSelectionRoot::handleSelectionAction(
-                action, this, Gui::SoFCDetail::Edge, selContext, selCounter))
+                action, this, SoFCDetail::Edge, selContext, selCounter))
         return;
 
     inherited::doAction(action);

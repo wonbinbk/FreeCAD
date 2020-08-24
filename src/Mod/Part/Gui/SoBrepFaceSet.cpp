@@ -386,7 +386,7 @@ void SoBrepFaceSet::buildPartIndexCache() {
 void SoBrepFaceSet::doAction(SoAction* action)
 {
     if (Gui::SoFCSelectionRoot::handleSelectionAction(
-                action, this, Gui::SoFCDetail::Face, selContext, selCounter))
+                action, this, SoFCDetail::Face, selContext, selCounter))
         return;
 
     if (action->getTypeId() == Gui::SoVRMLAction::getClassTypeId()) {
@@ -896,12 +896,12 @@ int SoBrepFaceSet::overrideMaterialBinding(
     unsigned int shapestyleflags = SoShapeStyleElement::get(state)->getFlags();
 
     int pushed = 0;
-    if(Gui::SoFCDisplayModeElement::showHiddenLines(state)) {
+    if(SoFCDisplayModeElement::showHiddenLines(state)) {
         state->push();
 
-        defaultTrans = hiddenLineTransparency = Gui::SoFCDisplayModeElement::getTransparency(state);
+        defaultTrans = hiddenLineTransparency = SoFCDisplayModeElement::getTransparency(state);
         pushed = defaultTrans==0.0 ? -1 : 1;
-        const SbColor *color = Gui::SoFCDisplayModeElement::getFaceColor(state);
+        const SbColor *color = SoFCDisplayModeElement::getFaceColor(state);
 
         // Here the "Hidden Lines" mode wants to override transparency and
         // color. SoLazyElement checks for the overriding node's ID to set the
@@ -1484,6 +1484,7 @@ void SoBrepFaceSet::generatePrimitivesRange(SoAction * action, int pstart, int f
     SoPointDetail pointDetail;
     SoFaceDetail faceDetail;
     faceDetail.setFaceIndex(fstart);
+    faceDetail.setPartIndex(pstart);
 
     vertex.setDetail(&pointDetail);
 
@@ -1504,6 +1505,7 @@ void SoBrepFaceSet::generatePrimitivesRange(SoAction * action, int pstart, int f
             matnr++;
         else if (mbind == PER_PART_INDEXED)
             mindices++;
+        faceDetail.incPartIndex();
     }
 
     while (viptr + 2 < viendptr) {
@@ -1605,8 +1607,10 @@ void SoBrepFaceSet::generatePrimitivesRange(SoAction * action, int pstart, int f
                     matnr++;
                 else if (mbind == PER_PART_INDEXED)
                     mindices++;
+                faceDetail.incPartIndex();
             }
             trinr = 0;
+            faceDetail.incPartIndex();
         }
     }
     if (mode != POLYGON) this->endShape();

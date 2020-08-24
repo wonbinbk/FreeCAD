@@ -225,10 +225,10 @@ void SoBrepPointSet::glRender(SoGLRenderAction *action, bool inpath)
         // with transparency type SORTED_OBJECT_SORTED_TRIANGLE_BLEND
         SoShapeStyleElement::setTransparencyType(state,SoGLRenderAction::SORTED_OBJECT_BLEND);
 
-        if(Gui::SoFCDisplayModeElement::showHiddenLines(state)) {
+        if(SoFCDisplayModeElement::showHiddenLines(state)) {
             SoLazyElement::setTransparency(state,this,1,&trans,&packer);
             SoLightModelElement::set(state,SoLightModelElement::BASE_COLOR);
-            auto lineColor = Gui::SoFCDisplayModeElement::getLineColor(state);
+            auto lineColor = SoFCDisplayModeElement::getLineColor(state);
             if(lineColor) {
                 color = lineColor->getPackedValue(0.0);
                 SoMaterialBindingElement::set(state,SoMaterialBindingElement::OVERALL);
@@ -393,7 +393,7 @@ void SoBrepPointSet::_renderSelection(SoGLRenderAction *action,
 void SoBrepPointSet::doAction(SoAction* action)
 {
     if (Gui::SoFCSelectionRoot::handleSelectionAction(
-                action, this, Gui::SoFCDetail::Vertex, selContext, selCounter))
+                action, this, SoFCDetail::Vertex, selContext, selCounter))
         return;
 
     inherited::doAction(action);

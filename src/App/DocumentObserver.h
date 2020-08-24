@@ -195,7 +195,7 @@ public:
     const std::string &getSubName() const;
 
     /// Return the subname path without sub-element
-    std::string getSubNameNoElement() const;
+    std::string getSubNameNoElement(bool withObjName=false) const;
 
     /// Return the sub-element (Face, Edge, etc) of the subname path
     const char *getElementName() const;

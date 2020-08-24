@@ -164,8 +164,8 @@ void SoFCHighlightAction::finish()
 }
 
 
-SoFCHighlightAction::SoFCHighlightAction (const SelectionChanges &SelCh)
-:SelChange(SelCh)
+SoFCHighlightAction::SoFCHighlightAction ()
+:SelChange(nullptr)
 {
   SO_ACTION_CONSTRUCTOR(SoFCHighlightAction);
 }
@@ -250,8 +250,8 @@ void SoFCSelectionAction::finish()
 }
 
 
-SoFCSelectionAction::SoFCSelectionAction (const SelectionChanges &SelCh)
-:SelChange(SelCh)
+SoFCSelectionAction::SoFCSelectionAction ()
+:SelChange(nullptr)
 {
   SO_ACTION_CONSTRUCTOR(SoFCSelectionAction);
 }
