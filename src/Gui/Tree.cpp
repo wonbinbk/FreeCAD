@@ -244,7 +244,7 @@ public:
     ViewProviderDocumentObject *viewObject;
     DocumentObjectItem *rootItem;
     std::vector<App::DocumentObject*> children;
-    std::set<App::DocumentObject*> childSet;
+    std::map<App::DocumentObject*, App::Document*> childSet;
     bool removeChildrenFromRoot;
     bool itemHidden;
     std::string label;
@@ -285,14 +285,14 @@ public:
     bool updateChildren(bool checkVisibility) {
         auto newChildren = viewObject->claimChildren();
         auto obj = viewObject->getObject();
-        std::set<App::DocumentObject *> newSet;
+        std::map<App::DocumentObject *, App::Document *> newSet;
         bool updated = false;
         for (auto child : newChildren) {
             auto childVp = docItem->getViewProvider(child);
             if (!childVp)
                 continue;
             if(child && child->getNameInDocument()) {
-                if(!newSet.insert(child).second) {
+                if(!newSet.insert(std::make_pair(child, child->getDocument())).second) {
                     TREE_WARN("duplicate child item " << obj->getFullName() 
                         << '.' << child->getNameInDocument());
                 }else if(!childSet.erase(child)) {
@@ -318,14 +318,20 @@ public:
                 }
             }
         }
-        for (auto child : childSet) {
+        for (auto &v : childSet) {
+            App::DocumentObject * child = v.first;
+            App::Document * childDoc = v.second;
             if (newSet.find(child) == newSet.end()) {
                 // this means old child removed
                 updated = true;
                 docItem->_ParentMap[child].erase(obj);
 
-                auto childVp = docItem->getViewProvider(child);
-                if (childVp && child->getDocument() == obj->getDocument())
+                if (childDoc != obj->getDocument())
+                    continue;
+
+                auto childVp = Base::freecad_dynamic_cast<ViewProviderDocumentObject>(
+                        docItem->document()->getViewProvider(child));
+                if (childVp)
                     childVp->setShowable(docItem->isObjectShowable(child));
             }
         }
