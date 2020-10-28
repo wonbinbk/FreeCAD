@@ -322,7 +322,7 @@ public:
     void setElementMap(const std::map<std::string, std::string> &map);
     
     /// Get the current element map size
-    size_t getElementMapSize() const;
+    size_t getElementMapSize(bool flush=true) const;
 
     /// Return the higher level element names of the given element
     virtual std::vector<std::string> getHigherElements(const char *element, bool silent=false) const;
@@ -367,6 +367,8 @@ public:
      *            tag. The callback can return 'true' to terminate the iteration.
      */
     void traceElement(const char *name, TraceCallback cb) const;
+    /** Flush an internal buffering for element mapping */
+    virtual void flushElementMap() const;
     //@}
 
     /** @name Save/restore */
@@ -410,8 +412,13 @@ public:
     mutable long Tag;
 
 protected:
-    ElementMapPtr _ElementMap;
+    ElementMapPtr elementMap(bool flush=true) const;
+
+protected:
     mutable std::string _PersistenceName;
+
+private:
+    ElementMapPtr _ElementMap;
 };
 
 struct AppExport ElementNameComp {
@@ -429,8 +436,6 @@ struct AppExport ElementNameComp {
      */
     bool operator()(const std::string &a, const std::string &b) const;
 };
-
-typedef std::set<std::string,ElementNameComp> ElementNameSet;
 
 } //namespace App
 

@@ -29,8 +29,10 @@
 
 #include <boost/algorithm/string/predicate.hpp>
 #include <boost/bimap.hpp>
-#include <boost/bimap/multiset_of.hpp>
-#include <boost/bimap/unordered_set_of.hpp>
+#include <boost/bimap/unordered_multiset_of.hpp>
+#include <boost/bimap/set_of.hpp>
+#include <boost/iostreams/device/array.hpp>
+#include <boost/iostreams/stream.hpp>
 #include <Base/Writer.h>
 #include <Base/Reader.h>
 
@@ -40,13 +42,54 @@
 
 FC_LOG_LEVEL_INIT("ComplexGeoData", true,true);
 
+namespace bio = boost::iostreams;
 using namespace Data;
+
+static int64_t _MemSize;
+static int64_t _MemMaxSize;
+
+struct MemUnit {
+    int count;
+    int maxcount;
+};
+static std::map<int, MemUnit> _MemUnits;
+
+template<typename T>
+struct MemoryMapAllocator : std::allocator<T> {
+    typedef typename std::allocator<T>::pointer pointer;
+    typedef typename std::allocator<T>::size_type size_type;
+    template<typename U> struct rebind { typedef MemoryMapAllocator<U> other; };
+
+    MemoryMapAllocator() {}
+
+    template<typename U>
+    MemoryMapAllocator(const MemoryMapAllocator<U>& u) : std::allocator<T>(u) {}
+
+    pointer allocate(size_type size, std::allocator<void>::const_pointer = 0) {
+        void* p = std::malloc(size * sizeof(T));
+        if(p == 0)
+            throw std::bad_alloc();
+        _MemSize += size * sizeof(T);
+        if (_MemSize > _MemMaxSize)
+            _MemMaxSize = _MemSize;
+        auto &unit = _MemUnits[sizeof(T)];
+        if (++unit.count > unit.maxcount)
+            unit.maxcount = unit.count;
+        return static_cast<pointer>(p);
+    }
+    void deallocate(pointer p, size_type size) {
+        _MemSize -= size * sizeof(T);
+        --_MemUnits[sizeof(T)].count;
+        std::free(p);
+    }
+};
 
 namespace Data {
 typedef boost::bimap<
             boost::bimaps::set_of<std::string>,
-            boost::bimaps::multiset_of<std::string>,
-            boost::bimaps::with_info<std::vector<App::StringIDRef> > > ElementMapBase;
+            boost::bimaps::unordered_multiset_of<std::string>,
+            boost::bimaps::with_info<std::vector<App::StringIDRef> >,
+            MemoryMapAllocator<std::pair<std::string, std::string> > > ElementMapBase;
 class ElementMap: public ElementMapBase {};
 }
 
@@ -252,7 +295,12 @@ const char *ComplexGeoData::findElementName(const char *subname) {
     return element;
 }
 
-size_t ComplexGeoData::getElementMapSize() const {
+size_t ComplexGeoData::getElementMapSize(bool flush) const {
+    if (flush)
+        flushElementMap();
+    FC_MSG("memory size " << (_MemSize/1024/1024) << "MB, " << (_MemMaxSize/1024/1024));
+    for (auto &unit : _MemUnits)
+        FC_MSG("unit " << unit.first << ": " << unit.second.count << ", " << unit.second.maxcount);
     return _ElementMap?_ElementMap->size():0;
 }
 
@@ -261,6 +309,7 @@ const char *ComplexGeoData::getElementName(const char *name, int direction,
 {
     if(!name)
         return 0;
+    flushElementMap();
     if(!_ElementMap) {
         const char *txt = isMappedElement(name);
         if(txt && !boost::contains(txt,elementMapPrefix()))
@@ -298,6 +347,7 @@ const char *ComplexGeoData::getElementName(const char *name, int direction,
 std::vector<std::pair<std::string, std::vector<App::StringIDRef> > >
 ComplexGeoData::getElementMappedNames(const char *element, bool needUnmapped) const {
     std::vector<std::pair<std::string, std::vector<App::StringIDRef> > > names;
+    flushElementMap();
     if(_ElementMap) {
         auto ret = _ElementMap->right.equal_range(element);
         size_t count=0;
@@ -318,6 +368,7 @@ ComplexGeoData::getElementMappedNames(const char *element, bool needUnmapped) co
 std::vector<std::pair<std::string,std::string> > 
 ComplexGeoData::getElementNamesWithPrefix(const char *prefix) const {
     std::vector<std::pair<std::string,std::string> > names;
+    flushElementMap();
     if(!prefix || !prefix[0] || !_ElementMap)
         return names;
     const auto &p = elementMapPrefix();
@@ -332,10 +383,22 @@ ComplexGeoData::getElementNamesWithPrefix(const char *prefix) const {
 
 std::map<std::string, std::string> ComplexGeoData::getElementMap() const {
     std::map<std::string, std::string> ret;
+    flushElementMap();
     if(!_ElementMap) return ret;
     for(auto &v : _ElementMap->left)
         ret.emplace_hint(ret.cend(),v.first,v.second);
     return ret;
+}
+
+ElementMapPtr ComplexGeoData::elementMap(bool flush) const
+{
+    if (flush)
+        flushElementMap();
+    return _ElementMap;
+}
+
+void ComplexGeoData::flushElementMap() const
+{
 }
 
 void ComplexGeoData::setElementMap(const std::map<std::string, std::string> &map) {
@@ -346,6 +409,7 @@ void ComplexGeoData::setElementMap(const std::map<std::string, std::string> &map
 
 void ComplexGeoData::copyElementMap(const ComplexGeoData &data, const char *postfix) {
     _ElementMap.reset();
+    data.flushElementMap();
     if(!data._ElementMap)
         return;
 
@@ -573,7 +637,7 @@ size_t ComplexGeoData::findTagInElementName(const std::string &name,
     if(pos==std::string::npos)
         return pos;
     size_t offset = pos + tagPostfix().size();
-    std::istringstream iss(name.c_str()+offset);
+    bio::stream<bio::array_source> iss(name.c_str()+offset, name.size()-offset);
     long _tag = 0;
     int _len = -1;
     char sep = 0;
@@ -621,9 +685,27 @@ void ComplexGeoData::encodeElementName(char element_type, std::string &name, std
             return;
         }
     }else if(!tag || tag==Tag) {
-        findTagInElementName(name,&inputTag,nullptr,nullptr,nullptr,true);
-        if(inputTag)
+        auto pos = findTagInElementName(name,&inputTag,nullptr,nullptr,nullptr,true);
+        if(inputTag) {
+            // About the encode the same tag used last time. This usually means
+            // the owner object is doing multi step modeling. Let's not
+            // recursively encode the same tag too many time. It will be a
+            // waste of memory, because the intermediate shapes has no
+            // corresponding objects, so no real value for history tracing.
+            //
+            // On the other hand, we still need to distingush the original name
+            // from the input object from the element name of the intermediate
+            // shapes. So we limit ourselves to encode only one extra level
+            // using the same tag. In order to do that, we need to dehash the
+            // previous level name, and check for its tag.
             tag = inputTag;
+            std::string n(name.c_str(), pos);
+            std::string prev = dehashElementName(n.c_str());
+            long prevTag = 0;
+            findTagInElementName(prev,&prevTag,nullptr,nullptr,nullptr,true);
+            if (prevTag == inputTag || prevTag == -inputTag)
+                name.resize(pos);
+        }
     }
     if(Hasher)
         name = hashElementName(name.c_str(),sids);
@@ -691,6 +773,7 @@ void ComplexGeoData::setPersistenceFileName(const char *filename) const {
 
 void ComplexGeoData::Save(Base::Writer &writer) const {
     writer.Stream() << writer.ind() << "<ElementMap";
+    flushElementMap();
     if(!_ElementMap || _ElementMap->empty()) {
         writer.Stream() << "/>\n";
         return;
@@ -709,7 +792,7 @@ void ComplexGeoData::Save(Base::Writer &writer) const {
         for(auto &v : _ElementMap->left) {
             // We are omitting indentation here to save some space in case of long list of elements
             writer.Stream() << "<Element key=\"" << encodeAttribute(v.first) 
-                            << "\" value=\"" << encodeAttribute(v.second);
+                            << "\" value=\"" << v.second;
             if(v.info.size()) {
                 writer.Stream() << "\" sid=\"" << v.info.front()->value();
                 for(size_t i=1;i<v.info.size();++i)
@@ -763,7 +846,8 @@ void ComplexGeoData::Restore(Base::XMLReader &reader) {
                     FC_ERR("missing hasher");
                 }
             } else {
-                std::istringstream iss(reader.getAttribute("sid"));
+                const char *attr = reader.getAttribute("sid");
+                bio::stream<bio::array_source> iss(attr, std::strlen(attr));
                 long id;
                 while((iss >> id)) {
                     auto sid = Hasher->getID(id);
@@ -820,6 +904,7 @@ void ComplexGeoData::restoreStream(std::istream &s, std::size_t count) {
 }
 
 void ComplexGeoData::SaveDocFile(Base::Writer &writer) const {
+    flushElementMap();
     writer.Stream() << _ElementMap->left.size() << '\n';
     saveStream(writer.Stream());
 }
@@ -831,6 +916,7 @@ void ComplexGeoData::RestoreDocFile(Base::Reader &reader) {
 }
 
 unsigned int ComplexGeoData::getMemSize(void) const {
+    flushElementMap();
     if(_ElementMap)
         return _ElementMap->size()*10;
     return 0;

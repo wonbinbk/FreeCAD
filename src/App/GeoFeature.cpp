@@ -200,8 +200,7 @@ void GeoFeature::updateElementReference() {
     auto prop = getPropertyOfGeometry();
     if(!prop) return;
     auto geo = prop->getComplexData();
-    if(!geo || !geo->getElementMapSize()) return;
-    auto elementMap = geo->getElementMap();
+    if(!geo) return;
     bool reset = false;
     auto version = getElementMapVersion(prop);
     if(_ElementMapVersion.getStrValue().empty()) 
@@ -210,10 +209,7 @@ void GeoFeature::updateElementReference() {
         reset = true;
         _ElementMapVersion.setValue(version);
     }
-    if(reset || _elementMapCache!=elementMap) {
-        _elementMapCache.swap(elementMap);
-        PropertyLinkBase::updateElementReferences(this,reset);
-    }
+    PropertyLinkBase::updateElementReferences(this,reset);
 }
 
 void GeoFeature::onChanged(const Property *prop) {
