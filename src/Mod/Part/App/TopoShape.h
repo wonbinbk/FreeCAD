@@ -625,14 +625,10 @@ public:
      */
     //@{
     void mapSubElement(const TopoShape &other,const char *op=0, bool forceHasher=false);
-    void mapSubElement(const std::vector<TopoShape> &shapes, const char *op=0) {
-        for(auto &shape : shapes)
-            mapSubElement(shape,op);
-    }
-    void mapSubElementsTo(std::vector<TopoShape> &shapes, const char *op=0) const {
-        for(auto &shape : shapes)
-            shape.mapSubElement(*this,op);
-    }
+    void mapSubElement(const std::vector<TopoShape> &shapes, const char *op=0);
+    void mapSubElementsTo(std::vector<TopoShape> &shapes, const char *op=0) const;
+    void delayMapSubElement(const TopoShape &other,const char *op=0);
+    void delayMapSubElement(const std::vector<TopoShape> &shapes,const char *op=0);
 
     bool canMapElement(const TopoShape &other) const;
 
@@ -646,6 +642,9 @@ public:
             std::vector<std::pair<std::string,std::string> > &names) const;
 
     virtual std::string getElementMapVersion() const;
+
+    virtual void flushElementMap() const;
+    bool hasPendingElementMap() const;
 
     virtual std::vector<std::string> getHigherElements(const char *element, bool silent=false) const;
 

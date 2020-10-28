@@ -315,15 +315,6 @@ TopoShape::TopoShape(const TopoDS_Shape& shape)
 {
 }
 
-TopoShape::TopoShape(const TopoShape& shape)
-  : _Shape(shape._Shape)
-{
-    Tag = shape.Tag;
-    Hasher = shape.Hasher;
-    _ElementMap = shape._ElementMap;
-    _Cache = shape._Cache;
-}
-
 const std::vector<const char*>& TopoShape::getElementTypes(void) const
 {
     static const std::vector<const char*> temp = {"Face","Edge","Vertex"};
@@ -443,17 +434,6 @@ PyObject * TopoShape::getPySubShape(const char* Type,bool silent) const
             return 0;
     }
     return Py::new_reference_to(shape2pyshape(s));
-}
-
-void TopoShape::operator = (const TopoShape& sh)
-{
-    if (this != &sh) {
-        this->Tag = sh.Tag;
-        this->_Shape = sh._Shape;
-        this->_ElementMap = sh._ElementMap;
-        this->_Cache = sh._Cache;
-        this->Hasher = sh.Hasher;
-    }
 }
 
 void TopoShape::convertTogpTrsf(const Base::Matrix4D& mtrx, gp_Trsf& trsf)
@@ -657,7 +637,7 @@ void TopoShape::importIges(const char *FileName)
         aReader.TransferRoots();
         // one shape that contains all subshapes
         this->_Shape = aReader.OneShape();
-        _ElementMap.reset();
+        resetElementMap();
 
 #if OCC_VERSION_HEX < 0x070500
         pi->EndScope();
@@ -686,7 +666,7 @@ void TopoShape::importStep(const char *FileName)
         aReader.TransferRoots();
         // one shape that contains all subshapes
         this->_Shape = aReader.OneShape();
-        _ElementMap.reset();
+        resetElementMap();
 
 #if OCC_VERSION_HEX < 0x070500
         pi->EndScope();
@@ -713,7 +693,7 @@ void TopoShape::importBrep(const char *FileName)
         BRepTools::Read(aShape,(const Standard_CString)FileName,aBuilder);
 #endif
         this->_Shape = aShape;
-        _ElementMap.reset();
+        resetElementMap();
     }
     catch (Standard_Failure& e) {
         throw Base::CADKernelError(e.GetMessageString());
@@ -742,7 +722,7 @@ void TopoShape::importBrep(std::istream& str, int indicator)
         BRepTools::Read(aShape,str,aBuilder);
 #endif
         this->_Shape = aShape;
-        _ElementMap.reset();
+        resetElementMap();
     }
     catch (Standard_Failure& e) {
         throw Base::CADKernelError(e.GetMessageString());
@@ -767,7 +747,7 @@ void TopoShape::importBinary(std::istream& str)
 
     try {
         this->_Shape = theShapeSet.Shape(shapeId);
-        _ElementMap.reset();
+        resetElementMap();
         this->_Shape.Location(theShapeSet.Locations().Location (locId));
         this->_Shape.Orientation (anOrient);
     }
@@ -3295,7 +3275,7 @@ void TopoShape::setFaces(const std::vector<Base::Vector3d> &Points,
 #endif
     if (_Shape.IsNull())
         _Shape = aComp;
-    _ElementMap.reset();
+    resetElementMap();
 }
 
 void TopoShape::getPoints(std::vector<Base::Vector3d> &Points,
