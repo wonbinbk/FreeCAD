@@ -7968,7 +7968,7 @@ void SketchObject::onDocumentRestored()
     if(ExternalGeo.getSize()<=2) {
         migrate = true;
         for(auto &key : externalGeoRef) {
-            long id = getDocument()->Hasher->getID(key.c_str())->value();
+            long id = getDocument()->getHasher()->getID(key.c_str()).value();
             if(geoLastId < id)
                 geoLastId = id;
             externalGeoRefMap[key].push_back(id);

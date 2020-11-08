@@ -28,7 +28,6 @@
 #include <Base/Persistence.h>
 #include <Base/Type.h>
 
-#include "StringHasher.h"
 #include "PropertyContainer.h"
 #include "PropertyStandard.h"
 #include "PropertyLinks.h"
@@ -130,8 +129,6 @@ public:
     /// Prefer binary format when saving
     PropertyBool PreferBinary;
     //@}
-
-    StringHasherRef Hasher;
 
     /** @name Signals of the document */
     //@{
@@ -514,7 +511,7 @@ public:
      * of the hasher. If the hasher has not been saved before, the object must
      * save the hasher by calling StringHasher::Save
      */
-    std::pair<bool,int> addStringHasher(StringHasherRef hasher) const;
+    std::pair<bool,int> addStringHasher(const StringHasherRef & hasher) const;
 
     /** Called by property to restore its containing StringHasher
      *
@@ -529,6 +526,9 @@ public:
      * save
      */
     StringHasherRef getStringHasher(int index=-1) const;
+
+    /// Return the document's own hasher regardless of UseHasher
+    StringHasherRef getHasher() const;
 
     /** Return the links to a given object
      *
