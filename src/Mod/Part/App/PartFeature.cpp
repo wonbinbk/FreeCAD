@@ -71,6 +71,7 @@ typedef boost::iterator_range<const char*> CharRange;
 #include <App/Document.h>
 #include <App/Link.h>
 #include <App/GeoFeatureGroupExtension.h>
+#include <App/MappedElement.h>
 
 #include "PartPyCXX.h"
 #include "PartFeature.h"
@@ -211,28 +212,21 @@ App::DocumentObject *Feature::getSubObject(const char *subname,
     }
 }
 
-static std::vector<std::pair<long,std::string> > 
+static std::vector<std::pair<long,Data::MappedName> > 
 getElementSource(App::DocumentObject *owner, 
-        TopoShape shape, const char *name, char type)
+        TopoShape shape, const Data::MappedName & name, char type)
 {
-    std::vector<std::pair<long,std::string> > ret;
-    auto mapped = shape.isMappedElement(name);
-    if(mapped)
-        name = mapped;
-    auto dot = strchr(name,'.');
-    if(dot)
-        ret.emplace_back(0,std::string(name,dot-name));
-    else
-        ret.emplace_back(0,name);
+    std::vector<std::pair<long,Data::MappedName> > ret;
+    ret.emplace_back(0,name);
     while(1) {
-        std::string original;
-        std::vector<std::string> history;
+        Data::MappedName original;
+        std::vector<Data::MappedName> history;
         // It is possible the name does not belong to the shape, e.g. when user
         // changes modeling order in PartDesign. So we try to assign the
         // document hasher here in case getElementHistory() needs to de-hash
         if(!shape.Hasher && owner)
             shape.Hasher = owner->getDocument()->getStringHasher();
-        long tag = shape.getElementHistory(ret.back().second.c_str(),&original,&history);
+        long tag = shape.getElementHistory(ret.back().second,&original,&history);
         if(!tag) 
             break;
         auto obj = owner;
@@ -240,7 +234,7 @@ getElementSource(App::DocumentObject *owner,
             obj = owner->getDocument()->getObjectByID(tag);
             if(type) {
                 for(auto &hist : history) {
-                    if(shape.elementType(hist.c_str())!=type)
+                    if(shape.elementType(hist)!=type)
                         return ret;
                 }
             }
@@ -252,28 +246,28 @@ getElementSource(App::DocumentObject *owner,
             shape.setShape(TopoDS_Shape());
         }else 
             shape = Part::Feature::getTopoShape(obj,0,false,0,&owner); 
-        if(type && shape.elementType(original.c_str())!=type)
+        if(type && shape.elementType(original)!=type)
             break;
         ret.emplace_back(tag,original);
     }
     return ret;
 }
 
-std::list<Part::Feature::HistoryItem> 
+std::list<Data::HistoryItem> 
 Feature::getElementHistory(App::DocumentObject *feature, 
         const char *name, bool recursive, bool sameType)
 {
-    std::list<HistoryItem> ret;
+    std::list<Data::HistoryItem> ret;
     TopoShape shape = getTopoShape(feature);
-    std::string mapped = shape.getElementName(name,Data::ComplexGeoData::MapToNamed);
+    Data::MappedName element = shape.getMappedName(name, true);
     char element_type=0;
     if(sameType)
-        element_type = shape.elementType(name);
+        element_type = shape.elementType(element);
     int depth = 0;
     do {
-        std::string original;
-        ret.emplace_back(feature,mapped.c_str());
-        long tag = shape.getElementHistory(mapped.c_str(),&original,&ret.back().intermediates);
+        Data::MappedName original;
+        ret.emplace_back(feature,element);
+        long tag = shape.getElementHistory(element,&original,&ret.back().intermediates);
         App::DocumentObject *obj = nullptr;
         if (tag) {
             App::Document *doc = feature->getDocument();
@@ -288,7 +282,7 @@ Feature::getElementHistory(App::DocumentObject *feature,
             obj = doc->getObjectByID(std::abs(tag));
         }
         if(!recursive) {
-            ret.emplace_back(obj,original.c_str());
+            ret.emplace_back(obj,original);
             ret.back().tag = tag;
             return ret;
         }
@@ -296,26 +290,29 @@ Feature::getElementHistory(App::DocumentObject *feature,
             break;
         if(element_type) {
             for(auto &hist : ret.back().intermediates) {
-                if(shape.elementType(hist.c_str())!=element_type)
+                if(shape.elementType(hist)!=element_type)
                     return ret;
             }
         }
         feature = obj;
         shape = Feature::getTopoShape(feature);
-        mapped = original;
-        if(element_type && shape.elementType(original.c_str())!=element_type)
+        element = original;
+        if(element_type && shape.elementType(original)!=element_type)
             break;
     }while(feature);
     return ret;
 }
 
-std::vector<std::pair<std::string,std::string> > 
+QVector<Data::MappedElement>
 Feature::getRelatedElements(App::DocumentObject *obj, const char *name, bool sameType, bool withCache)
 {
     auto owner = obj;
     auto shape = getTopoShape(obj,0,false,0,&owner); 
-    std::vector<std::pair<std::string,std::string> > ret;
-    if(withCache && shape.getRelatedElementsCached(name,sameType,ret))
+    QVector<Data::MappedElement> ret;
+    Data::MappedElement mapped = shape.getElementName(name);
+    if (!mapped.name)
+        return ret;
+    if(withCache && shape.getRelatedElementsCached(mapped.name,sameType,ret))
         return ret;
 #if 0
     auto ret = shape.getRelatedElements(name,sameType); 
@@ -325,35 +322,32 @@ Feature::getRelatedElements(App::DocumentObject *obj, const char *name, bool sam
     }
 #endif
 
-    char element_type = shape.elementType(name);
+    char element_type = shape.elementType(mapped.name);
     TopAbs_ShapeEnum type = TopoShape::shapeType(element_type,true);
     if(type == TopAbs_SHAPE)
         return ret;
 
-    auto source = getElementSource(owner,shape,name,element_type);
+    auto source = getElementSource(owner,shape,mapped.name,element_type);
     for(auto &src : source) {
-        auto element = shape.getElementName(src.second.c_str(),Data::ComplexGeoData::MapToIndexedForced);
-        if(element!=src.second.c_str() &&
-           (!sameType || shape.elementType(element) == element_type))
-        {
-            ret.emplace_back(src.second,element);
-            shape.cacheRelatedElements(name,sameType,ret);
+        auto srcIndex = shape.getIndexedName(src.second);
+        if(srcIndex && (!sameType || shape.elementType(src.second) == element_type)) {
+            ret.push_back(Data::MappedElement(src.second,srcIndex));
+            shape.cacheRelatedElements(mapped.name,sameType,ret);
             return ret;
         }
     }
 
-    std::map<int,std::vector<std::pair<std::string,std::string> > > retMap;
+    std::map<int,QVector<Data::MappedElement> > retMap;
 
-    auto shapetype = TopoShape::shapeName(type);
+    const char *shapetype = TopoShape::shapeName(type).c_str();
     std::ostringstream ss;
     for(size_t i=1;i<=shape.countSubShapes(type);++i) {
-        ss.str("");
-        ss << shapetype << i;
-        std::string element(ss.str());
-        auto mapped = shape.getElementName(element.c_str(),Data::ComplexGeoData::MapToNamed);
-        if(mapped == element.c_str())
+        Data::MappedElement related;
+        related.index = Data::IndexedName::fromConst(shapetype, i);
+        related.name = shape.getMappedName(related.index);
+        if (!related.name)
             continue;
-        auto src = getElementSource(owner,shape,mapped,sameType?element_type:0);
+        auto src = getElementSource(owner,shape,related.name,sameType?element_type:0);
         int idx = (int)source.size()-1;
         for(auto rit=src.rbegin();idx>=0&&rit!=src.rend();++rit,--idx) {
             // TODO: shall we ignore source tag when comparing? It could cause
@@ -370,11 +364,11 @@ Feature::getRelatedElements(App::DocumentObject *obj, const char *name, bool sam
             }
         }
         if(idx < (int)source.size())
-            retMap[idx].emplace_back(mapped,element);
+            retMap[idx].push_back(related);
     }
     if(retMap.size())
-        ret.swap(retMap.begin()->second);
-    shape.cacheRelatedElements(name,sameType,ret);
+        ret = retMap.begin()->second;
+    shape.cacheRelatedElements(mapped.name,sameType,ret);
     return ret;
 }
 

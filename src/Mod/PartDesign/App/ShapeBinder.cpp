@@ -40,10 +40,9 @@
 #include <unordered_map>
 #include <unordered_set>
 #include <boost/algorithm/string/predicate.hpp>
-#include <boost/algorithm/string/find.hpp>
 #include <boost/range.hpp>
-
-typedef boost::iterator_range<const char*> CharRange;
+#include <boost/iostreams/device/array.hpp>
+#include <boost/iostreams/stream.hpp>
 
 #include <Base/Console.h>
 #include <Base/Tools.h>
@@ -54,6 +53,7 @@ typedef boost::iterator_range<const char*> CharRange;
 #include <App/GroupExtension.h>
 #include <App/OriginFeature.h>
 #include <App/Link.h>
+#include <App/MappedElement.h>
 #include <Mod/Part/App/TopoShape.h>
 #include <Mod/Part/App/TopoShapeOpCode.h>
 #include <Mod/Part/App/FaceMakerBullseye.h>
@@ -66,6 +66,7 @@ FC_LOG_LEVEL_INIT("PartDesign",true,true)
 
 using namespace PartDesign;
 namespace bp = boost::placeholders;
+namespace bio = boost::iostreams;
 
 // ============================================================================
 
@@ -853,20 +854,22 @@ void SubShapeBinder::update(SubShapeBinder::UpdateOption options) {
     }
 }
 
-App::DocumentObject *SubShapeBinder::getElementOwner(const char *element) const
+App::DocumentObject *SubShapeBinder::getElementOwner(const Data::MappedName & name) const
 {
-    if(!element)
+    if(!name)
         return nullptr;
 
-    CharRange range(element, element+strlen(element)+1);
-    static const char _op[] = TOPOP_SHAPEBINDER ":";
-    CharRange op(_op, _op+sizeof(_op)-1);
-    auto res = boost::find_last(range, op);
-    if(boost::begin(res) == boost::end(res))
+    static const char *op = TOPOP_SHAPEBINDER ":";
+    int offset = name.rfind(op);
+    if (offset < 0)
         return nullptr;
     
     int idx, subidx;
-    if(sscanf(boost::end(res), "%d:%d", &idx, &subidx) != 2 || subidx<0)
+    char sep;
+    int size;
+    const char * s = name.toConstString(offset, size);
+    bio::stream<bio::array_source> iss(s, size);
+    if (!(iss >> idx >> sep >> subidx) || sep!=':' || subidx<0)
         return nullptr;
 
     const App::PropertyXLink *link = nullptr;

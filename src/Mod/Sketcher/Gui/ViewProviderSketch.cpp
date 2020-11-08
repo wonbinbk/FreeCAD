@@ -86,6 +86,7 @@
 #include <Base/Interpreter.h>
 #include <Base/UnitsSchema.h>
 #include <Base/UnitsApi.h>
+#include <App/MappedElement.h>
 #include <Gui/Application.h>
 #include <Gui/BitmapFactory.h>
 #include <Gui/Document.h>
@@ -1067,7 +1068,7 @@ bool ViewProviderSketch::getElementPicked(const SoPickedPoint *pp, std::string &
                 pp, edit->viewer, edit->curCursorPos, false);
         if (edit->lastPreselection.empty())
             return false;
-        subname += getSketchObject()->checkSubName(edit->lastPreselection.c_str());
+        getSketchObject()->checkSubName(edit->lastPreselection.c_str()).toString(subname);
         return true;
     }
     return PartGui::ViewProvider2DObjectGrid::getElementPicked(pp, subname);

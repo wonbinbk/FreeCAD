@@ -39,6 +39,11 @@ class gp_Dir;
 
 class BRepBuilderAPI_MakeShape;
 
+namespace Data
+{
+class HistoryItem;
+}
+
 namespace Part
 {
 
@@ -69,22 +74,10 @@ public:
 
     virtual PyObject* getPyObject(void) override;
 
-    struct HistoryItem {
-        App::DocumentObject *obj;
-        long tag;
-        std::string element;
-        std::vector<std::string> intermediates;
-        HistoryItem(App::DocumentObject *obj, const char *name)
-            :obj(obj),tag(0),element(name)
-        {
-            if(obj)
-                tag = obj->getID();
-        }
-    };
-    static std::list<HistoryItem> getElementHistory(App::DocumentObject *obj,
+    static std::list<Data::HistoryItem> getElementHistory(App::DocumentObject *obj,
             const char *name, bool recursive=true, bool sameType=false);
 
-    static std::vector<std::pair<std::string,std::string> > 
+    static QVector<Data::MappedElement>
     getRelatedElements(App::DocumentObject *obj, const char *name, bool sameType=true, bool withCache=true);
 
     TopLoc_Location getLocation() const;

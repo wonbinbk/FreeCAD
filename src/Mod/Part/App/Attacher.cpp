@@ -73,6 +73,7 @@
 #include <App/OriginFeature.h>
 #include <App/Application.h>
 #include <App/Document.h>
+#include <App/MappedElement.h>
 
 using namespace Part;
 using namespace Attacher;
@@ -926,10 +927,11 @@ Base::Placement AttachEngine::calculateAttachedPlacement(
         auto related = Part::Feature::getRelatedElements(obj,shadow.c_str(),true,false);
         if(related.size()) {
             auto &res = subChanges[i];
-            res.first = Data::ComplexGeoData::elementMapPrefix() + related.front().first;
-            res.second = std::move(related.front().second);
-        } else
-            subnames[i] = shadow;
+            res.first = Data::ComplexGeoData::elementMapPrefix();
+            related.front().name.toString(res.first);
+            res.second.clear();
+            related.front().index.toString(res.second);
+        }
     }
     if(subChanges.size()) {
         // In case there is topological name changes, we only auto change the

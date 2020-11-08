@@ -38,6 +38,7 @@
 #include <Base/Tools.h>
 #include <App/Application.h>
 #include <App/Document.h>
+#include <App/MappedElement.h>
 #include <Gui/Application.h>
 #include <Gui/Document.h>
 #include <Gui/BitmapFactory.h>
@@ -198,6 +199,7 @@ bool TaskDressUpParameters::populate(bool refresh)
         subSet.insert(sub.first.empty()?sub.second:sub.first);
     bool touched = false;
     std::vector<std::string> refs;
+    std::string tmp;
     for(auto &sub : subs) {
         refs.push_back(sub.second);
         if(refresh || sub.first.empty() || baseShape.isNull()) {
@@ -215,17 +217,19 @@ bool TaskDressUpParameters::populate(bool refresh)
         }
         FC_WARN("missing element reference: " << pcDressUp->getFullName() << "." << ref);
         bool popped = false;
-        for(auto &name : Part::Feature::getRelatedElements(base,ref.c_str())) {
-            if(!subSet.insert(name.second).second || !subSet.insert(name.first).second)
+        for(auto &mapped : Part::Feature::getRelatedElements(base,ref.c_str())) {
+            tmp.clear();
+            if (subSet.insert(mapped.index.toString(tmp)).second
+                    || subSet.insert(mapped.name.toString(0)).second)
                 continue;
-            FC_WARN("guess element reference: " << ref << " -> " << name.first);
-            listWidget->addItem(QString::fromStdString(name.second));
+            FC_WARN("guess element reference: " << ref << " -> " << mapped.name);
+            listWidget->addItem(QString::fromStdString(tmp));
             if(!popped) {
                 refs.pop_back();
                 touched = true;
                 popped = true;
             }
-            refs.push_back(name.second);
+            refs.push_back(tmp);
         }
         if(!popped) {
             std::string missingSub = refs.back();
@@ -333,18 +337,19 @@ void TaskDressUpParameters::onSelectionChanged(const Gui::SelectionChanges& msg)
         // back to its base
         auto history = pcDressUp->getElementHistory(pcDressUp,msg.pSubName);
         const char *element = 0;
+        std::string tmp;
         for(auto &hist : history) {
-            if(hist.obj != base
-                    || (!allowFaces && boost::starts_with(hist.element,"Face"))
-                    || (!allowEdges && boost::starts_with(hist.element,"Edge")))
-            {
+            if(hist.obj != base)
                 continue;
-            }
+
+            char type = pcDressUp->Shape.getShape().elementType(hist.element);
+            if ((!allowFaces && type == 'F') || (!allowEdges && type == 'E'))
+                continue;
             if(element) {
                 showMessage("Ambiguious selection");
                 return;
             }
-            element = hist.element.c_str();
+            element = hist.element.toString(tmp);
         }
         if(element) {
             std::string subname = Data::ComplexGeoData::elementMapPrefix()+element;
