@@ -2046,8 +2046,8 @@ void ViewProviderPartExt::updateVisual()
 void ViewProviderPartExt::forceUpdate(bool enable) {
     if(enable) {
         if(++forceUpdateCount == 1) {
-            if(!isShow())
-                Visibility.touch();
+            if(!isShow() && VisualTouched)
+                updateVisual();
         }
     }else if(forceUpdateCount)
         --forceUpdateCount;
