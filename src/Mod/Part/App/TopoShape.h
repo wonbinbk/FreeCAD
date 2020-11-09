@@ -772,9 +772,8 @@ private:
         }
     
         void Location (const TopLoc_Location& Loc) {
-            master.flushElementMap();
+            // Location does not affect element map or cache
             _Shape.Location(Loc);
-            if (master._Cache) master.initCache();
         }
     
         void Orientation (const TopAbs_Orientation Orient) {
