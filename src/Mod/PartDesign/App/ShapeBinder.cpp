@@ -662,8 +662,9 @@ void SubShapeBinder::update(SubShapeBinder::UpdateOption options) {
                 ss.str("");
                 ss << TOPOP_SHAPEBINDER << ':' << shapeOwners[idx].first
                    << ':' << shapeOwners[idx].second;
-                shape.reTagElementMap(getID(),
-                        getDocument()->getStringHasher(),ss.str().c_str());
+                Part::TopoShape tmp(shape);
+                shape.Tag = 0;
+                shape.copyElementMap(tmp, ss.str().c_str());
             }
         }
         
@@ -859,7 +860,7 @@ App::DocumentObject *SubShapeBinder::getElementOwner(const Data::MappedName & na
     if(!name)
         return nullptr;
 
-    static const char *op = TOPOP_SHAPEBINDER ":";
+    static std::string op(TOPOP_SHAPEBINDER ":");
     int offset = name.rfind(op);
     if (offset < 0)
         return nullptr;
@@ -867,7 +868,7 @@ App::DocumentObject *SubShapeBinder::getElementOwner(const Data::MappedName & na
     int idx, subidx;
     char sep;
     int size;
-    const char * s = name.toConstString(offset, size);
+    const char * s = name.toConstString(offset+op.size(), size);
     bio::stream<bio::array_source> iss(s, size);
     if (!(iss >> idx >> sep >> subidx) || sep!=':' || subidx<0)
         return nullptr;
@@ -875,13 +876,8 @@ App::DocumentObject *SubShapeBinder::getElementOwner(const Data::MappedName & na
     const App::PropertyXLink *link = nullptr;
     if(idx < 0)
         link = &_CopiedLink;
-    else if (idx < Support.getSize()) {
-        int i=0;
-        for(auto &l : Support.getSubListValues()) {
-            if(i++ == idx)
-                link = &l;
-        }
-    }
+    else if (idx < Support.getSize())
+        link = &Support.getSubListValues()[idx];
     if(!link || !link->getValue())
         return nullptr;
 
