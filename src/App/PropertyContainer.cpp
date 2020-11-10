@@ -299,7 +299,9 @@ void PropertyContainer::beforeSave() const
 
     for(auto it=Map.begin();it!=Map.end();) {
         auto prop = it->second;
-        if(prop->testStatus(Property::PropNoPersist)) {
+        if (prop->getContainer() != this
+                || prop->testStatus(Property::PropNoPersist))
+        {
             it = Map.erase(it);
             continue;
         }
